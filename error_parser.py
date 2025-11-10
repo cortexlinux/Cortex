@@ -305,17 +305,46 @@ class ErrorParser:
             if regex_match:
                 # Extract data from regex groups
                 extracted_data = {}
-                if regex_match.groups():
-                    for i, group in enumerate(regex_match.groups()):
-                        extracted_data[f'group_{i}'] = group
+                groups = regex_match.groups() if regex_match else ()
+                if groups:
+                    for i, group in enumerate(groups):
+                        if group is not None:
+                            extracted_data[f'group_{i}'] = group
                     
                     # Try to identify specific data types
-                    if 'package' in pattern_def['fixes'][0].lower():
-                        extracted_data['package'] = regex_match.group(1)
-                    if 'dependency' in str(pattern_def['fixes']):
-                        extracted_data['dependency'] = regex_match.group(1) if regex_match.groups() else None
-                    if 'key_id' in str(pattern_def.get('auto_fix', '')):
-                        extracted_data['key_id'] = regex_match.group(1)
+                    first_group = groups[0] if len(groups) > 0 and groups[0] is not None else None
+                    fixes_text = " ".join(pattern_def['fixes']).lower()
+                    if first_group:
+                        if 'package' in fixes_text:
+                            extracted_data.setdefault('package', first_group)
+                        if 'dependency' in fixes_text:
+                            extracted_data.setdefault('dependency', first_group)
+                    
+                    # Pattern-specific extractions
+                    try:
+                        pattern_text = pattern_def['regex'].pattern
+                    except AttributeError:
+                        pattern_text = ""
+                    
+                    if pattern_text == r'([a-z0-9\-]+) : Depends: (.+?) but' and len(groups) >= 2:
+                        extracted_data['package'] = groups[0]
+                        extracted_data['dependency'] = groups[1]
+                    if pattern_text == r'([a-z0-9\-]+) conflicts with ([a-z0-9\-]+)' and len(groups) >= 2:
+                        extracted_data['package1'] = groups[0]
+                        extracted_data['package2'] = groups[1]
+                    
+                    if pattern_def['category'] == ErrorCategory.GPG_KEY_ERROR:
+                        # Prefer explicit capture if available
+                        if first_group:
+                            extracted_data['key_id'] = first_group
+                        else:
+                            # Fallback: search the entire error_message for a likely key id
+                            key_match = re.search(r'NO_PUBKEY\s+([A-F0-9]{8,40})|recv-keys\s+([A-F0-9]{8,40})|([A-F0-9]{8,16})', error_message, re.IGNORECASE)
+                            if key_match:
+                                for g in key_match.groups():
+                                    if g:
+                                        extracted_data['key_id'] = g
+                                        break
                 
                 match = ErrorMatch(
                     category=pattern_def['category'],
@@ -394,16 +423,22 @@ class ErrorParser:
         fixes = []
         
         for match in matches:
-            # Find the pattern definition
-            for pattern_def in self.ERROR_PATTERNS:
-                if pattern_def['category'] == match.category:
+            # Find the compiled pattern definition
+            for pattern_def in self.compiled_patterns:
+                if pattern_def['category'] == match.category and pattern_def['regex'].pattern == match.pattern:
                     for fix_template in pattern_def['fixes']:
                         # Replace placeholders with extracted data
                         fix = fix_template
                         for key, value in match.extracted_data.items():
+                            if value is None:
+                                continue
                             placeholder = f'{{{key}}}'
                             if placeholder in fix:
                                 fix = fix.replace(placeholder, value)
+                        
+                        # Skip fixes that still have unresolved placeholders
+                        if '{' in fix and '}' in fix:
+                            continue
                         
                         # Add fix if not already present
                         if fix not in fixes:
@@ -425,12 +460,14 @@ class ErrorParser:
         """Get automatic fix command if available"""
         for match in matches:
             # Find pattern with auto_fix
-            for pattern_def in self.ERROR_PATTERNS:
-                if pattern_def['category'] == match.category:
+            for pattern_def in self.compiled_patterns:
+                if pattern_def['category'] == match.category and pattern_def['regex'].pattern == match.pattern:
                     auto_fix = pattern_def.get('auto_fix')
                     if auto_fix:
                         # Replace placeholders
                         for key, value in match.extracted_data.items():
+                            if value is None:
+                                continue
                             placeholder = f'{{{key}}}'
                             if placeholder in auto_fix:
                                 auto_fix = auto_fix.replace(placeholder, value)

@@ -31,6 +31,16 @@ class ConfigManager:
     
     CORTEX_VERSION = "0.2.0"
     
+    # Timeout constants
+    DETECTION_TIMEOUT = 30  # seconds for package detection
+    INSTALLATION_TIMEOUT = 300  # seconds for package installation
+    
+    # Package sources
+    SOURCE_APT = 'apt'
+    SOURCE_PIP = 'pip'
+    SOURCE_NPM = 'npm'
+    DEFAULT_SOURCES = [SOURCE_APT, SOURCE_PIP, SOURCE_NPM]
+    
     def __init__(self, sandbox_executor=None):
         """
         Initialize ConfigManager.
@@ -59,7 +69,7 @@ class ConfigManager:
                 ['dpkg-query', '-W', '-f=${Package}\t${Version}\n'],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=self.DETECTION_TIMEOUT
             )
             
             if result.returncode == 0:
@@ -70,7 +80,7 @@ class ConfigManager:
                             packages.append({
                                 'name': parts[0],
                                 'version': parts[1],
-                                'source': 'apt'
+                                'source': self.SOURCE_APT
                             })
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
             pass
@@ -93,7 +103,7 @@ class ConfigManager:
                     [pip_cmd, 'list', '--format=json'],
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=self.DETECTION_TIMEOUT
                 )
                 
                 if result.returncode == 0:
@@ -102,7 +112,7 @@ class ConfigManager:
                         packages.append({
                             'name': pkg['name'],
                             'version': pkg['version'],
-                            'source': 'pip'
+                            'source': self.SOURCE_PIP
                         })
                     break  # Success, no need to try other pip commands
             except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
@@ -124,7 +134,7 @@ class ConfigManager:
                 ['npm', 'list', '-g', '--depth=0', '--json'],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=self.DETECTION_TIMEOUT
             )
             
             if result.returncode == 0:
@@ -136,7 +146,7 @@ class ConfigManager:
                     packages.append({
                         'name': name,
                         'version': version,
-                        'source': 'npm'
+                        'source': self.SOURCE_NPM
                     })
         except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
             pass
@@ -155,30 +165,27 @@ class ConfigManager:
             List of package dictionaries sorted by name
         """
         if sources is None:
-            sources = ['apt', 'pip', 'npm']
+            sources = self.DEFAULT_SOURCES
         
         all_packages = []
         
-        if 'apt' in sources:
+        if self.SOURCE_APT in sources:
             all_packages.extend(self.detect_apt_packages())
         
-        if 'pip' in sources:
+        if self.SOURCE_PIP in sources:
             all_packages.extend(self.detect_pip_packages())
         
-        if 'npm' in sources:
+        if self.SOURCE_NPM in sources:
             all_packages.extend(self.detect_npm_packages())
         
-        # Remove duplicates based on name and source
-        seen = set()
-        unique_packages = []
+        # Remove duplicates based on name and source (more efficient)
+        unique_packages_dict = {}
         for pkg in all_packages:
             key = (pkg['name'], pkg['source'])
-            if key not in seen:
-                seen.add(key)
-                unique_packages.append(pkg)
+            unique_packages_dict[key] = pkg
         
         # Sort by name
-        unique_packages.sort(key=lambda x: x['name'])
+        unique_packages = sorted(unique_packages_dict.values(), key=lambda x: x['name'])
         
         return unique_packages
     
@@ -190,7 +197,11 @@ class ConfigManager:
             OS version string (e.g., 'ubuntu-24.04')
         """
         try:
-            with open('/etc/os-release', 'r') as f:
+            os_release_path = Path('/etc/os-release')
+            if not os_release_path.exists():
+                return "unknown"
+            
+            with open(os_release_path, 'r') as f:
                 os_release = f.read()
             
             # Extract distribution name and version
@@ -429,7 +440,31 @@ class ConfigManager:
     
     def _compare_versions(self, version1: str, version2: str) -> int:
         """
-        Compare two version strings.
+        Compare two version strings using packaging library for robustness.
+        
+        Args:
+            version1: First version string
+            version2: Second version string
+        
+        Returns:
+            -1 if version1 < version2, 0 if equal, 1 if version1 > version2
+        """
+        try:
+            from packaging import version
+            v1 = version.parse(version1)
+            v2 = version.parse(version2)
+            if v1 < v2:
+                return -1
+            elif v1 > v2:
+                return 1
+            return 0
+        except Exception:
+            # Fallback to simple numeric comparison
+            return self._simple_version_compare(version1, version2)
+    
+    def _simple_version_compare(self, version1: str, version2: str) -> int:
+        """
+        Simple fallback version comparison (extract numeric parts).
         
         Args:
             version1: First version string
@@ -512,37 +547,57 @@ class ConfigManager:
         
         # Import packages
         if 'packages' in selective:
-            diff = self.diff_configuration(config)
-            packages_to_process = (
-                diff['packages_to_install'] +
-                diff['packages_to_upgrade'] +
-                diff['packages_to_downgrade']
-            )
-            
-            for pkg in packages_to_process:
-                try:
-                    success = self._install_package(pkg)
-                    if success:
-                        if pkg in diff['packages_to_install']:
-                            summary['installed'].append(pkg['name'])
-                        else:
-                            summary['upgraded'].append(pkg['name'])
-                    else:
-                        summary['failed'].append(pkg['name'])
-                except Exception as e:
-                    summary['failed'].append(f"{pkg['name']} ({str(e)})")
+            self._import_packages(config, summary)
         
         # Import preferences
         if 'preferences' in selective:
-            config_prefs = config.get('preferences', {})
-            if config_prefs:
-                try:
-                    self._save_preferences(config_prefs)
-                    summary['preferences_updated'] = True
-                except Exception as e:
-                    summary['failed'].append(f"preferences ({str(e)})")
+            self._import_preferences(config, summary)
         
         return summary
+    
+    def _import_packages(self, config: Dict[str, Any], summary: Dict[str, Any]) -> None:
+        """
+        Import packages from configuration.
+        
+        Args:
+            config: Configuration dictionary
+            summary: Summary dictionary to update with results
+        """
+        diff = self.diff_configuration(config)
+        packages_to_process = (
+            diff['packages_to_install'] +
+            diff['packages_to_upgrade'] +
+            diff['packages_to_downgrade']
+        )
+        
+        for pkg in packages_to_process:
+            try:
+                success = self._install_package(pkg)
+                if success:
+                    if pkg in diff['packages_to_install']:
+                        summary['installed'].append(pkg['name'])
+                    else:
+                        summary['upgraded'].append(pkg['name'])
+                else:
+                    summary['failed'].append(pkg['name'])
+            except Exception as e:
+                summary['failed'].append(f"{pkg['name']} ({str(e)})")
+    
+    def _import_preferences(self, config: Dict[str, Any], summary: Dict[str, Any]) -> None:
+        """
+        Import preferences from configuration.
+        
+        Args:
+            config: Configuration dictionary
+            summary: Summary dictionary to update with results
+        """
+        config_prefs = config.get('preferences', {})
+        if config_prefs:
+            try:
+                self._save_preferences(config_prefs)
+                summary['preferences_updated'] = True
+            except Exception as e:
+                summary['failed'].append(f"preferences ({str(e)})")
     
     def _install_package(self, pkg: Dict[str, Any]) -> bool:
         """
@@ -561,7 +616,7 @@ class ConfigManager:
         if self.sandbox_executor:
             # Use SandboxExecutor for safe installation
             try:
-                if source == 'apt':
+                if source == self.SOURCE_APT:
                     # For apt, we typically install latest or specific version
                     if version:
                         command = f"sudo apt-get install -y {name}={version}"
@@ -570,7 +625,7 @@ class ConfigManager:
                     result = self.sandbox_executor.execute(command)
                     return result.success
                 
-                elif source == 'pip':
+                elif source == self.SOURCE_PIP:
                     if version:
                         command = f"pip3 install {name}=={version}"
                     else:
@@ -578,7 +633,7 @@ class ConfigManager:
                     result = self.sandbox_executor.execute(command)
                     return result.success
                 
-                elif source == 'npm':
+                elif source == self.SOURCE_NPM:
                     if version:
                         command = f"npm install -g {name}@{version}"
                     else:
@@ -591,28 +646,28 @@ class ConfigManager:
         else:
             # Direct installation (not recommended in production)
             try:
-                if source == 'apt':
+                if source == self.SOURCE_APT:
                     if version:
                         cmd = ['sudo', 'apt-get', 'install', '-y', f'{name}={version}']
                     else:
                         cmd = ['sudo', 'apt-get', 'install', '-y', name]
-                    result = subprocess.run(cmd, capture_output=True, timeout=300)
+                    result = subprocess.run(cmd, capture_output=True, timeout=self.INSTALLATION_TIMEOUT)
                     return result.returncode == 0
                 
-                elif source == 'pip':
+                elif source == self.SOURCE_PIP:
                     if version:
                         cmd = ['pip3', 'install', f'{name}=={version}']
                     else:
                         cmd = ['pip3', 'install', name]
-                    result = subprocess.run(cmd, capture_output=True, timeout=300)
+                    result = subprocess.run(cmd, capture_output=True, timeout=self.INSTALLATION_TIMEOUT)
                     return result.returncode == 0
                 
-                elif source == 'npm':
+                elif source == self.SOURCE_NPM:
                     if version:
                         cmd = ['npm', 'install', '-g', f'{name}@{version}']
                     else:
                         cmd = ['npm', 'install', '-g', name]
-                    result = subprocess.run(cmd, capture_output=True, timeout=300)
+                    result = subprocess.run(cmd, capture_output=True, timeout=self.INSTALLATION_TIMEOUT)
                     return result.returncode == 0
                 
             except Exception:

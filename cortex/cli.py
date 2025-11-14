@@ -1,3 +1,5 @@
+"""Command-line interface entry point for the Cortex automation toolkit."""
+
 import argparse
 import os
 import subprocess
@@ -13,6 +15,7 @@ class CortexCLI:
     """Command-line interface for Cortex AI-powered software installation."""
 
     def __init__(self) -> None:
+        """Initialise spinner state used for interactive progress updates."""
         self.spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
         self.spinner_idx = 0
 
@@ -33,21 +36,26 @@ class CortexCLI:
         return 'openai'
 
     def _print_status(self, label: str, message: str) -> None:
+        """Emit informational output with a consistent status label."""
         print(f"{label} {message}")
 
     def _print_error(self, message: str) -> None:
+        """Emit an error message to ``stderr`` with standard formatting."""
         print(f"[ERROR] {message}", file=sys.stderr)
 
     def _print_success(self, message: str) -> None:
+        """Emit a success message to ``stdout`` with the success label."""
         print(f"[SUCCESS] {message}")
 
     def _animate_spinner(self, message: str) -> None:
+        """Render a single spinner frame with the supplied ``message``."""
         sys.stdout.write(f"\r{self.spinner_chars[self.spinner_idx]} {message}")
         sys.stdout.flush()
         self.spinner_idx = (self.spinner_idx + 1) % len(self.spinner_chars)
         time.sleep(0.1)
 
     def _clear_line(self) -> None:
+        """Clear the active terminal line to hide spinner artifacts."""
         sys.stdout.write('\r\033[K')
         sys.stdout.flush()
 

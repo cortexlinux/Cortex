@@ -9,6 +9,6 @@ __version__ = "0.1.0"
 __author__ = "Cortex Team"
 
 from .config import ConfigGenerator
+from .cli import main
 
-__all__ = ["ConfigGenerator"]
-
+__all__ = ["ConfigGenerator", "main"]

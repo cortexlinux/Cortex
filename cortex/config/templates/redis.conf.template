@@ -13,6 +13,8 @@ tcp-keepalive {{ tcp_keepalive|default(300) }}
 protected-mode yes
 {% if password %}
 requirepass {{ password }}
+{% else %}
+# WARNING: Protected mode enabled without password. Set 'password' parameter for authentication.
 {% endif %}
 {% else %}
 protected-mode no

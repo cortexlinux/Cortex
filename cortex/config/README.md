@@ -489,7 +489,7 @@ pytest cortex/config/test_config_generator.py --cov=cortex.config --cov-report=h
 
 ## Examples
 
-Complete working examples are available in `examples/config_examples.py`.
+Complete working examples are available in `cortex/config/examples.py`.
 
 ## Contributing
 

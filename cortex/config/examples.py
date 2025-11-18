@@ -363,7 +363,7 @@ def example_redis_replication():
         "redis",
         output_path="./examples_output/redis_replica.conf",
         port=6379,
-        bind_address="0.0.0.0",
+        bind_address="127.0.0.1",
         maxmemory="1gb",
         enable_replication=True,
         replica_host="master.example.com",

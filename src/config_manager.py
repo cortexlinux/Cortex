@@ -46,13 +46,66 @@ class ConfigManager:
         
         Args:
             sandbox_executor: Optional SandboxExecutor instance for safe command execution
+        
+        Raises:
+            PermissionError: If directory ownership or permissions cannot be secured
         """
         self.sandbox_executor = sandbox_executor
         self.cortex_dir = Path.home() / '.cortex'
         self.preferences_file = self.cortex_dir / 'preferences.yaml'
         
-        # Ensure .cortex directory exists
+        # Ensure .cortex directory exists with secure permissions
         self.cortex_dir.mkdir(mode=0o700, exist_ok=True)
+        self._enforce_directory_security(self.cortex_dir)
+    
+    def _enforce_directory_security(self, directory: Path) -> None:
+        """
+        Enforce ownership and permission security on a directory.
+        
+        Ensures the directory is owned by the current user and has mode 0o700
+        (read/write/execute for owner only).
+        
+        Args:
+            directory: Path to the directory to secure
+        
+        Raises:
+            PermissionError: If ownership or permissions cannot be secured
+        """
+        try:
+            # Get directory statistics
+            stat_info = directory.stat()
+            current_uid = os.getuid()
+            current_gid = os.getgid()
+            
+            # Check and fix ownership if needed
+            if stat_info.st_uid != current_uid or stat_info.st_gid != current_gid:
+                try:
+                    os.chown(directory, current_uid, current_gid)
+                except PermissionError:
+                    raise PermissionError(
+                        f"Directory {directory} is owned by uid={stat_info.st_uid}, "
+                        f"gid={stat_info.st_gid}, but process is running as uid={current_uid}, "
+                        f"gid={current_gid}. Insufficient privileges to change ownership."
+                    )
+            
+            # Enforce mode 0o700
+            os.chmod(directory, 0o700)
+            
+            # Verify the chmod succeeded
+            stat_info = directory.stat()
+            actual_mode = stat_info.st_mode & 0o777
+            if actual_mode != 0o700:
+                raise PermissionError(
+                    f"Failed to set secure permissions on {directory}. "
+                    f"Expected mode 0o700, but actual mode is {oct(actual_mode)}. "
+                    f"Security invariant failed."
+                )
+        except OSError as e:
+            if isinstance(e, PermissionError):
+                raise
+            raise PermissionError(
+                f"Failed to enforce security on {directory}: {e}"
+            )
     
     def detect_apt_packages(self) -> List[Dict[str, Any]]:
         """

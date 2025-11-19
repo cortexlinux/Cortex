@@ -579,7 +579,7 @@ Cortex Linux Configuration Management is part of the Cortex Linux project.
 
 ## Support
 
-- **Issues**: https://github.com/danishirfan21/cortex/issues
+- **Issues**: https://github.com/cortexlinux/cortex/issues
 - **Discord**: https://discord.gg/uCqHvxjU83
 - **Email**: mike@cortexlinux.com
 

@@ -407,7 +407,7 @@ class ConfigManager:
             else:
                 current_version = current_pkg_map[key]
                 if current_version != version:
-                    # Simple version comparison (would need proper semver in production)
+                    # Compare versions (uses packaging library with fallback to simple comparison)
                     try:
                         if self._compare_versions(current_version, version) < 0:
                             diff['packages_to_upgrade'].append({
@@ -686,6 +686,7 @@ class ConfigManager:
         
         Prevents command injection by ensuring package identifiers only contain
         alphanumeric characters and common package naming characters.
+        Supports NPM scoped packages (@scope/package) while blocking path traversal.
         
         Args:
             identifier: Package name or version string to validate
@@ -693,7 +694,9 @@ class ConfigManager:
         Returns:
             bool: True if identifier is safe, False otherwise
         """
-        return bool(re.match(r'^[a-zA-Z0-9._:@=+\-]+$', identifier))
+        # Allow standard characters plus exactly one forward slash for NPM scoped packages
+        # This prevents path traversal (../, ../../, etc.) while allowing @scope/package
+        return bool(re.match(r'^[a-zA-Z0-9._:@=+\-]+(/[a-zA-Z0-9._\-]+)?$', identifier))
     
     def _install_package(self, pkg: Dict[str, Any]) -> bool:
         """

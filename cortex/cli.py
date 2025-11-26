@@ -390,7 +390,7 @@ class CortexCLI:
                 print(f"Resetting {key} to default value...")
                 
                 # Create a new manager with defaults
-                from user_preferences import UserPreferences
+                from cortex.user_preferences import UserPreferences
                 defaults = UserPreferences()
                 
                 # Get the default value

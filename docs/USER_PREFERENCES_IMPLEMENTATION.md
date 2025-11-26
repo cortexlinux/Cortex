@@ -255,7 +255,7 @@ Useful for:
 ### Running Tests
 ```bash
 # Run all preference tests (from project root)
-python test\test_user_preferences.py
+python test/test_user_preferences.py
 
 # Or with unittest module
 python -m unittest test.test_user_preferences -v

@@ -15,6 +15,11 @@ import shutil
 from datetime import datetime
 
 
+class PreferencesError(Exception):
+    """Custom exception for preferences-related errors"""
+    pass
+
+
 class VerbosityLevel(str, Enum):
     """Verbosity levels for output"""
     QUIET = "quiet"
@@ -171,7 +176,7 @@ class PreferencesManager:
         except Exception as e:
             if temp_path.exists():
                 temp_path.unlink()
-            raise Exception(f"Failed to save preferences: {e}")
+            raise PreferencesError(f"Failed to save preferences: {e}") from e
     
     def get(self, key: str, default: Any = None) -> Any:
         """

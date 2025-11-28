@@ -12,12 +12,30 @@ from LLM.interpreter import CommandInterpreter
 from cortex.coordinator import InstallationCoordinator, StepStatus
 from cortex.update_manifest import UpdateChannel
 from cortex.updater import ChecksumMismatch, InstallError, UpdateError, UpdateService
+<<<<<<< HEAD
+=======
+from installation_history import (
+    InstallationHistory,
+    InstallationType,
+    InstallationStatus
+)
+from cortex.user_preferences import (
+    PreferencesManager,
+    print_all_preferences,
+    format_preference_value
+)
+>>>>>>> 1be5ced (User Preferences & Settings System (#26))
 
 
 class CortexCLI:
     def __init__(self):
         self.spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
         self.spinner_idx = 0
+<<<<<<< HEAD
+=======
+        self.update_service = UpdateService()
+        self.prefs_manager = None  # Lazy initialization
+>>>>>>> 1be5ced (User Preferences & Settings System (#26))
     
     def _get_api_key(self) -> Optional[str]:
         api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
@@ -259,6 +277,307 @@ class CortexCLI:
         self._print_success(f"Update channel set to '{channel_enum.value}'")
         return 0
 
+<<<<<<< HEAD
+=======
+    def history(self, limit: int = 20, status: Optional[str] = None, show_id: Optional[str] = None):
+        """Show installation history"""
+        history = InstallationHistory()
+        
+        try:
+            if show_id:
+                # Show specific installation
+                record = history.get_installation(show_id)
+                
+                if not record:
+                    self._print_error(f"Installation {show_id} not found")
+                    return 1
+                
+                print(f"\nInstallation Details: {record.id}")
+                print("=" * 60)
+                print(f"Timestamp: {record.timestamp}")
+                print(f"Operation: {record.operation_type.value}")
+                print(f"Status: {record.status.value}")
+                if record.duration_seconds:
+                    print(f"Duration: {record.duration_seconds:.2f}s")
+                else:
+                    print("Duration: N/A")
+                print(f"\nPackages: {', '.join(record.packages)}")
+                
+                if record.error_message:
+                    print(f"\nError: {record.error_message}")
+                
+                if record.commands_executed:
+                    print(f"\nCommands executed:")
+                    for cmd in record.commands_executed:
+                        print(f"  {cmd}")
+                
+                print(f"\nRollback available: {record.rollback_available}")
+                return 0
+            else:
+                # List history
+                status_filter = InstallationStatus(status) if status else None
+                records = history.get_history(limit, status_filter)
+                
+                if not records:
+                    print("No installation records found.")
+                    return 0
+                
+                print(f"\n{'ID':<18} {'Date':<20} {'Operation':<12} {'Packages':<30} {'Status':<15}")
+                print("=" * 100)
+                
+                for r in records:
+                    date = r.timestamp[:19].replace('T', ' ')
+                    packages = ', '.join(r.packages[:2])
+                    if len(r.packages) > 2:
+                        packages += f" +{len(r.packages)-2}"
+                    
+                    print(f"{r.id:<18} {date:<20} {r.operation_type.value:<12} {packages:<30} {r.status.value:<15}")
+                
+                return 0
+        except Exception as e:
+            self._print_error(f"Failed to retrieve history: {str(e)}")
+            return 1
+
+    def rollback(self, install_id: str, dry_run: bool = False):
+        """Rollback an installation"""
+        history = InstallationHistory()
+        
+        try:
+            success, message = history.rollback(install_id, dry_run)
+            
+            if dry_run:
+                print("\nRollback actions (dry run):")
+                print(message)
+                return 0
+            elif success:
+                self._print_success(message)
+                return 0
+            else:
+                self._print_error(message)
+                return 1
+        except Exception as e:
+            self._print_error(f"Rollback failed: {str(e)}")
+            return 1
+
+    def _get_prefs_manager(self):
+        """Lazy initialize preferences manager"""
+        if self.prefs_manager is None:
+            self.prefs_manager = PreferencesManager()
+        return self.prefs_manager
+
+    def check_pref(self, key: Optional[str] = None):
+        """Check/display user preferences"""
+        manager = self._get_prefs_manager()
+        
+        try:
+            if key:
+                # Show specific preference
+                value = manager.get(key)
+                if value is None:
+                    self._print_error(f"Preference key '{key}' not found")
+                    print("\nAvailable preference keys:")
+                    print("  - verbosity")
+                    print("  - theme")
+                    print("  - language")
+                    print("  - timezone")
+                    print("  - confirmations.before_install")
+                    print("  - confirmations.before_remove")
+                    print("  - confirmations.before_upgrade")
+                    print("  - confirmations.before_system_changes")
+                    print("  - auto_update.check_on_start")
+                    print("  - auto_update.auto_install")
+                    print("  - auto_update.frequency_hours")
+                    print("  - ai.model")
+                    print("  - ai.creativity")
+                    print("  - ai.explain_steps")
+                    print("  - ai.suggest_alternatives")
+                    print("  - ai.learn_from_history")
+                    print("  - ai.max_suggestions")
+                    print("  - packages.default_sources")
+                    print("  - packages.prefer_latest")
+                    print("  - packages.auto_cleanup")
+                    print("  - packages.backup_before_changes")
+                    return 1
+                
+                print(f"\n{key} = {format_preference_value(value)}")
+                return 0
+            else:
+                # Show all preferences
+                print_all_preferences(manager)
+                
+                # Show validation status
+                print("\nValidation Status:")
+                errors = manager.validate()
+                if errors:
+                    print("❌ Configuration has errors:")
+                    for error in errors:
+                        print(f"  - {error}")
+                    return 1
+                else:
+                    print("✅ Configuration is valid")
+                
+                # Show config info
+                info = manager.get_config_info()
+                print(f"\nConfiguration file: {info['config_path']}")
+                print(f"File size: {info['config_size_bytes']} bytes")
+                if info['last_modified']:
+                    print(f"Last modified: {info['last_modified']}")
+                
+                return 0
+                
+        except Exception as e:
+            self._print_error(f"Failed to read preferences: {str(e)}")
+            return 1
+
+    def edit_pref(self, action: str, key: Optional[str] = None, value: Optional[str] = None):
+        """Edit user preferences (add/set, delete/remove, list)"""
+        manager = self._get_prefs_manager()
+        
+        try:
+            if action in ['add', 'set', 'update']:
+                # Set/update a preference
+                if not key:
+                    self._print_error("Key is required for set/add/update action")
+                    print("Usage: cortex edit-pref set <key> <value>")
+                    print("Example: cortex edit-pref set ai.model gpt-4")
+                    return 1
+                
+                if not value:
+                    self._print_error("Value is required for set/add/update action")
+                    print("Usage: cortex edit-pref set <key> <value>")
+                    return 1
+                
+                # Get current value for comparison
+                old_value = manager.get(key)
+                
+                # Set new value
+                manager.set(key, value)
+                
+                self._print_success(f"Updated {key}")
+                if old_value is not None:
+                    print(f"  Old value: {format_preference_value(old_value)}")
+                print(f"  New value: {format_preference_value(manager.get(key))}")
+                
+                # Validate after change
+                errors = manager.validate()
+                if errors:
+                    print("\n⚠️  Warning: Configuration has validation errors:")
+                    for error in errors:
+                        print(f"  - {error}")
+                    print("\nYou may want to fix these issues.")
+                
+                return 0
+                
+            elif action in ['delete', 'remove', 'reset-key']:
+                # Reset a specific key to default
+                if not key:
+                    self._print_error("Key is required for delete/remove/reset-key action")
+                    print("Usage: cortex edit-pref delete <key>")
+                    print("Example: cortex edit-pref delete ai.model")
+                    return 1
+                
+                # To "delete" a key, we reset entire config and reload (since we can't delete individual keys)
+                # Instead, we'll reset to the default value for that key
+                print(f"Resetting {key} to default value...")
+                
+                # Create a new manager with defaults
+                from cortex.user_preferences import UserPreferences
+                defaults = UserPreferences()
+                
+                # Get the default value
+                parts = key.split('.')
+                obj = defaults
+                for part in parts:
+                    obj = getattr(obj, part)
+                default_value = obj
+                
+                # Set to default
+                manager.set(key, format_preference_value(default_value))
+                
+                self._print_success(f"Reset {key} to default")
+                print(f"  Value: {format_preference_value(manager.get(key))}")
+                
+                return 0
+                
+            elif action in ['list', 'show', 'display']:
+                # List all preferences (same as check-pref)
+                return self.check_pref()
+                
+            elif action == 'reset-all':
+                # Reset all preferences to defaults
+                confirm = input("⚠️  This will reset ALL preferences to defaults. Continue? (yes/no): ")
+                if confirm.lower() not in ['yes', 'y']:
+                    print("Operation cancelled.")
+                    return 0
+                
+                manager.reset()
+                self._print_success("All preferences reset to defaults")
+                return 0
+                
+            elif action == 'validate':
+                # Validate configuration
+                errors = manager.validate()
+                if errors:
+                    print("❌ Configuration has errors:")
+                    for error in errors:
+                        print(f"  - {error}")
+                    return 1
+                else:
+                    self._print_success("Configuration is valid")
+                    return 0
+                    
+            elif action == 'export':
+                # Export preferences to file
+                if not key:  # Using key as filepath
+                    self._print_error("Filepath is required for export action")
+                    print("Usage: cortex edit-pref export <filepath>")
+                    print("Example: cortex edit-pref export ~/cortex-prefs.json")
+                    return 1
+                
+                from pathlib import Path
+                manager.export_json(Path(key))
+                return 0
+                
+            elif action == 'import':
+                # Import preferences from file
+                if not key:  # Using key as filepath
+                    self._print_error("Filepath is required for import action")
+                    print("Usage: cortex edit-pref import <filepath>")
+                    print("Example: cortex edit-pref import ~/cortex-prefs.json")
+                    return 1
+                
+                from pathlib import Path
+                filepath = Path(key)
+                if not filepath.exists():
+                    self._print_error(f"File not found: {filepath}")
+                    return 1
+                
+                manager.import_json(filepath)
+                return 0
+                
+            else:
+                self._print_error(f"Unknown action: {action}")
+                print("\nAvailable actions:")
+                print("  set/add/update <key> <value>  - Set a preference value")
+                print("  delete/remove <key>           - Reset a preference to default")
+                print("  list/show/display             - Display all preferences")
+                print("  reset-all                     - Reset all preferences to defaults")
+                print("  validate                      - Validate configuration")
+                print("  export <filepath>             - Export preferences to JSON")
+                print("  import <filepath>             - Import preferences from JSON")
+                return 1
+                
+        except AttributeError as e:
+            self._print_error(f"Invalid preference key: {key}")
+            print("Use 'cortex check-pref' to see available keys")
+            return 1
+        except Exception as e:
+            self._print_error(f"Failed to edit preferences: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return 1
+
+>>>>>>> 1be5ced (User Preferences & Settings System (#26))
 
 def main():
     parser = argparse.ArgumentParser(
@@ -271,6 +590,17 @@ Examples:
   cortex install docker --execute
   cortex install "python 3.11 with pip"
   cortex install nginx --dry-run
+<<<<<<< HEAD
+=======
+  cortex history
+  cortex history show <id>
+  cortex rollback <id>
+  cortex check-pref
+  cortex check-pref ai.model
+  cortex edit-pref set ai.model gpt-4
+  cortex edit-pref delete theme
+  cortex edit-pref reset-all
+>>>>>>> 1be5ced (User Preferences & Settings System (#26))
 
 Environment Variables:
   OPENAI_API_KEY      OpenAI API key for GPT-4
@@ -297,6 +627,34 @@ Environment Variables:
     channel_set_parser = channel_sub.add_parser('set', help='Set update channel')
     channel_set_parser.add_argument('channel', choices=[c.value for c in UpdateChannel], help='Channel to use')
 
+<<<<<<< HEAD
+=======
+    # History command
+    history_parser = subparsers.add_parser('history', help='View installation history')
+    history_parser.add_argument('--limit', type=int, default=20, help='Number of records to show')
+    history_parser.add_argument('--status', choices=['success', 'failed', 'rolled_back', 'in_progress'], 
+                               help='Filter by status')
+    history_parser.add_argument('show_id', nargs='?', help='Show details for specific installation ID')
+    
+    # Rollback command
+    rollback_parser = subparsers.add_parser('rollback', help='Rollback an installation')
+    rollback_parser.add_argument('id', help='Installation ID to rollback')
+    rollback_parser.add_argument('--dry-run', action='store_true', help='Show rollback actions without executing')
+    
+    # Check preferences command
+    check_pref_parser = subparsers.add_parser('check-pref', help='Check/display user preferences')
+    check_pref_parser.add_argument('key', nargs='?', help='Specific preference key to check (optional)')
+    
+    # Edit preferences command
+    edit_pref_parser = subparsers.add_parser('edit-pref', help='Edit user preferences')
+    edit_pref_parser.add_argument('action', 
+                                  choices=['set', 'add', 'update', 'delete', 'remove', 'reset-key', 
+                                          'list', 'show', 'display', 'reset-all', 'validate', 'export', 'import'],
+                                  help='Action to perform')
+    edit_pref_parser.add_argument('key', nargs='?', help='Preference key or filepath (for export/import)')
+    edit_pref_parser.add_argument('value', nargs='?', help='Preference value (for set/add/update)')
+    
+>>>>>>> 1be5ced (User Preferences & Settings System (#26))
     args = parser.parse_args()
     
     if not args.command:
@@ -305,6 +663,7 @@ Environment Variables:
     
     cli = CortexCLI()
     
+<<<<<<< HEAD
     if args.command == 'install':
         return cli.install(args.software, execute=args.execute, dry_run=args.dry_run)
     if args.command == 'update':
@@ -316,6 +675,35 @@ Environment Variables:
             return cli.set_channel(args.channel)
     
     return 0
+=======
+    try:
+        if args.command == 'install':
+            return cli.install(args.software, execute=args.execute, dry_run=args.dry_run)
+        elif args.command == 'update':
+            return cli.update(channel=args.channel, force=args.force, dry_run=args.dry_run)
+        elif args.command == 'channel':
+            if args.channel_command == 'show':
+                return cli.show_channel()
+            if args.channel_command == 'set':
+                return cli.set_channel(args.channel)
+        elif args.command == 'history':
+            return cli.history(limit=args.limit, status=args.status, show_id=args.show_id)
+        elif args.command == 'rollback':
+            return cli.rollback(args.id, dry_run=args.dry_run)
+        elif args.command == 'check-pref':
+            return cli.check_pref(key=args.key)
+        elif args.command == 'edit-pref':
+            return cli.edit_pref(action=args.action, key=args.key, value=args.value)
+        else:
+            parser.print_help()
+            return 1
+    except KeyboardInterrupt:
+        print("\n❌ Operation cancelled by user", file=sys.stderr)
+        return 130
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}", file=sys.stderr)
+        return 1
+>>>>>>> 1be5ced (User Preferences & Settings System (#26))
 
 
 if __name__ == '__main__':

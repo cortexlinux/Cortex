@@ -9,13 +9,11 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from LLM.interpreter import CommandInterpreter
-from cortex.coordinator import InstallationCoordinator, StepStatus
 from installation_history import (
     InstallationHistory,
     InstallationType,
     InstallationStatus
 )
-from cortex.user_preferences import (
     PreferencesManager,
     print_all_preferences,
     format_preference_value
@@ -390,7 +388,6 @@ class CortexCLI:
                 print(f"Resetting {key} to default value...")
                 
                 # Create a new manager with defaults
-                from cortex.user_preferences import UserPreferences
                 defaults = UserPreferences()
                 
                 # Get the default value
@@ -545,9 +542,9 @@ Environment Variables:
                                   help='Action to perform')
     edit_pref_parser.add_argument('key', nargs='?', help='Preference key or filepath (for export/import)')
     edit_pref_parser.add_argument('value', nargs='?', help='Preference value (for set/add/update)')
+    health_parser = subparsers.add_parser('health', help='System health')
+    health_parser.add_argument('--fix', action='store_true')
     # Health command
-    health_parser = subparsers.add_parser('health', help='Analyze system health and show recommendations')
-    health_parser.add_argument('--fix', action='store_true', help='Apply automated fixes where possible')
 
     
     args = parser.parse_args()
@@ -571,7 +568,9 @@ Environment Variables:
             return cli.edit_pref(action=args.action, key=args.key, value=args.value)
         elif args.command == 'health':
             from cortex.health import check_health
-            check_health()
+            check_health(fix=args.fix)
+            return 0
+        elif args.command == 'health':
             return 0
         else:
             parser.print_help()

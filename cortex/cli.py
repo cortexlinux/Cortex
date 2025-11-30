@@ -545,6 +545,17 @@ Environment Variables:
                                   help='Action to perform')
     edit_pref_parser.add_argument('key', nargs='?', help='Preference key or filepath (for export/import)')
     edit_pref_parser.add_argument('value', nargs='?', help='Preference value (for set/add/update)')
+    # Notify command
+    notify_parser = subparsers.add_parser('notify', help='Send desktop notifications')
+    notify_parser.add_argument('title', nargs='?', default="Cortex", help='Notification Title')
+    notify_parser.add_argument('message', nargs='?', default="Test Message", help='Notification Message')
+    notify_parser.add_argument('--dnd-toggle', action='store_true', help='Toggle Smart DND mode')
+    notify_parser.add_argument('--config', action='store_true', help='Show current configuration')
+
+    # Cleanup command
+    cleanup_parser = subparsers.add_parser('cleanup', help='Optimize disk space and clean cache')
+    cleanup_parser.add_argument('--dry-run', action='store_true', help='Scan without deleting files')
+
     # Health command
     health_parser = subparsers.add_parser('health', help='Analyze system health and show recommendations')
     health_parser.add_argument('--fix', action='store_true', help='Apply automated fixes where possible')
@@ -569,6 +580,14 @@ Environment Variables:
             return cli.check_pref(key=args.key)
         elif args.command == 'edit-pref':
             return cli.edit_pref(action=args.action, key=args.key, value=args.value)
+        elif args.command == 'notify':
+            from cortex.notify import notify_cli
+            notify_cli(args.title, args.message, configure=args.config, dnd_toggle=args.dnd_toggle)
+            return 0
+        elif args.command == 'cleanup':
+            from cortex.cleanup import cleanup_cli
+            cleanup_cli(dry_run=args.dry_run)
+            return 0
         elif args.command == 'health':
             from cortex.health import check_health
             check_health()

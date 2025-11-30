@@ -552,6 +552,13 @@ Environment Variables:
     notify_parser.add_argument('--dnd-toggle', action='store_true', help='Toggle Smart DND mode')
     notify_parser.add_argument('--config', action='store_true', help='Show current configuration')
 
+    # Notify command
+    notify_parser = subparsers.add_parser('notify', help='Send desktop notifications')
+    notify_parser.add_argument('title', nargs='?', default="Cortex", help='Notification Title')
+    notify_parser.add_argument('message', nargs='?', default="Test Message", help='Notification Message')
+    notify_parser.add_argument('--dnd-toggle', action='store_true', help='Toggle Smart DND mode')
+    notify_parser.add_argument('--config', action='store_true', help='Show current configuration')
+
     # Cleanup command
     cleanup_parser = subparsers.add_parser('cleanup', help='Optimize disk space and clean cache')
     cleanup_parser.add_argument('--dry-run', action='store_true', help='Scan without deleting files')
@@ -580,6 +587,10 @@ Environment Variables:
             return cli.check_pref(key=args.key)
         elif args.command == 'edit-pref':
             return cli.edit_pref(action=args.action, key=args.key, value=args.value)
+        elif args.command == 'notify':
+            from cortex.notify import notify_cli
+            notify_cli(args.title, args.message, configure=args.config, dnd_toggle=args.dnd_toggle)
+            return 0
         elif args.command == 'notify':
             from cortex.notify import notify_cli
             notify_cli(args.title, args.message, configure=args.config, dnd_toggle=args.dnd_toggle)

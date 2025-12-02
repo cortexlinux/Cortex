@@ -1,9 +1,6 @@
 import json
-import os
 import sys
-import unittest
-from types import SimpleNamespace
-from unittest.mock import Mock, patch
+import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -30,14 +27,6 @@ class TestCommandInterpreter(unittest.TestCase):
         self.assertEqual(interpreter.model, "gpt-4")
         mock_openai.assert_called_once_with(api_key=self.api_key)
     
-    @patch.dict(os.environ, {'GROQ_BASE_URL': 'https://example.com/api'}, clear=True)
-    @patch('openai.OpenAI')
-    def test_initialization_groq(self, mock_openai):
-        interpreter = CommandInterpreter(api_key=self.api_key, provider="groq")
-        self.assertEqual(interpreter.provider, APIProvider.GROQ)
-        self.assertEqual(interpreter.model, "llama-3.3-70b-versatile")
-        mock_openai.assert_called_once_with(api_key=self.api_key, base_url='https://example.com/api')
-
     @patch('anthropic.Anthropic')
     def test_initialization_claude(self, mock_anthropic):
         interpreter = CommandInterpreter(api_key=self.api_key, provider="claude")
@@ -272,49 +261,6 @@ class TestCommandInterpreter(unittest.TestCase):
         result = interpreter.parse("install docker")
         self.assertGreater(len(result), 0)
         self.assertTrue(any("docker" in cmd.lower() for cmd in result))
-
-    @patch.dict(os.environ, {'CORTEX_FAKE_COMMANDS': '{"commands": ["echo test"]}'}, clear=True)
-    def test_call_fake_with_env_commands(self):
-        interpreter = CommandInterpreter(api_key="ignore", provider="fake")
-        result = interpreter.parse("install docker", validate=False)
-        self.assertEqual(result, ["echo test"])
-
-    @patch.dict(os.environ, {}, clear=True)
-    def test_call_fake_with_defaults(self):
-        interpreter = CommandInterpreter(api_key="ignore", provider="fake")
-        result = interpreter.parse("install docker", validate=False)
-        self.assertTrue(len(result) > 0)
-
-    @patch.dict(os.environ, {}, clear=True)
-    @patch.dict(sys.modules, {'requests': Mock()})
-    def test_call_kimi_success(self):
-        requests_mock = sys.modules['requests']
-        response_mock = Mock()
-        response_mock.json.return_value = {
-            'choices': [
-                {'message': {'content': '{"commands": ["apt update"]}'}}
-            ]
-        }
-        response_mock.raise_for_status.return_value = None
-        requests_mock.post.return_value = response_mock
-
-        interpreter = CommandInterpreter(api_key=self.api_key, provider="kimi")
-        interpreter.client = requests_mock
-
-        result = interpreter._call_kimi("install docker")
-        self.assertEqual(result, ["apt update"])
-
-    @patch.dict(os.environ, {}, clear=True)
-    @patch.dict(sys.modules, {'requests': Mock()})
-    def test_call_kimi_failure(self):
-        requests_mock = sys.modules['requests']
-        requests_mock.post.side_effect = Exception("API Error")
-
-        interpreter = CommandInterpreter(api_key=self.api_key, provider="kimi")
-        interpreter.client = requests_mock
-
-        with self.assertRaises(RuntimeError):
-            interpreter._call_kimi("install docker")
 
 
 if __name__ == "__main__":

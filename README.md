@@ -1,121 +1,157 @@
-ds# 🧠 Cortex Linux
-### The AI-Native Operating System
+# Cortex Linux
 
-**Linux that understands you. No documentation required.**
+**Linux automation that actually works.** Tell it what you want in plain English.
+
 ```bash
 $ cortex install oracle-23-ai --optimize-gpu
-🧠 Analyzing system: NVIDIA RTX 4090 detected
-   Installing CUDA 12.3 + dependencies
-   Configuring Oracle for GPU acceleration  
-   Running validation tests
-✅ Oracle 23 AI ready at localhost:1521 (4m 23s)
+
+Analyzing system... NVIDIA RTX 4090 detected
+Planning: CUDA 12.3 → cuDNN → Oracle 23 AI
+Installing 47 packages (this usually takes mass googling)
+Configuring for GPU acceleration
+Running validation...
+
+Done. Oracle 23 AI ready at localhost:1521
+Total time: 4m 23s (vs. your afternoon)
 ```
 
 ## The Problem
 
-Installing complex software on Linux is broken:
-- 47 Stack Overflow tabs to install CUDA drivers
-- Dependency hell that wastes days
-- Configuration files written in ancient runes
-- "Works on my machine" syndrome
+We've all been there:
 
-**Developers spend 30% of their time fighting the OS instead of building.**
+- **12 browser tabs** of conflicting Stack Overflow answers
+- **Dependency hell** where installing X breaks Y which needs Z
+- **Config file archaeology** - who wrote this? what does `vm.swappiness=60` even do?
+- **4 hours later** you still don't have CUDA working
 
-## The Solution
+I built Cortex because I was tired of wasting time on package management instead of actual work.
 
-Cortex Linux embeds AI at the operating system level. Tell it what you need in plain English—it handles everything:
+## What It Does
 
-- **Natural language commands** → System understands intent
-- **Hardware-aware optimization** → Automatically configures for your GPU/CPU
-- **Self-healing configuration** → Fixes broken dependencies automatically
-- **Enterprise-grade security** → AI actions are sandboxed and validated
+Cortex wraps `apt` with an LLM that:
 
-## Status: Early Development
+1. **Understands what you mean** - "install a machine learning stack" → figures out PyTorch, TensorFlow, CUDA, cuDNN, Jupyter, etc.
+2. **Detects your hardware** - Sees your GPU/CPU and configures appropriately
+3. **Handles dependencies** - Resolves conflicts before they happen
+4. **Rolls back on failure** - Something breaks? Undo with one command
+5. **Runs in a sandbox** - AI-generated commands execute in Firejail isolation
 
-**Seeking contributors.** If you've ever spent 6 hours debugging a failed apt install, this project is for you.
+It's not magic. It's just automating what a senior sysadmin would do, but faster.
 
-## Current Roadmap
+## Current Status
 
-### Phase 1: Foundation (Weeks 1-2)
-- ✅ LLM integration layer (PR #5 by @Sahilbhatane)
-- ✅ Safe command execution sandbox (PR #6 by @dhvil)
-- ✅ Hardware detection (PR #4 by @dhvil)
-- [ ] Package manager AI wrapper
-- [ ] Basic multi-step orchestration
+**Working (merged to main):**
+- LLM integration (Claude API via LangChain)
+- Hardware detection (GPU, CPU, memory)
+- Sandboxed execution (Firejail + AppArmor)
+- Package manager wrapper
+- Installation rollback
+- Context memory (learns your preferences)
 
-### Phase 2: Intelligence (Weeks 2-5)
-- [ ] Dependency resolution AI
-- [ ] Configuration file generation
-- [ ] Multi-step installation orchestration
-- [ ] Error diagnosis and auto-fix
+**In progress:**
+- Dependency resolution improvements
+- Better error messages
+- Multi-step orchestration
+- Web dashboard (maybe)
 
-### Phase 3: Enterprise (Weeks 5-9)
-- [ ] Security hardening
-- [ ] Audit logging
-- [ ] Role-based access control
-- [ ] Enterprise deployment tools
+This is early-stage software. Expect rough edges.
 
 ## Tech Stack
 
-- **Base OS**: Ubuntu 24.04 LTS (Debian packaging)
-- **AI Layer**: Python 3.11+, OpenAI GPT-4, Anthropic Claude 3.5, Kimi K2
-- **Security**: Firejail sandboxing, AppArmor policies
-- **Package Management**: apt wrapper with semantic understanding
-- **Hardware Detection**: hwinfo, lspci, nvidia-smi integration
+- **Base:** Ubuntu 24.04 LTS
+- **Language:** Python 3.11+ (yes, I know - "Python for a package manager?" - it's a prototype, Rust rewrite is on the roadmap)
+- **AI:** LangChain + Claude API
+- **Security:** Firejail sandboxing, AppArmor policies
+- **Storage:** SQLite for history and context
 
-### Supported LLM Providers
+## Safety
 
-Configure the CLI by exporting the relevant API key (or using the fake provider
-for offline development):
+"But what if the AI hallucinates `rm -rf /`?"
 
-| Provider | Environment Variable | Default Model |
-|----------|----------------------|---------------|
-| OpenAI   | `OPENAI_API_KEY`     | `gpt-4`       |
-| Claude   | `ANTHROPIC_API_KEY`  | `claude-3-5-sonnet-20241022` |
-| Kimi K2  | `KIMI_API_KEY`       | `kimi-k2`     |
-| Fake     | `CORTEX_PROVIDER=fake` + optional `CORTEX_FAKE_COMMANDS` | Offline stubs |
+Fair concern. Here's how we handle it:
 
-To run the CLI with the fake provider:
+1. **Sandbox everything** - Commands run in Firejail isolation
+2. **Whitelist dangerous operations** - No `rm -rf`, no `dd`, no `mkfs` without explicit confirmation
+3. **Dry-run by default** - Shows you what it plans to do before doing it
+4. **Rollback built-in** - Every installation is reversible
+5. **Human confirmation** - Destructive operations require typing "yes I'm sure"
+
+We're paranoid about this. The AI is a suggestion engine, not root.
+
+## Contributing
+
+We pay bounties for merged PRs:
+
+| Type | Amount |
+|------|--------|
+| Bug fixes | $25-50 |
+| Features | $50-200 |
+| Major features | $200-500 |
+
+Payment via Bitcoin, USDC, PayPal, or Venmo. International contributors welcome.
+
+Check the [issues](https://github.com/cortexlinux/cortex/issues) for bounty labels.
+
+### What We Need
+
+- **Linux developers** who know apt/dpkg internals
+- **Python devs** for the core logic
+- **Security folks** to poke holes in our sandbox
+- **Technical writers** for documentation
+- **Testers** to break things
+
+## Running It
 
 ```bash
-CORTEX_PROVIDER=fake CORTEX_FAKE_COMMANDS='{"commands": ["echo Step 1"]}' cortex install docker --dry-run
+# Clone
+git clone https://github.com/cortexlinux/cortex.git
+cd cortex
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set your Claude API key
+export ANTHROPIC_API_KEY="your-key"
+
+# Run
+python -m cortex install "nginx with ssl"
 ```
 
-## Get Involved
+Requires Ubuntu 22.04+ or Debian 12+. Other distros eventually.
 
-**We need:**
-- Linux Kernel Developers
-- AI/ML Engineers
-- DevOps Experts
-- Technical Writers
-- Beta Testers
+## FAQ
 
-Browse [Issues](../../issues) for contribution opportunities and review the
-[Contribution Guide](contribution.md) plus the [Testing Strategy](test.md)
-before opening a pull request.
+**Q: Why Python for a package manager?**
+A: It's a prototype. If this takes off, core components get rewritten in Rust. Python lets us move fast and prove the concept.
 
-### Join the Community
+**Q: Is this just a wrapper around apt?**
+A: Yes, for now. The goal is deeper integration - custom package formats, rollback at filesystem level, eventually kernel-level optimizations. You have to start somewhere.
 
-- **Discord**: https://discord.gg/uCqHvxjU83
-- **Email**: mike@cortexlinux.com
+**Q: Why Claude and not GPT-4/Llama/etc?**
+A: Claude has the best instruction-following for this use case. We'll add model options eventually.
 
-## Why This Matters
+**Q: Can I use this in production?**
+A: Not yet. This is alpha software. Test it on VMs first.
 
-**Market Opportunity**: $50B+ (10x Cursor's $9B valuation)
+## Roadmap
 
-- Cursor wraps VS Code → $9B valuation
-- Cortex wraps entire OS → 10x larger market
-- Every data scientist, ML engineer, DevOps team needs this
+**Phase 1 (now):** Get the basics working. Natural language → apt commands.
 
-**Business Model**: Open source community edition + Enterprise subscriptions
+**Phase 2 (Q1 2025):** Polish, error handling, config file generation.
 
-## Founding Team
+**Phase 3 (2025):** Deeper integration - package caching, custom repos, multi-distro support.
 
-**Michael J. Morgan** - CEO/Founder  
-AI Venture Holdings LLC | Patent holder in AI-accelerated systems
+**Phase 4 (eventually):** Kernel-level stuff - we have some ideas around native LLM support in the Linux kernel. Wild, but interesting.
 
-**You?** - Looking for technical co-founders from the contributor community.
+## Community
+
+- **Discord:** [discord.gg/uCqHvxjU83](https://discord.gg/uCqHvxjU83)
+- **Email:** mike@cortexlinux.com
+
+## License
+
+Apache 2.0 - Use it, fork it, sell it, whatever. Just don't blame us if it breaks.
 
 ---
 
-⭐ **Star this repo to follow development**
+*Built by [Mike Morgan](https://github.com/mikejmorgan-ai) and contributors. We're hiring - if you're good at Linux internals and want to work on something different, reach out.*

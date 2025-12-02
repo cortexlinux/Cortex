@@ -3,14 +3,17 @@ import os
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
+# # Try to read requirements from root, fallback to LLM directory
+requirements_path = "requirements.txt"
+if not os.path.exists(requirements_path):
+    requirements_path = os.path.join("LLM", "requirements.txt")
 
-with open(os.path.join("LLM", "requirements.txt"), "r", encoding="utf-8") as fh:
-    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
-
-setup(
-    name="cortex-linux",
-    version="0.1.0",
-    author="Cortex Linux",
+if os.path.exists(requirements_path):
+    with open(requirements_path, "r", encoding="utf-8") as fh:
+        requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#") and not line.startswith("-r")]
+else:
+    requirements = ["anthropic>=0.18.0", "openai>=1.0.0"]
+ Linux",
     author_email="mike@cortexlinux.com",
     description="AI-powered Linux command interpreter",
     long_description=long_description,

@@ -1,17 +1,34 @@
-"""Execution coordinator for multi-step software installation plans."""
-
-import json
 import subprocess
+import shlex
 import time
-from dataclasses import dataclass
-from datetime import datetime
+import json
+import re
+from typing import List, Dict, Any, Optional, Callable
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Dangerous patterns that should never be executed
+DANGEROUS_PATTERNS = [
+    r'rm\s+-rf\s+[/\*]',
+    r'rm\s+--no-preserve-root',
+    r'dd\s+if=.*of=/dev/',
+    r'curl\s+.*\|\s*sh',
+    r'curl\s+.*\|\s*bash',
+    r'wget\s+.*\|\s*sh',
+    r'wget\s+.*\|\s*bash',
+    r'\beval\s+',
+    r'base64\s+-d\s+.*\|',
+    r'>\s*/etc/',
+    r'chmod\s+777',
+    r'chmod\s+\+s',
+]
 
 
 class StepStatus(Enum):
-    """Lifecycle states for a single installation step."""
-
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
@@ -21,8 +38,6 @@ class StepStatus(Enum):
 
 @dataclass
 class InstallationStep:
-    """Container describing an individual shell command execution."""
-
     command: str
     description: str
     status: StepStatus = StepStatus.PENDING
@@ -33,7 +48,6 @@ class InstallationStep:
     return_code: Optional[int] = None
     
     def duration(self) -> Optional[float]:
-        """Return the elapsed execution time for the step if available."""
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
         return None
@@ -41,8 +55,6 @@ class InstallationStep:
 
 @dataclass
 class InstallationResult:
-    """Summary returned after executing all installation steps."""
-
     success: bool
     steps: List[InstallationStep]
     total_duration: float
@@ -51,7 +63,7 @@ class InstallationResult:
 
 
 class InstallationCoordinator:
-    """Coordinate execution of shell commands with optional rollback."""
+    """Coordinates multi-step software installation processes."""
 
     def __init__(
         self,
@@ -63,8 +75,7 @@ class InstallationCoordinator:
         log_file: Optional[str] = None,
         progress_callback: Optional[Callable[[int, int, InstallationStep], None]] = None
     ):
-        """Build the coordinator and prepare execution metadata."""
-
+        """Initialize an installation run with optional logging and rollback."""
         self.timeout = timeout
         self.stop_on_error = stop_on_error
         self.enable_rollback = enable_rollback
@@ -83,9 +94,57 @@ class InstallationCoordinator:
         ]
         
         self.rollback_commands: List[str] = []
+
+    @classmethod
+    def from_plan(
+        cls,
+        plan: List[Dict[str, str]],
+        *,
+        timeout: int = 300,
+        stop_on_error: bool = True,
+        enable_rollback: Optional[bool] = None,
+        log_file: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, int, InstallationStep], None]] = None
+    ) -> "InstallationCoordinator":
+        """Create a coordinator from a structured plan produced by an LLM.
+
+        Each plan entry should contain at minimum a ``command`` key and
+        optionally ``description`` and ``rollback`` fields. Rollback commands are
+        registered automatically when present.
+        """
+
+        commands: List[str] = []
+        descriptions: List[str] = []
+        rollback_commands: List[str] = []
+
+        for index, step in enumerate(plan):
+            command = step.get("command")
+            if not command:
+                raise ValueError("Each plan step must include a 'command'")
+
+            commands.append(command)
+            descriptions.append(step.get("description", f"Step {index + 1}"))
+
+            rollback_cmd = step.get("rollback")
+            if rollback_cmd:
+                rollback_commands.append(rollback_cmd)
+
+        coordinator = cls(
+            commands,
+            descriptions,
+            timeout=timeout,
+            stop_on_error=stop_on_error,
+            enable_rollback=enable_rollback if enable_rollback is not None else bool(rollback_commands),
+            log_file=log_file,
+            progress_callback=progress_callback,
+        )
+
+        for rollback_cmd in rollback_commands:
+            coordinator.add_rollback_command(rollback_cmd)
+
+        return coordinator
     
-    def _log(self, message: str) -> None:
-        """Append a timestamped line to the optional log file."""
+    def _log(self, message: str):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] {message}"
         
@@ -96,14 +155,42 @@ class InstallationCoordinator:
             except Exception:
                 pass
     
+    def _validate_command(self, command: str) -> tuple:
+        """Validate command for security before execution.
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not command or not command.strip():
+            return False, "Empty command"
+
+        # Check for dangerous patterns
+        for pattern in DANGEROUS_PATTERNS:
+            if re.search(pattern, command, re.IGNORECASE):
+                logger.warning(f"Dangerous command pattern blocked: {pattern}")
+                return False, f"Command blocked: matches dangerous pattern"
+
+        return True, None
+
     def _execute_command(self, step: InstallationStep) -> bool:
-        """Run a step command and update the step state in place."""
         step.status = StepStatus.RUNNING
         step.start_time = time.time()
-        
+
         self._log(f"Executing: {step.command}")
-        
+
+        # Validate command before execution
+        is_valid, error = self._validate_command(step.command)
+        if not is_valid:
+            step.status = StepStatus.FAILED
+            step.error = error
+            step.end_time = time.time()
+            self._log(f"Command blocked: {step.command} - {error}")
+            return False
+
         try:
+            # Use shell=True carefully - commands are validated first
+            # For complex shell commands (pipes, redirects), shell=True is needed
+            # Simple commands could use shlex.split() with shell=False
             result = subprocess.run(
                 step.command,
                 shell=True,
@@ -140,8 +227,7 @@ class InstallationCoordinator:
             self._log(f"Error: {step.command} - {str(e)}")
             return False
     
-    def _rollback(self) -> None:
-        """Execute registered rollback commands in reverse order."""
+    def _rollback(self):
         if not self.enable_rollback or not self.rollback_commands:
             return
         
@@ -159,12 +245,12 @@ class InstallationCoordinator:
             except Exception as e:
                 self._log(f"Rollback failed: {cmd} - {str(e)}")
     
-    def add_rollback_command(self, command: str) -> None:
-        """Register a command that reverts a successful step."""
+    def add_rollback_command(self, command: str):
+        """Register a rollback command executed if a step fails."""
         self.rollback_commands.append(command)
     
     def execute(self) -> InstallationResult:
-        """Execute all commands and return a structured result object."""
+        """Run each installation step and capture structured results."""
         start_time = time.time()
         failed_step_index = None
         
@@ -213,7 +299,7 @@ class InstallationCoordinator:
         )
     
     def verify_installation(self, verify_commands: List[str]) -> Dict[str, bool]:
-        """Run verification commands and return a mapping of pass/fail results."""
+        """Execute verification commands and return per-command success."""
         verification_results = {}
         
         self._log("Starting verification...")
@@ -237,7 +323,6 @@ class InstallationCoordinator:
         return verification_results
     
     def get_summary(self) -> Dict[str, Any]:
-        """Return a JSON-serialisable summary of the full installation run."""
         total_steps = len(self.steps)
         success_steps = sum(1 for s in self.steps if s.status == StepStatus.SUCCESS)
         failed_steps = sum(1 for s in self.steps if s.status == StepStatus.FAILED)
@@ -260,43 +345,58 @@ class InstallationCoordinator:
             ]
         }
     
-    def export_log(self, filepath: str) -> None:
-        """Persist the run summary to ``filepath`` in JSON format."""
+    def export_log(self, filepath: str):
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(self.get_summary(), f, indent=2)
 
 
 def install_docker() -> InstallationResult:
-    """Provision Docker using the coordinator's default behaviour."""
+    plan = [
+        {
+            "command": "apt update",
+            "description": "Update package lists"
+        },
+        {
+            "command": "apt install -y apt-transport-https ca-certificates curl software-properties-common",
+            "description": "Install dependencies"
+        },
+        {
+            "command": "install -m 0755 -d /etc/apt/keyrings",
+            "description": "Create keyrings directory"
+        },
+        {
+            "command": "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg",
+            "description": "Add Docker GPG key"
+        },
+        {
+            "command": "chmod a+r /etc/apt/keyrings/docker.gpg",
+            "description": "Set key permissions"
+        },
+        {
+            "command": 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null',
+            "description": "Add Docker repository"
+        },
+        {
+            "command": "apt update",
+            "description": "Update package lists again"
+        },
+        {
+            "command": "apt install -y docker-ce docker-ce-cli containerd.io",
+            "description": "Install Docker packages"
+        },
+        {
+            "command": "systemctl start docker",
+            "description": "Start Docker service",
+            "rollback": "systemctl stop docker"
+        },
+        {
+            "command": "systemctl enable docker",
+            "description": "Enable Docker on boot",
+            "rollback": "systemctl disable docker"
+        }
+    ]
 
-    commands = [
-        "apt update",
-        "apt install -y apt-transport-https ca-certificates curl software-properties-common",
-        "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -",
-        'add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"',
-        "apt update",
-        "apt install -y docker-ce docker-ce-cli containerd.io",
-        "systemctl start docker",
-        "systemctl enable docker"
-    ]
-    
-    descriptions = [
-        "Update package lists",
-        "Install dependencies",
-        "Add Docker GPG key",
-        "Add Docker repository",
-        "Update package lists again",
-        "Install Docker packages",
-        "Start Docker service",
-        "Enable Docker on boot"
-    ]
-    
-    coordinator = InstallationCoordinator(
-        commands=commands,
-        descriptions=descriptions,
-        timeout=300,
-        stop_on_error=True
-    )
+    coordinator = InstallationCoordinator.from_plan(plan, timeout=300, stop_on_error=True)
     
     result = coordinator.execute()
     
@@ -305,3 +405,31 @@ def install_docker() -> InstallationResult:
         coordinator.verify_installation(verify_commands)
     
     return result
+
+
+def example_cuda_install_plan() -> List[Dict[str, str]]:
+    """Return a sample CUDA installation plan for LLM integration tests."""
+
+    return [
+        {
+            "command": "apt update",
+            "description": "Refresh package repositories"
+        },
+        {
+            "command": "apt install -y build-essential dkms",
+            "description": "Install build tooling"
+        },
+        {
+            "command": "sh cuda_installer.run --silent",
+            "description": "Install CUDA drivers",
+            "rollback": "rm -rf /usr/local/cuda"
+        },
+        {
+            "command": "nvidia-smi",
+            "description": "Verify GPU driver status"
+        },
+        {
+            "command": "nvcc --version",
+            "description": "Validate CUDA compiler installation"
+        }
+    ]

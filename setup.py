@@ -12,8 +12,12 @@ if os.path.exists(requirements_path):
     with open(requirements_path, "r", encoding="utf-8") as fh:
         requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#") and not line.startswith("-r")]
 else:
-    requirements = ["anthropic>=0.18.0", "openai>=1.0.0"]
- Linux",
+    requirements = ["anthropic>=0.18.0", "openai>=1.0.0", "requests>=2.32.4"]
+
+setup(
+    name="cortex-linux",
+    version="0.1.0",
+    author="Cortex Linux",
     author_email="mike@cortexlinux.com",
     description="AI-powered Linux command interpreter",
     long_description=long_description,

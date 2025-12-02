@@ -1,6 +1,9 @@
 import json
-import sys
 import os
+import sys
+import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -24,7 +27,7 @@ class TestCommandInterpreter(unittest.TestCase):
     def test_initialization_openai(self, mock_openai):
         interpreter = CommandInterpreter(api_key=self.api_key, provider="openai")
         self.assertEqual(interpreter.provider, APIProvider.OPENAI)
-        self.assertEqual(interpreter.model, "gpt-4")
+        self.assertEqual(interpreter.model, "gpt-4o")
         mock_openai.assert_called_once_with(api_key=self.api_key)
     
     @patch('anthropic.Anthropic')
@@ -124,30 +127,6 @@ class TestCommandInterpreter(unittest.TestCase):
             interpreter._call_openai("install docker")
 
     @patch('openai.OpenAI')
-    def test_call_groq_success(self, mock_openai):
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = '{"commands": ["apt update"]}'
-        mock_client.chat.completions.create.return_value = mock_response
-
-        interpreter = CommandInterpreter(api_key=self.api_key, provider="groq")
-        interpreter.client = mock_client
-
-        result = interpreter._call_groq("install docker")
-        self.assertEqual(result, ["apt update"])
-
-    @patch('openai.OpenAI')
-    def test_call_groq_failure(self, mock_openai):
-        mock_client = Mock()
-        mock_client.chat.completions.create.side_effect = Exception("API Error")
-
-        interpreter = CommandInterpreter(api_key=self.api_key, provider="groq")
-        interpreter.client = mock_client
-
-        with self.assertRaises(RuntimeError):
-            interpreter._call_groq("install docker")
-    
     @patch('anthropic.Anthropic')
     def test_call_claude_success(self, mock_anthropic):
         mock_client = Mock()

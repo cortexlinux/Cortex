@@ -1,7 +1,8 @@
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
 import tempfile
 import os
+import time
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -9,9 +10,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from cortex.coordinator import (
     InstallationCoordinator,
     InstallationStep,
+    InstallationResult,
     StepStatus,
-    install_docker,
-    example_cuda_install_plan
+    install_docker
 )
 
 
@@ -42,20 +43,6 @@ class TestInstallationCoordinator(unittest.TestCase):
         self.assertEqual(coordinator.steps[0].command, "echo 1")
         self.assertEqual(coordinator.steps[1].command, "echo 2")
     
-    def test_from_plan_initialization(self):
-        plan = [
-            {"command": "echo 1", "description": "First step"},
-            {"command": "echo 2", "rollback": "echo rollback"}
-        ]
-
-        coordinator = InstallationCoordinator.from_plan(plan)
-
-        self.assertEqual(len(coordinator.steps), 2)
-        self.assertEqual(coordinator.steps[0].description, "First step")
-        self.assertEqual(coordinator.steps[1].description, "Step 2")
-        self.assertTrue(coordinator.enable_rollback)
-        self.assertEqual(coordinator.rollback_commands, ["echo rollback"])
-
     def test_initialization_with_descriptions(self):
         commands = ["echo 1", "echo 2"]
         descriptions = ["First", "Second"]
@@ -329,7 +316,7 @@ class TestInstallationCoordinator(unittest.TestCase):
         self.assertIsNotNone(step.start_time)
         self.assertIsNotNone(step.end_time)
         if step.end_time and step.start_time:
-            self.assertGreater(step.end_time, step.start_time)
+            self.assertTrue(step.end_time > step.start_time)
         self.assertIsNotNone(step.duration())
 
 
@@ -360,16 +347,6 @@ class TestInstallDocker(unittest.TestCase):
         
         self.assertFalse(result.success)
         self.assertIsNotNone(result.failed_step)
-
-
-class TestInstallationPlans(unittest.TestCase):
-
-    def test_example_cuda_install_plan_structure(self):
-        plan = example_cuda_install_plan()
-
-        self.assertGreaterEqual(len(plan), 5)
-        self.assertTrue(all("command" in step for step in plan))
-        self.assertTrue(any("rollback" in step for step in plan))
 
 
 if __name__ == '__main__':

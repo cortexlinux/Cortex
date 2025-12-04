@@ -1,14 +1,1 @@
-"""/dev/llm Virtual Device - FUSE-Based LLM Interface"""
-from .llm_device import (
-    LLMDevice,
-    MockLLMClient,
-    ClaudeLLMClient,
-    Session,
-)
-
-__all__ = [
-    "LLMDevice",
-    "MockLLMClient",
-    "ClaudeLLMClient",
-    "Session",
-]
+"""\n/dev/llm Virtual Device - FUSE-based file interface for LLM operations.\n\nProvides file-like interface to LLM operations. Enables shell scripts\nand any Unix program to use LLMs.\n\nBounty: cortexlinux/cortex#223\n\"\"\"\n\nfrom .llm_device import LLMDevice, MockLLMClient, ClaudeLLMClient, Session\n\n__all__ = ['LLMDevice', 'MockLLMClient', 'ClaudeLLMClient', 'Session']\n

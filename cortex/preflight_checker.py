@@ -76,8 +76,8 @@ class PreflightChecker:
     All checks are performed against the actual system - no simulation.
     """
     
-    # Paths to check for disk space
-    DISK_CHECK_PATHS = ['/', '/var/lib/docker', '/opt']
+    # Default paths - will be set based on platform in __init__
+    DISK_CHECK_PATHS = []
     MIN_DISK_SPACE_MB = 500
     
     def __init__(self, api_key: Optional[str] = None, provider: str = 'openai'):
@@ -88,6 +88,18 @@ class PreflightChecker:
         self.api_key = api_key
         self.provider = provider
         self._llm_client = None
+        
+        # Set platform-appropriate disk check paths
+        if self._is_windows:
+            # On Windows, check system drive and common program directories
+            system_drive = os.environ.get('SystemDrive', 'C:') + '\\'
+            self.DISK_CHECK_PATHS = [system_drive, os.path.join(system_drive, 'Program Files')]
+        elif self._is_mac:
+            # On macOS, check root and common application directories
+            self.DISK_CHECK_PATHS = ['/', '/Applications', '/usr/local']
+        else:
+            # On Linux, check root and common Docker/application directories
+            self.DISK_CHECK_PATHS = ['/', '/var/lib/docker', '/opt']
     
     def _run_command(self, cmd: List[str], timeout: int = 10) -> Tuple[bool, str]:
         """Run a shell command and return success status and output"""
@@ -166,6 +178,7 @@ class PreflightChecker:
                             elif key == 'ID':
                                 info['distro_id'] = value
             except Exception:
+                # If /etc/os-release is malformed or unreadable, continue with defaults
                 pass
         
         return info
@@ -238,6 +251,7 @@ class PreflightChecker:
                 free_mb = stat.free // (1024 * 1024)
                 total_mb = stat.total // (1024 * 1024)
             except Exception:
+                # Path may not be accessible or permission denied; leave as 0
                 pass
             
             # Get filesystem type on Linux
@@ -306,6 +320,7 @@ class PreflightChecker:
                     self._llm_client = CommandInterpreter(api_key=fallback_key, provider=fallback_provider)
                     return self._llm_client
             except Exception:
+                # Fallback provider also failed; will return None and use estimates
                 pass
         
         return None
@@ -365,8 +380,9 @@ If unsure, estimate typical sizes. ONLY OUTPUT THE JSON OBJECT."""
                 
                 data = json.loads(content)
                 return data
-        except Exception:
+        except Exception as e:
             # LLM response parsing failed, fall back to estimates
+            self.report.warnings.append(f"Failed to parse LLM response for package info: {e}. Falling back to estimated package sizes.")
             pass
         
         return {'packages': [], 'total_size_mb': 0, 'config_changes': []}
@@ -465,7 +481,6 @@ If unsure, estimate typical sizes. ONLY OUTPUT THE JSON OBJECT."""
     
     def calculate_requirements(self, software: str) -> None:
         """Calculate installation requirements based on software to install"""
-        
         # Calculate total download and disk requirements
         total_download = 0
         total_disk = 0
@@ -479,14 +494,19 @@ If unsure, estimate typical sizes. ONLY OUTPUT THE JSON OBJECT."""
                 total_download += size
                 total_disk += size * 3  # Rough estimate: downloaded + extracted + working space
             except (ValueError, AttributeError):
-                pass
+                # Could not parse size_mb for this package; skip and warn
+                self.report.warnings.append(
+                    f"Could not parse size for package '{pkg.get('name', 'unknown')}', value: '{pkg.get('size_mb', '0')}'"
+                )
         
         self.report.total_download_mb = total_download
         self.report.total_disk_required_mb = total_disk
         
         # Check if we have enough disk space
+        # Determine the root path for the current working directory
+        root_path = Path(os.getcwd()).anchor
         root_disk = next(
-            (d for d in self.report.disk_usage if d.path == '/'),
+            (d for d in self.report.disk_usage if os.path.normcase(os.path.abspath(d.path)) == os.path.normcase(os.path.abspath(root_path))),
             None
         )
         
@@ -554,7 +574,14 @@ def format_report(report: PreflightReport, software: str) -> str:
         lines.append(f"\n✓ {software} is already installed")
     
     # Disk space available
-    root_disk = next((d for d in report.disk_usage if d.path == '/'), None)
+    # Determine the root disk path based on the platform
+    if os.name == 'nt':
+        # On Windows, use the system drive (e.g., 'C:\\')
+        root_path = os.environ.get('SystemDrive', 'C:') + '\\'
+    else:
+        # On Unix-like systems, use '/'
+        root_path = '/'
+    root_disk = next((d for d in report.disk_usage if os.path.normcase(os.path.abspath(d.path)) == os.path.normcase(os.path.abspath(root_path))), None)
     if root_disk:
         status = '✓' if root_disk.free_mb > report.total_disk_required_mb else '✗'
         lines.append(f"Disk space available: {root_disk.free_mb // 1024} GB {status}")
@@ -588,7 +615,6 @@ def format_report(report: PreflightReport, software: str) -> str:
 
 def export_report(report: PreflightReport, filepath: str) -> None:
     """Export preflight report to a JSON file"""
-    import json
     from dataclasses import asdict
     
     # Convert dataclass to dict

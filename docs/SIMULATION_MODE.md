@@ -220,7 +220,7 @@ print(output)
 ```python
 # Export report to JSON
 from cortex.preflight_checker import export_report
-json_str = export_report(report)
+export_report(report, "report.json")
 
 # Check specific software
 pkg_info = checker.check_software("nginx")

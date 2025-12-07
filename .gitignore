@@ -157,3 +157,7 @@ htmlcov/
 data/*.json
 data/*.csv
 !data/contributors.json
+.cortex/
+*.yaml.bak
+/tmp/
+.env

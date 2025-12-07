@@ -156,3 +156,4 @@ htmlcov/
 .cortex/
 *.yaml.bak
 /tmp/
+.env

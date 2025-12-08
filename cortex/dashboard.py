@@ -19,11 +19,9 @@ try:
     from rich.console import Console, Group
     from rich.table import Table
     from rich.panel import Panel
-    from rich.layout import Layout
     from rich.live import Live
     from rich.text import Text
     from rich.columns import Columns
-    from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn
     from rich.box import ROUNDED
 except ImportError as e:
     raise ImportError(f"rich library required: {e}. Install with: pip install rich")
@@ -37,15 +35,20 @@ try:
     import pynvml
     GPU_AVAILABLE = True
 except ImportError:
+    pynvml = None  # type: ignore
     GPU_AVAILABLE = False
 
 # Cross-platform keyboard input
 if sys.platform == 'win32':
     import msvcrt
+    termios = None  # type: ignore
+    tty = None  # type: ignore
+    select = None  # type: ignore
 else:
     import select
     import tty
     import termios
+    msvcrt = None  # type: ignore
 
 # Suppress verbose logging
 logging.basicConfig(level=logging.WARNING)
@@ -86,7 +89,7 @@ class SystemMetrics:
     ram_total_gb: float
     gpu_percent: Optional[float] = None
     gpu_memory_percent: Optional[float] = None
-    timestamp: datetime = None
+    timestamp: Optional[datetime] = None
 
     def __post_init__(self):
         if self.timestamp is None:
@@ -115,7 +118,23 @@ class InstallationProgress:
 
 
 class SystemMonitor:
-    """Monitors CPU, RAM, GPU metrics"""
+    """
+    Monitors CPU, RAM, and GPU metrics in a thread-safe manner.
+    
+    This class collects system metrics using psutil and, if available, pynvml for GPU monitoring.
+    Metrics are updated synchronously via `update_metrics()` and accessed via `get_metrics()`.
+    Thread safety is ensured using a threading.Lock to protect access to the current metrics.
+    
+    Threading Model:
+    - All access to metrics is protected by a lock.
+    - Safe to call `update_metrics()` and `get_metrics()` from multiple threads.
+    
+    Example:
+        monitor = SystemMonitor()
+        monitor.update_metrics()
+        metrics = monitor.get_metrics()
+        print(f"CPU: {metrics.cpu_percent}%")
+    """
 
     def __init__(self):
         self.current_metrics = SystemMetrics(
@@ -130,7 +149,7 @@ class SystemMonitor:
 
     def _init_gpu(self):
         """Initialize GPU monitoring if available"""
-        if not GPU_AVAILABLE:
+        if not GPU_AVAILABLE or pynvml is None:
             return
         try:
             pynvml.nvmlInit()
@@ -152,14 +171,14 @@ class SystemMonitor:
             gpu_percent = None
             gpu_memory_percent = None
             
-            if self.gpu_initialized:
+            if self.gpu_initialized and pynvml is not None:
                 try:
                     device_count = pynvml.nvmlDeviceGetCount()
                     if device_count > 0:
                         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                        gpu_percent = pynvml.nvmlDeviceGetUtilizationRates(handle).gpu
+                        gpu_percent = float(pynvml.nvmlDeviceGetUtilizationRates(handle).gpu)
                         mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                        gpu_memory_percent = (mem_info.used / mem_info.total) * 100
+                        gpu_memory_percent = float(mem_info.used) / float(mem_info.total) * 100
                 except Exception as e:
                     logger.debug(f"GPU metrics error: {e}")
             
@@ -245,7 +264,7 @@ class CommandHistory:
                                 self.history.append(cmd)
                     break
                 except Exception as e:
-                    logger.debug(f"History load error: {e}")
+                    logger.warning(f"Could not read history file {history_file}: {e}")
 
     def add_command(self, command: str):
         """Add command to history"""
@@ -261,6 +280,8 @@ class CommandHistory:
 
 class UIRenderer:
     """Renders the dashboard UI with multi-tab support"""
+    
+    MAX_LIBRARIES_DISPLAY = 5  # Maximum number of libraries to display in progress
 
     def __init__(self, monitor: SystemMonitor, lister: ProcessLister, history: CommandHistory):
         self.console = Console()
@@ -437,9 +458,9 @@ class UIRenderer:
         
         # Show installed libraries for install operations
         if progress.libraries and progress.package not in ["System Benchmark", "System Doctor"]:
-            lines.append(f"\n[dim]Libraries: {', '.join(progress.libraries[:5])}[/dim]")
-            if len(progress.libraries) > 5:
-                lines.append(f"[dim]... and {len(progress.libraries) - 5} more[/dim]")
+            lines.append(f"\n[dim]Libraries: {', '.join(progress.libraries[:self.MAX_LIBRARIES_DISPLAY])}[/dim]")
+            if len(progress.libraries) > self.MAX_LIBRARIES_DISPLAY:
+                lines.append(f"[dim]... and {len(progress.libraries) - self.MAX_LIBRARIES_DISPLAY} more[/dim]")
         
         # Status messages
         if progress.error_message:
@@ -664,7 +685,6 @@ class UIRenderer:
             package = self.input_text.strip()
             self.installation_progress.package = package
             self.installation_progress.state = InstallationState.PROCESSING
-            self.installation_progress.input_active = False
             self.input_active = False
             
             # Simulate processing - in real implementation, this would call CLI
@@ -742,8 +762,9 @@ class UIRenderer:
             try:
                 old_settings = termios.tcgetattr(sys.stdin)
                 tty.setcbreak(sys.stdin.fileno())
-            except Exception:
-                pass
+            except Exception as e:
+                # It's safe to ignore errors when setting terminal attributes (e.g., not a tty)
+                logger.debug(f"Failed to set terminal attributes: {e}")
         
         def monitor_loop():
             while self.running:
@@ -780,15 +801,25 @@ class UIRenderer:
         finally:
             self.running = False
             # Restore terminal settings on Unix
-            if old_settings is not None:
+            if old_settings is not None and termios is not None:
                 try:
                     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to restore terminal settings: {e}")
 
 
 class DashboardApp:
-    """Main dashboard application"""
+    """
+    Main dashboard application orchestrator.
+    
+    Coordinates all dashboard components including system monitoring,
+    process listing, command history, and UI rendering. Provides the
+    main entry point for running the dashboard.
+    
+    Example:
+        app = DashboardApp()
+        app.run()
+    """
 
     def __init__(self):
         self.monitor = SystemMonitor()
@@ -805,7 +836,7 @@ class DashboardApp:
             time.sleep(1)
             self.ui.run()
         except KeyboardInterrupt:
-            pass
+            console.print("\n[yellow]Keyboard interrupt received. Shutting down dashboard...[/yellow]")
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
         finally:

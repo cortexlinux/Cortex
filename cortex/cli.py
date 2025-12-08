@@ -748,6 +748,25 @@ class CortexCLI:
 
         return 0
 
+    def dashboard(self):
+        """Launch the real-time system monitoring dashboard"""
+        try:
+            from cortex.dashboard import DashboardApp
+            
+            app = DashboardApp()
+            app.run()
+            return 0
+        except ImportError as e:
+            self._print_error(f"Dashboard dependencies not available: {e}")
+            cx_print("Install required packages with:", "info")
+            cx_print("  pip install psutil pynvml", "info")
+            return 1
+        except KeyboardInterrupt:
+            return 0
+        except Exception as e:
+            self._print_error(f"Dashboard error: {e}")
+            return 1
+
 
 def show_rich_help():
     """Display beautifully formatted help using Rich"""
@@ -821,6 +840,9 @@ Environment Variables:
     # Demo command (first - show this to new users)
     demo_parser = subparsers.add_parser('demo', help='See Cortex in action (no API key needed)')
 
+    # Dashboard command
+    dashboard_parser = subparsers.add_parser('dashboard', help='Real-time system monitoring dashboard')
+
     # Wizard command
     wizard_parser = subparsers.add_parser('wizard', help='Configure API key interactively')
 
@@ -869,6 +891,8 @@ Environment Variables:
     try:
         if args.command == 'demo':
             return cli.demo()
+        elif args.command == 'dashboard':
+            return cli.dashboard()
         elif args.command == 'wizard':
             return cli.wizard()
         elif args.command == 'status':

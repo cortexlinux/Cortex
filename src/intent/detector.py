@@ -20,6 +20,10 @@ class IntentDetector:
         "tensorflow": ["tensorflow", "tf"],
         "jupyter": ["jupyter", "jupyterlab", "notebook"],
         "cudnn": ["cudnn"],
+        "python": ["python", "python3"],
+        "docker": ["docker"],
+        "nodejs": ["node", "nodejs", "npm"],
+        "git": ["git"],
         "gpu": ["gpu", "graphics card", "rtx", "nvidia"]
     }
 

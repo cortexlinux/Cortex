@@ -13,6 +13,11 @@ logging.getLogger("cortex.installation_history").setLevel(logging.ERROR)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Add src path for intent detection modules
+src_path = os.path.join(os.path.dirname(__file__), '..', 'src')
+if os.path.exists(src_path):
+    sys.path.insert(0, src_path)
+
 from LLM.interpreter import CommandInterpreter
 from cortex.coordinator import InstallationCoordinator, StepStatus
 from cortex.installation_history import (
@@ -134,6 +139,63 @@ class CortexCLI:
         try:
             self._print_status("🧠", "Understanding request...")
             
+            # Try to use intent detection if available (for showing installation plan)
+            use_intent_detection = False
+            try:
+                from intent.detector import IntentDetector
+                from intent.planner import InstallationPlanner
+                from intent.clarifier import Clarifier
+                use_intent_detection = True
+            except ImportError:
+                self._debug("Intent detection modules not available, using fallback")
+            
+            # Show intent-based plan and get confirmation (for any package)
+            if use_intent_detection and not execute and not dry_run:
+                detector = IntentDetector()
+                planner = InstallationPlanner()
+                clarifier = Clarifier()
+                
+                intents = detector.detect(software)
+                
+                # Check for clarification needs
+                clarification = clarifier.needs_clarification(intents, software)
+                if clarification:
+                    cx_print(f"\n❓ {clarification}", "warning")
+                    print()
+                    cx_print("Please provide more specific details in your request.", "info")
+                    cx_print("Example: 'cortex install pytorch and tensorflow'", "info")
+                    print()
+                    cx_print("Or press Ctrl+C to cancel.", "info")
+                    try:
+                        response = input("\nYour clarification: ").strip()
+                        if response:
+                            # Retry with the clarified request
+                            software = response
+                            intents = detector.detect(software)
+                            clarification = clarifier.needs_clarification(intents, software)
+                            if clarification:
+                                cx_print(f"\n❓ Still need clarification: {clarification}", "warning")
+                                cx_print("Falling back to LLM for command generation...", "info")
+                        else:
+                            cx_print("No input provided. Falling back to LLM...", "info")
+                    except (KeyboardInterrupt, EOFError):
+                        print("\n")
+                        cx_print("Operation cancelled by user.", "info")
+                        return 0
+                
+                # Build plan (even if no intents detected, we'll show LLM-generated commands)
+                plan = planner.build_plan(intents)
+                
+                # Always show plan if we have intents, otherwise fall through to LLM
+                if plan and len(plan) > 1:  # More than just verification step
+                    cx_print("\n📋 Installation Plan:", "info")
+                    for i, step in enumerate(plan, 1):
+                        print(f"  {i}. {step}")
+                    print()
+                
+                # For ANY request (not just ML), generate commands via LLM and ask confirmation
+                # This happens whether intents were detected or not
+            
             interpreter = CommandInterpreter(api_key=api_key, provider=provider)
             
             self._print_status("📦", "Planning installation...")
@@ -151,6 +213,31 @@ class CortexCLI:
             # Extract packages from commands for tracking
             packages = history._extract_packages_from_commands(commands)
             
+            # Show generated commands and ask for confirmation (Issue #53)
+            if not execute and not dry_run:
+                print("\nGenerated commands:")
+                for i, cmd in enumerate(commands, 1):
+                    print(f"  {i}. {cmd}")
+                
+                # Ask for confirmation before executing
+                print()
+                try:
+                    response = input("Proceed with plan? [Y/n]: ").strip().lower()
+                    if response == 'n' or response == 'no':
+                        cx_print("Installation cancelled by user.", "info")
+                        return 0
+                    elif response == '' or response == 'y' or response == 'yes':
+                        # User confirmed, proceed with execution
+                        execute = True
+                        cx_print("\nProceeding with installation...", "success")
+                    else:
+                        cx_print("Invalid response. Installation cancelled.", "error")
+                        return 1
+                except (KeyboardInterrupt, EOFError):
+                    print("\n")
+                    cx_print("Installation cancelled by user.", "info")
+                    return 0
+            
             # Record installation start
             if execute or dry_run:
                 install_id = history.record_installation(
@@ -160,10 +247,11 @@ class CortexCLI:
                     start_time
                 )
             
-            self._print_status("⚙️", f"Installing {software}...")
-            print("\nGenerated commands:")
-            for i, cmd in enumerate(commands, 1):
-                print(f"  {i}. {cmd}")
+            if not dry_run:
+                self._print_status("⚙️", f"Installing {software}...")
+                print("\nGenerated commands:")
+                for i, cmd in enumerate(commands, 1):
+                    print(f"  {i}. {cmd}")
             
             if dry_run:
                 print("\n(Dry run mode - commands not executed)")

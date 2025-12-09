@@ -35,6 +35,18 @@ class InstallationPlanner:
                 elif intent.target == "jupyter":
                     plan.append("Install JupyterLab")
 
+                elif intent.target == "python":
+                    plan.append("Install Python 3")
+
+                elif intent.target == "docker":
+                    plan.append("Install Docker")
+
+                elif intent.target == "nodejs":
+                    plan.append("Install Node.js and npm")
+
+                elif intent.target == "git":
+                    plan.append("Install Git")
+
                 elif intent.target == "gpu":
                     # GPU setup is handled by CUDA/cuDNN
                     pass

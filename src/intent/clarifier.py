@@ -26,8 +26,11 @@ class Clarifier:
             return "Installing CUDA requires an NVIDIA GPU. Do you have one?"
 
         # 4. If package versions are missing (later we can add real version logic)
+        # Only ask about GPU/CPU version if user hasn't already specified
         if "torch" in text and "version" not in text:
-            return "Do you need the GPU version or CPU version of PyTorch?"
+            # Don't ask if user already mentioned GPU or CUDA
+            if not any(term in text for term in ["gpu", "cuda", "nvidia", "graphics"]):
+                return "Do you need the GPU version or CPU version of PyTorch?"
 
         # 5. Otherwise no clarification needed
         return None

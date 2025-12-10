@@ -115,6 +115,11 @@ class CortexCLI:
     # --- New Notification Method ---
     def notify(self, args):
         """Handle notification commands"""
+        # Addressing CodeRabbit feedback: Handle missing subcommand gracefully
+        if not args.notify_action:
+            self._print_error("Please specify a subcommand (config/enable/disable/dnd/send)")
+            return 1
+
         mgr = NotificationManager()
 
         if args.notify_action == 'config':

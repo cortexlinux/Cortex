@@ -1,329 +1,192 @@
-<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
-<a name="readme-top"></a>
+# Cortex Linux
 
-<!-- PROJECT SHIELDS -->
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-[![Discord][discord-shield]][discord-url]
+An AI-powered package manager for Debian/Ubuntu that understands natural language.
 
-<!-- PROJECT LOGO -->
-<br />
-<div align="center">
-  <a href="https://github.com/cortexlinux/cortex">
-    <img src="images/logo.png" alt="Cortex Linux Logo" width="120" height="120">
-  </a>
+```
+$ cortex install nginx --dry-run
 
-  <h3 align="center">Cortex Linux</h3>
+🧠 Understanding request: nginx
+📦 Mode: DRY RUN
 
-  <p align="center">
-    An AI-powered package manager that understands what you actually want to install.
-    <br />
-    <a href="https://cortexlinux.com/docs"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="https://cortexlinux.com/beta">View Demo</a>
-    ·
-    <a href="https://github.com/cortexlinux/cortex/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/cortexlinux/cortex/issues">Request Feature</a>
-  </p>
-</div>
+╭───────────────────────────── Installation Plan ──────────────────────────────╮
+│ Packages to install:                                                         │
+│   - nginx (1.24.0)                                                           │
+│   - nginx-common                                                             │
+│   - libnginx-mod-http-geoip                                                  │
+│                                                                              │
+│ Commands that will be executed:                                              │
+│   sudo apt update                                                            │
+│   sudo apt install -y nginx                                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
 
-<!-- TABLE OF CONTENTS -->
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#usage">Usage</a></li>
-    <li><a href="#safety-features">Safety Features</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#bounties">Bounties</a></li>
-    <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgements">Acknowledgements</a></li>
-  </ol>
-</details>
-
-<!-- ABOUT THE PROJECT -->
-## About The Project
-
-[![Cortex Screen Shot][product-screenshot]](https://cortexlinux.com)
-
-Stop memorizing package names. Just tell Cortex what you want.
-
-```bash
-$ cortex install "full ML stack for my RTX 4090"
-
-🔍 Detected: NVIDIA RTX 4090 (24GB VRAM)
-📦 Installing: CUDA 12.3, cuDNN, PyTorch 2.1, TensorFlow...
-⚡ Optimized for your GPU
-✅ Done in 4m 23s
+Run with --execute to install, or edit the plan above.
 ```
 
-Here's why Cortex exists:
+## Requirements
 
-* **Natural language** — Say "install docker" not `apt install docker.io docker-compose docker-buildx`
-* **Hardware-aware** — Automatically detects your GPU, CPU, and RAM to optimize installations
-* **Safe by default** — Every command shows a preview before execution. Nothing runs without your approval.
-* **Undo mistakes** — Full transaction history with rollback capability
+- **OS:** Ubuntu 22.04+ / Debian 12+
+- **Python:** 3.10 or higher
+- **API Key:** Anthropic API key (get one at [console.anthropic.com](https://console.anthropic.com))
 
-Cortex wraps apt/dpkg with an AI layer that translates intent into action, while keeping you in control.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-### Built With
-
-* [![Python][Python-badge]][Python-url]
-* [![Ubuntu][Ubuntu-badge]][Ubuntu-url]
-* [![Claude][Claude-badge]][Claude-url]
-* [![LangChain][LangChain-badge]][LangChain-url]
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- GETTING STARTED -->
-## Getting Started
-
-Get Cortex running on your Debian/Ubuntu system in under 2 minutes.
-
-### Prerequisites
-
-* Ubuntu 22.04+ or Debian 11+
-* Python 3.11+
-* An Anthropic API key ([get one here](https://console.anthropic.com))
-
-### Installation
-
-**One-liner install (coming soon):**
+Check your Python version:
 ```bash
-curl -fsSL https://cortexlinux.com/install.sh | bash
+python3 --version  # Must be 3.10+
 ```
 
-**Manual install:**
+## Quick Start
 
-1. Clone the repo
-   ```bash
-   git clone https://github.com/cortexlinux/cortex.git
-   cd cortex
-   ```
+### 1. Clone and enter the repository
+```bash
+git clone https://github.com/cortexlinux/cortex.git
+cd cortex
+```
 
-2. Create virtual environment
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
+### 2. Create and activate virtual environment
+```bash
+python3 -m venv venv
 
-3. Install dependencies
-   ```bash
-   pip install -e .
-   ```
+# Linux/macOS (bash/zsh):
+source venv/bin/activate
 
-4. Set your API key
-   ```bash
-   export ANTHROPIC_API_KEY='your-api-key-here'
-   ```
+# Linux/macOS (sh/dash):
+. venv/bin/activate
 
-5. Run Cortex
-   ```bash
-   cortex install docker
-   ```
+# Windows:
+venv\Scripts\activate
+```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+### 3. Install Cortex
+```bash
+pip install -e .
+```
 
-<!-- USAGE EXAMPLES -->
+### 4. Configure your API key
+```bash
+echo 'ANTHROPIC_API_KEY=your-key-here' > .env
+```
+
+Replace `your-key-here` with your actual Anthropic API key.
+
+### 5. Verify installation
+```bash
+cortex --version
+# Output: cortex, version 0.1.0
+
+cortex install nginx --dry-run
+# Should show installation plan
+```
+
 ## Usage
 
-### Quick Start
+### Preview installations (safe, default)
 ```bash
-# See Cortex in action (no API key needed)
-cortex demo
-
-# Configure your API key interactively
-cortex wizard
-
-# Check system status
-cortex status
+cortex install nginx --dry-run
+cortex install "something to edit PDFs" --dry-run
 ```
 
-### Basic Installation
+### Actually install
 ```bash
-# Preview what would be installed
-cortex install docker
-
-# Actually execute the installation
-cortex install docker --execute
-
-# Natural language works too
-cortex install "web development tools" --execute
+cortex install nginx --execute
 ```
 
-### Dry Run (Preview Mode)
+### View history and rollback
 ```bash
-# See what would happen without executing
-cortex install tensorflow --dry-run
-```
-
-### Transaction History
-```bash
-# View what Cortex has done
 cortex history
-
-# Show details for specific installation
-cortex history <id>
-
-# Rollback an installation
 cortex rollback <id>
 ```
 
-### Debug Mode
+### Check preferences
 ```bash
-# Show verbose output
-cortex -v install nginx
+cortex check-pref
 ```
 
-_For more examples, please refer to the [Documentation](https://cortexlinux.com/docs)_
+## Troubleshooting
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+### "ANTHROPIC_API_KEY not set"
+```bash
+# Make sure .env file exists and contains your key
+cat .env
+# Should show: ANTHROPIC_API_KEY=sk-ant-...
 
-<!-- SAFETY FEATURES -->
+# If missing, create it:
+echo 'ANTHROPIC_API_KEY=your-actual-key' > .env
+```
+
+### "command not found: cortex"
+```bash
+# Make sure virtual environment is activated
+source venv/bin/activate  # or: . venv/bin/activate
+
+# Reinstall if needed
+pip install -e .
+```
+
+### "Python version too old"
+```bash
+# Check version
+python3 --version
+
+# Ubuntu/Debian - install newer Python:
+sudo apt update
+sudo apt install python3.11 python3.11-venv
+
+# Use specific version:
+python3.11 -m venv venv
+```
+
+### pip install fails
+```bash
+# Update pip first
+pip install --upgrade pip
+
+# Try again
+pip install -e .
+
+# If still failing, install build tools:
+sudo apt install python3-dev build-essential
+```
+
 ## Safety Features
 
 | Feature | Description |
 |---------|-------------|
-| **Dry-run mode** | Preview all commands before execution |
-| **Transaction log** | Every operation is recorded with undo capability |
-| **Firejail sandbox** | Optional sandboxing for untrusted packages |
-| **Confirmation prompts** | Nothing executes without explicit approval |
-| **Rollback support** | Integration with Timeshift/Snapper snapshots |
+| **Dry-run default** | Shows planned commands without executing |
+| **Firejail sandbox** | Commands run in isolated environment |
+| **Rollback support** | Undo any installation with `cortex rollback` |
+| **Audit logging** | All actions logged to `~/.cortex/history.db` |
+| **No root by default** | Only uses sudo when explicitly needed |
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- ROADMAP -->
-## Roadmap
+## Project Status
 
 ### Completed
-- [x] Natural language to apt translation
-- [x] Dry-run mode (preview commands before execution)
-- [x] Firejail sandboxing with security controls
-- [x] Transaction history with rollback
-- [x] Rich terminal UI with CX branding
-- [x] Interactive setup wizard (`cortex wizard`)
-- [x] Local LLM fallback (Ollama support)
-- [x] Multi-provider support (Claude, GPT-4, Ollama)
-- [x] Input validation and security checks
-- [x] System status command (`cortex status`)
+- ✅ CLI with dry-run and execute modes
+- ✅ Claude and OpenAI integration
+- ✅ Installation history and rollback
+- ✅ User preferences (YAML-backed)
+- ✅ Hardware detection
+- ✅ Firejail sandboxing
 
 ### In Progress
-- [ ] Hardware detection (GPU, CPU, RAM)
-- [ ] Interactive fuzzy search (fzf integration)
-- [ ] One-liner install script
+- 🔄 Conflict resolution UI
+- 🔄 Multi-step orchestration
+- 🔄 Ollama local model support
+- 🔄 MCP server integration
 
-### Planned
-- [ ] Offline mode with semantic caching
-- [ ] System snapshot integration (Timeshift/Snapper)
-- [ ] Web dashboard
-- [ ] Package dependency visualization
-
-See the [open issues](https://github.com/cortexlinux/cortex/issues) for a full list of proposed features and known issues.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- CONTRIBUTING -->
 ## Contributing
 
-Contributions make the open source community amazing. Any contributions you make are **greatly appreciated**.
+We need:
+- Python developers (package manager features)
+- Linux kernel developers (kernel optimizations)
+- Technical writers (documentation)
+- Beta testers (bug reports)
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Bounties available for merged PRs. See issues labeled `bounty`.
 
-See `CONTRIBUTING.md` for detailed guidelines.
+## Community
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+- Discord: [discord.gg/uCqHvxjU83](https://discord.gg/uCqHvxjU83)
+- Email: mike@cortexlinux.com
 
-<!-- BOUNTIES -->
-## Bounties
-
-We pay contributors for merged PRs. 💰
-
-| Tier | Current | After Funding |
-|------|---------|---------------|
-| Quick fix | $25 | +$25 bonus |
-| Small feature | $50 | +$50 bonus |
-| Medium feature | $75-100 | +$75-100 bonus |
-| Large feature | $150-175 | +$150-175 bonus |
-
-**Early contributors get double** — when we close funding, all previous bounties receive a matching bonus.
-
-See issues labeled [`bounty`](https://github.com/cortexlinux/cortex/labels/bounty) to get started.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- LICENSE -->
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- CONTACT -->
-## Contact
-
-Mike Morgan - [@mikejmorgan_ai](https://twitter.com/mikejmorgan_ai)
-
-Project Link: [https://github.com/cortexlinux/cortex](https://github.com/cortexlinux/cortex)
-
-Discord: [https://discord.gg/cortexlinux](https://discord.gg/uCqHvxjU83)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- ACKNOWLEDGEMENTS -->
-## Acknowledgements
-
-* [Anthropic Claude](https://anthropic.com) - AI backbone
-* [LangChain](https://langchain.com) - LLM orchestration
-* [Rich](https://github.com/Textualize/rich) - Terminal formatting
-* [Firejail](https://firejail.wordpress.com) - Sandboxing
-* [Best-README-Template](https://github.com/othneildrew/Best-README-Template) - This README structure
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/cortexlinux/cortex.svg?style=for-the-badge
-[contributors-url]: https://github.com/cortexlinux/cortex/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/cortexlinux/cortex.svg?style=for-the-badge
-[forks-url]: https://github.com/cortexlinux/cortex/network/members
-[stars-shield]: https://img.shields.io/github/stars/cortexlinux/cortex.svg?style=for-the-badge
-[stars-url]: https://github.com/cortexlinux/cortex/stargazers
-[issues-shield]: https://img.shields.io/github/issues/cortexlinux/cortex.svg?style=for-the-badge
-[issues-url]: https://github.com/cortexlinux/cortex/issues
-[license-shield]: https://img.shields.io/github/license/cortexlinux/cortex.svg?style=for-the-badge
-[license-url]: https://github.com/cortexlinux/cortex/blob/main/LICENSE
-[discord-shield]: https://img.shields.io/discord/1234567890?style=for-the-badge&logo=discord&logoColor=white
-[discord-url]: https://discord.gg/uCqHvxjU83
-[product-screenshot]: images/screenshot.png
-[Python-badge]: https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white
-[Python-url]: https://python.org
-[Ubuntu-badge]: https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white
-[Ubuntu-url]: https://ubuntu.com
-[Claude-badge]: https://img.shields.io/badge/Claude-191919?style=for-the-badge&logo=anthropic&logoColor=white
-[Claude-url]: https://anthropic.com
-[LangChain-badge]: https://img.shields.io/badge/LangChain-121212?style=for-the-badge&logo=chainlink&logoColor=white
-[LangChain-url]: https://langchain.com
+Apache 2.0

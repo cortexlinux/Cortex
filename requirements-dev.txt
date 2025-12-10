@@ -1,9 +1,4 @@
-# Cortex Linux - Development Dependencies
-
-# Include core dependencies
--r requirements.txt
-
-# Testing
+# Development Dependencies
 pytest>=7.0.0
 pytest-cov>=4.0.0
 pytest-mock>=3.10.0
@@ -24,3 +19,7 @@ sphinx-rtd-theme>=1.0.0
 # System monitoring (for dashboard)
 psutil>=5.0.0
 pynvml>=11.0.0
+black>=24.0.0
+ruff>=0.8.0
+isort>=5.13.0
+pre-commit>=3.0.0

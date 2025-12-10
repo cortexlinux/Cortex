@@ -3,8 +3,10 @@ import os
 import argparse
 import time
 import logging
+import shutil
+import traceback
+import urllib.request
 from typing import List, Optional
-import subprocess
 from datetime import datetime
 
 # Suppress noisy log messages in normal operation
@@ -35,9 +37,7 @@ from cortex.branding import (
 )
 from cortex.validators import (
     validate_api_key,
-    validate_install_request,
-    validate_installation_id,
-    ValidationError
+    validate_install_request
 )
 
 
@@ -62,7 +62,8 @@ class CortexCLI:
 
         is_valid, detected_provider, error = validate_api_key()
         if not is_valid:
-            self._print_error(error)
+            if error:
+                self._print_error(error)
             cx_print("Run [bold]cortex wizard[/bold] to configure your API key.", "info")
             cx_print("Or use [bold]CORTEX_PROVIDER=ollama[/bold] for offline mode.", "info")
             return None
@@ -111,11 +112,12 @@ class CortexCLI:
         sys.stdout.write('\r\033[K')
         sys.stdout.flush()
     
-    def install(self, software: str, execute: bool = False, dry_run: bool = False):
+    def install(self, software: str, execute: bool = False, dry_run: bool = False, parallel: bool = False):
         # Validate input first
         is_valid, error = validate_install_request(software)
         if not is_valid:
-            self._print_error(error)
+            if error:
+                self._print_error(error)
             return 1
 
         api_key = self._get_api_key()
@@ -183,47 +185,119 @@ class CortexCLI:
                 
                 print("\nExecuting commands...")
                 
-                coordinator = InstallationCoordinator(
-                    commands=commands,
-                    descriptions=[f"Step {i+1}" for i in range(len(commands))],
-                    timeout=300,
-                    stop_on_error=True,
-                    progress_callback=progress_callback
-                )
-                
-                result = coordinator.execute()
-                
-                if result.success:
-                    self._print_success(f"{software} installed successfully!")
-                    print(f"\nCompleted in {result.total_duration:.2f} seconds")
+                if parallel:
+                    # Use parallel execution
+                    import asyncio
+                    from cortex.install_parallel import run_parallel_install
                     
-                    # Record successful installation
-                    if install_id:
-                        history.update_installation(install_id, InstallationStatus.SUCCESS)
-                        print(f"\n📝 Installation recorded (ID: {install_id})")
-                        print(f"   To rollback: cortex rollback {install_id}")
+                    def parallel_log_callback(message: str, level: str = "info"):
+                        """Callback for parallel execution logging."""
+                        if level == "success":
+                            cx_print(f"  ✅ {message}", "success")
+                        elif level == "error":
+                            cx_print(f"  ❌ {message}", "error")
+                        else:
+                            cx_print(f"  ℹ {message}", "info")
                     
-                    return 0
-                else:
-                    # Record failed installation
-                    if install_id:
-                        error_msg = result.error_message or "Installation failed"
-                        history.update_installation(
-                            install_id,
-                            InstallationStatus.FAILED,
-                            error_msg
+                    try:
+                        success, parallel_tasks = asyncio.run(
+                            run_parallel_install(
+                                commands=commands,
+                                descriptions=[f"Step {i+1}" for i in range(len(commands))],
+                                timeout=300,
+                                stop_on_error=True,
+                                log_callback=parallel_log_callback
+                            )
                         )
+                        
+                        # Calculate total duration from tasks
+                        total_duration = 0
+                        if parallel_tasks:
+                            max_end = max((t.end_time or 0) for t in parallel_tasks)
+                            min_start = min((t.start_time or time.time()) for t in parallel_tasks)
+                            if max_end and min_start:
+                                total_duration = max_end - min_start
+                        
+                        if success:
+                            self._print_success(f"{software} installed successfully!")
+                            print(f"\nCompleted in {total_duration:.2f} seconds (parallel mode)")
+                            
+                            # Record successful installation
+                            if install_id:
+                                history.update_installation(install_id, InstallationStatus.SUCCESS)
+                                print(f"\n📝 Installation recorded (ID: {install_id})")
+                                print(f"   To rollback: cortex rollback {install_id}")
+                            
+                            return 0
+                        else:
+                            # Find failed task for error reporting
+                            failed_tasks = [t for t in parallel_tasks if t.status.value == "failed"]
+                            error_msg = failed_tasks[0].error if failed_tasks else "Installation failed"
+                            
+                            if install_id:
+                                history.update_installation(
+                                    install_id,
+                                    InstallationStatus.FAILED,
+                                    error_msg
+                                )
+                            
+                            self._print_error("Installation failed")
+                            if error_msg:
+                                print(f"  Error: {error_msg}", file=sys.stderr)
+                            if install_id:
+                                print(f"\n📝 Installation recorded (ID: {install_id})")
+                                print(f"   View details: cortex history show {install_id}")
+                            return 1
                     
-                    if result.failed_step is not None:
-                        self._print_error(f"Installation failed at step {result.failed_step + 1}")
+                    except Exception as e:
+                        if install_id:
+                            history.update_installation(install_id, InstallationStatus.FAILED, str(e))
+                        self._print_error(f"Parallel execution failed: {str(e)}")
+                        return 1
+                
+                else:
+                    # Use sequential execution (original behavior)
+                    coordinator = InstallationCoordinator(
+                        commands=commands,
+                        descriptions=[f"Step {i+1}" for i in range(len(commands))],
+                        timeout=300,
+                        stop_on_error=True,
+                        progress_callback=progress_callback
+                    )
+                    
+                    result = coordinator.execute()
+                    
+                    if result.success:
+                        self._print_success(f"{software} installed successfully!")
+                        print(f"\nCompleted in {result.total_duration:.2f} seconds")
+                        
+                        # Record successful installation
+                        if install_id:
+                            history.update_installation(install_id, InstallationStatus.SUCCESS)
+                            print(f"\n📝 Installation recorded (ID: {install_id})")
+                            print(f"   To rollback: cortex rollback {install_id}")
+                        
+                        return 0
                     else:
-                        self._print_error("Installation failed")
-                    if result.error_message:
-                        print(f"  Error: {result.error_message}", file=sys.stderr)
-                    if install_id:
-                        print(f"\n📝 Installation recorded (ID: {install_id})")
-                        print(f"   View details: cortex history show {install_id}")
-                    return 1
+                        # Record failed installation
+                        if install_id:
+                            error_msg = result.error_message or "Installation failed"
+                            history.update_installation(
+                                install_id,
+                                InstallationStatus.FAILED,
+                                error_msg
+                            )
+                        
+                        if result.failed_step is not None:
+                            self._print_error(f"Installation failed at step {result.failed_step + 1}")
+                        else:
+                            self._print_error("Installation failed")
+                        if result.error_message:
+                            print(f"  Error: {result.error_message}", file=sys.stderr)
+                        if install_id:
+                            print(f"\n📝 Installation recorded (ID: {install_id})")
+                            print(f"   View details: cortex history show {install_id}")
+                        return 1
             else:
                 print("\nTo execute these commands, run with --execute flag")
                 print("Example: cortex install docker --execute")
@@ -540,14 +614,11 @@ class CortexCLI:
             return 1
         except Exception as e:
             self._print_error(f"Failed to edit preferences: {str(e)}")
-            import traceback
             traceback.print_exc()
             return 1
 
     def status(self):
         """Show system status including security features"""
-        import shutil
-
         show_banner(show_version=True)
         console.print()
 
@@ -577,7 +648,6 @@ class CortexCLI:
         # Check Ollama
         ollama_host = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
         try:
-            import urllib.request
             req = urllib.request.Request(f"{ollama_host}/api/tags", method='GET')
             with urllib.request.urlopen(req, timeout=2) as resp:
                 cx_print(f"Ollama: [bold]Running[/bold] ({ollama_host})", "success")
@@ -819,19 +889,20 @@ Environment Variables:
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
     # Demo command (first - show this to new users)
-    demo_parser = subparsers.add_parser('demo', help='See Cortex in action (no API key needed)')
+    _demo_parser = subparsers.add_parser('demo', help='See Cortex in action (no API key needed)')
 
     # Wizard command
-    wizard_parser = subparsers.add_parser('wizard', help='Configure API key interactively')
+    _wizard_parser = subparsers.add_parser('wizard', help='Configure API key interactively')
 
     # Status command
-    status_parser = subparsers.add_parser('status', help='Show system status and security features')
+    _status_parser = subparsers.add_parser('status', help='Show system status and security features')
 
     # Install command
     install_parser = subparsers.add_parser('install', help='Install software using natural language')
     install_parser.add_argument('software', type=str, help='Software to install (natural language)')
     install_parser.add_argument('--execute', action='store_true', help='Execute the generated commands')
     install_parser.add_argument('--dry-run', action='store_true', help='Show commands without executing')
+    install_parser.add_argument('--parallel', action='store_true', help='Execute independent tasks in parallel')
     
     # History command
     history_parser = subparsers.add_parser('history', help='View installation history')
@@ -846,17 +917,17 @@ Environment Variables:
     rollback_parser.add_argument('--dry-run', action='store_true', help='Show rollback actions without executing')
     
     # Check preferences command
-    check_pref_parser = subparsers.add_parser('check-pref', help='Check/display user preferences')
-    check_pref_parser.add_argument('key', nargs='?', help='Specific preference key to check (optional)')
+    _check_pref_parser = subparsers.add_parser('check-pref', help='Check/display user preferences')
+    _check_pref_parser.add_argument('key', nargs='?', help='Specific preference key to check (optional)')
     
     # Edit preferences command
-    edit_pref_parser = subparsers.add_parser('edit-pref', help='Edit user preferences')
-    edit_pref_parser.add_argument('action', 
+    _edit_pref_parser = subparsers.add_parser('edit-pref', help='Edit user preferences')
+    _edit_pref_parser.add_argument('action', 
                                   choices=['set', 'add', 'update', 'delete', 'remove', 'reset-key', 
                                           'list', 'show', 'display', 'reset-all', 'validate', 'export', 'import'],
                                   help='Action to perform')
-    edit_pref_parser.add_argument('key', nargs='?', help='Preference key or filepath (for export/import)')
-    edit_pref_parser.add_argument('value', nargs='?', help='Preference value (for set/add/update)')
+    _edit_pref_parser.add_argument('key', nargs='?', help='Preference key or filepath (for export/import)')
+    _edit_pref_parser.add_argument('value', nargs='?', help='Preference value (for set/add/update)')
     
     args = parser.parse_args()
     
@@ -874,7 +945,7 @@ Environment Variables:
         elif args.command == 'status':
             return cli.status()
         elif args.command == 'install':
-            return cli.install(args.software, execute=args.execute, dry_run=args.dry_run)
+            return cli.install(args.software, execute=args.execute, dry_run=args.dry_run, parallel=args.parallel)
         elif args.command == 'history':
             return cli.history(limit=args.limit, status=args.status, show_id=args.show_id)
         elif args.command == 'rollback':

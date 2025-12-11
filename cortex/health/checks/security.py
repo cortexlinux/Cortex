@@ -23,10 +23,8 @@ class SecurityCheck(HealthCheck):
         recommendations = []
         
         # 1. Firewall (UFW) Check
-        # Returns: score_delta (negative for penalty), issues, recommendations
         fw_score_delta, fw_issues, fw_recs = self._check_firewall()
         
-        # If firewall is inactive, score becomes 0 immediately per requirements
         if fw_score_delta == -100:
              score = 0
         
@@ -69,10 +67,10 @@ class SecurityCheck(HealthCheck):
             )
             if res.returncode == 0 and res.stdout.strip() == "active":
                 return 0, [], []
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        except Exception:
+            # Catch-all is intentional here for robustness against missing systemctl etc.
             pass
         
-        # Return -100 to signal immediate failure condition
         return -100, ["Firewall Inactive"], ["Enable UFW Firewall"]
 
     def _check_ssh_root_login(self) -> tuple[int, list[str], list[str]]:
@@ -88,11 +86,10 @@ class SecurityCheck(HealthCheck):
                 with open(ssh_config, 'r') as f:
                     for line in f:
                         parts = line.split()
-                        # Precise check: PermitRootLogin must be the first word, yes the second
-                        # This avoids matching commented lines or "no" followed by comments
                         if len(parts) >= 2 and parts[0] == "PermitRootLogin" and parts[1] == "yes":
                             return -50, ["Root SSH Allowed"], ["Disable SSH Root Login in sshd_config"]
-        except (PermissionError, Exception):
+        except Exception:
+            # Catch-all is intentional here for file permission issues etc.
             pass
         
         return 0, [], []

@@ -15,25 +15,35 @@ class DiskCheck(HealthCheck):
         total, used, _ = shutil.disk_usage("/")
         usage_percent = (used / total) * 100
         
-        score = 100
-        status = "OK"
-        rec = None
-        
+        # Explicit early returns to avoid static analysis confusion
         if usage_percent > 90:
-            score = 0
-            status = "CRITICAL"
-            rec = "Clean up disk space immediately"
-        elif usage_percent > 80:
-            score = 50
-            status = "WARNING"
-            rec = "Consider cleaning up disk space"
+            return CheckResult(
+                name="Disk Usage",
+                category="disk",
+                score=0,
+                status="CRITICAL",
+                details=f"{usage_percent:.1f}% used",
+                recommendation="Clean up disk space immediately",
+                weight=0.20
+            )
             
+        if usage_percent > 80:
+            return CheckResult(
+                name="Disk Usage",
+                category="disk",
+                score=50,
+                status="WARNING",
+                details=f"{usage_percent:.1f}% used",
+                recommendation="Consider cleaning up disk space",
+                weight=0.20
+            )
+
         return CheckResult(
             name="Disk Usage",
             category="disk",
-            score=score,
-            status=status,
+            score=100,
+            status="OK",
             details=f"{usage_percent:.1f}% used",
-            recommendation=rec,
+            recommendation=None,
             weight=0.20
         )

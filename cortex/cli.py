@@ -173,7 +173,7 @@ class CortexCLI:
             return 1
 
     # --- New Health Command ---
-    def health(self, args):
+    def health(self, _):
         """Run system health checks and show recommendations"""
         from cortex.health.monitor import HealthMonitor
         
@@ -227,85 +227,91 @@ class CortexCLI:
         optimizer = CleanupOptimizer()
         
         if args.cleanup_action == 'scan':
-            self._print_status("🔍", "Scanning for cleanup opportunities...")
-            opportunities = optimizer.scan()
-            
-            if not opportunities:
-                self._print_success("No cleanup opportunities found! system is clean.")
-                return 0
-                
-            total_bytes = sum(o.size_bytes for o in opportunities)
-            total_mb = total_bytes / (1024 * 1024)
-            
-            console.print()
-            cx_header(f"Cleanup Scan Results ({total_mb:.1f} MB Reclaimable)")
-            
-            from rich.table import Table
-            table = Table(box=None)
-            table.add_column("Type", style="cyan")
-            table.add_column("Description")
-            table.add_column("Size", justify="right", style="green")
-            
-            for opp in opportunities:
-                size_mb = opp.size_bytes / (1024 * 1024)
-                table.add_row(
-                    opp.type.replace('_', ' ').title(),
-                    opp.description,
-                    f"{size_mb:.1f} MB"
-                )
-            
-            console.print(table)
-            console.print()
-            console.print("[dim]Run 'cortex cleanup run' to clean these items.[/dim]")
-            return 0
+            return self._cleanup_scan(optimizer)
             
         elif args.cleanup_action == 'run':
-            safe_mode = not args.force
+            return self._cleanup_run(args, optimizer)
             
-            self._print_status("🔍", "Preparing cleanup plan...")
-            commands = optimizer.get_cleanup_plan(safe_mode=safe_mode)
-            
-            if not commands:
-                self._print_success("Nothing to clean!")
-                return 0
-                
-            console.print("[bold]Proposed Cleanup Operations:[/bold]")
-            for i, cmd in enumerate(commands, 1):
-                console.print(f"  {i}. {cmd}")
-            
-            if getattr(args, 'dry_run', False):
-                 console.print("\n[dim](Dry run mode - no changes made)[/dim]")
-                 return 0
-
-            if not args.yes:
-                if not safe_mode:
-                    console.print("\n[bold red]WARNING: Running in FORCE mode (no backups)[/bold red]")
-                
-                confirm = input("\nProceed with cleanup? (y/n): ")
-                if confirm.lower() != 'y':
-                    print("Operation cancelled.")
-                    return 0
-            
-            # Use InstallationCoordinator for execution
-            def progress_callback(current, total, step):
-                print(f"[{current}/{total}] {step.description}")
-            
-            coordinator = InstallationCoordinator(
-                commands=commands,
-                descriptions=[f"Cleanup Step {i+1}" for i in range(len(commands))],
-                progress_callback=progress_callback
-            )
-            
-            result = coordinator.execute()
-            if result.success:
-                self._print_success("Cleanup completed successfully!")
-                return 0
-            else:
-                self._print_error("Cleanup encountered errors.")
-                return 1
-                
         else:
             self._print_error("Unknown cleanup action")
+            return 1
+
+    def _cleanup_scan(self, optimizer):
+        self._print_status("🔍", "Scanning for cleanup opportunities...")
+        opportunities = optimizer.scan()
+        
+        if not opportunities:
+            self._print_success("No cleanup opportunities found! system is clean.")
+            return 0
+            
+        total_bytes = sum(o.size_bytes for o in opportunities)
+        total_mb = total_bytes / (1024 * 1024)
+        
+        console.print()
+        cx_header(f"Cleanup Scan Results ({total_mb:.1f} MB Reclaimable)")
+        
+        from rich.table import Table
+        table = Table(box=None)
+        table.add_column("Type", style="cyan")
+        table.add_column("Description")
+        table.add_column("Size", justify="right", style="green")
+        
+        for opp in opportunities:
+            size_mb = opp.size_bytes / (1024 * 1024)
+            table.add_row(
+                opp.type.replace('_', ' ').title(),
+                opp.description,
+                f"{size_mb:.1f} MB"
+            )
+        
+        console.print(table)
+        console.print()
+        console.print("[dim]Run 'cortex cleanup run' to clean these items.[/dim]")
+        return 0
+
+    def _cleanup_run(self, args, optimizer):
+        safe_mode = not args.force
+        
+        self._print_status("🔍", "Preparing cleanup plan...")
+        commands = optimizer.get_cleanup_plan()
+        
+        if not commands:
+            self._print_success("Nothing to clean!")
+            return 0
+            
+        console.print("[bold]Proposed Cleanup Operations:[/bold]")
+        for i, cmd in enumerate(commands, 1):
+            console.print(f"  {i}. {cmd}")
+        
+        if getattr(args, 'dry_run', False):
+                console.print("\n[dim](Dry run mode - no changes made)[/dim]")
+                return 0
+
+        if not args.yes:
+            if not safe_mode:
+                console.print("\n[bold red]WARNING: Running in FORCE mode (no backups)[/bold red]")
+            
+            confirm = input("\nProceed with cleanup? (y/n): ")
+            if confirm.lower() != 'y':
+                print("Operation cancelled.")
+                return 0
+        
+        # Use InstallationCoordinator for execution
+        def progress_callback(current, total, step):
+            print(f"[{current}/{total}] {step.description}")
+        
+        coordinator = InstallationCoordinator(
+            commands=commands,
+            descriptions=[f"Cleanup Step {i+1}" for i in range(len(commands))],
+            progress_callback=progress_callback
+        )
+        
+        result = coordinator.execute()
+        if result.success:
+            self._print_success("Cleanup completed successfully!")
+            return 0
+        else:
+            self._print_error("Cleanup encountered errors.")
             return 1
 
     def install(self, software: str, execute: bool = False, dry_run: bool = False):
@@ -750,13 +756,13 @@ def main():
     send_parser.add_argument('--actions', nargs='*', help='Action buttons')
     
     # --- New Health Command ---
-    health_parser = subparsers.add_parser('health', help='Check system health score')
+    subparsers.add_parser('health', help='Check system health score')
     
     # --- Cleanup Command ---
     cleanup_parser = subparsers.add_parser('cleanup', help='Optimize disk space')
     cleanup_subs = cleanup_parser.add_subparsers(dest='cleanup_action', help='Cleanup actions')
     
-    scan_parser = cleanup_subs.add_parser('scan', help='Scan for cleanable items')
+    cleanup_subs.add_parser('scan', help='Scan for cleanable items')
     
     run_parser = cleanup_subs.add_parser('run', help='Execute cleanup')
     run_parser.add_argument('--safe', action='store_true', default=True, help='Run safely (with backups)')
@@ -793,8 +799,6 @@ def main():
         elif args.command == 'notify':
             return cli.notify(args)
         # Handle new command
-        elif args.command == 'notify':
-            return cli.notify(args)
         elif args.command == 'health':
             return cli.health(args)
         elif args.command == 'cleanup':

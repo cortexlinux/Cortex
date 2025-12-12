@@ -465,59 +465,63 @@ class PackageManager:
         
         try:
             if self.pm_type == PackageManagerType.APT:
-                # Check apt cache size
-                result = subprocess.run(
-                    "du -sb /var/cache/apt/archives 2>/dev/null | cut -f1",
-                    shell=True, capture_output=True, text=True
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    opportunities["cache_size_bytes"] = int(result.stdout.strip())
-                
-                # Check for autoremovable packages
-                # This simulates 'apt-get autoremove' to find orphans
-                result = subprocess.run(
-                    ["apt-get", "--dry-run", "autoremove"],
-                    capture_output=True, text=True, env={"LANG": "C"}
-                )
-                
-                if result.returncode == 0:
-                    for line in result.stdout.split('\n'):
-                        if line.startswith("Remv"):
-                            parts = line.split()
-                            if len(parts) >= 2:
-                                pkg_name = parts[1]
-                                opportunities["orphaned_packages"].append(pkg_name)
-                    
-                    # Estimate size (rough estimate based on installed size)
-                    if opportunities["orphaned_packages"]:
-                        cmd = ["dpkg-query", "-W", "-f=${Installed-Size}\n"] + opportunities["orphaned_packages"]
-                        size_res = subprocess.run(cmd, capture_output=True, text=True)
-                        if size_res.returncode == 0:
-                            total_kb = sum(int(s) for s in size_res.stdout.split() if s.isdigit())
-                            opportunities["orphaned_size_bytes"] = total_kb * 1024
-
+                self._get_apt_cleanable_items(opportunities)
             elif self.pm_type in (PackageManagerType.YUM, PackageManagerType.DNF):
-                pm_cmd = "yum" if self.pm_type == PackageManagerType.YUM else "dnf"
-                
-                # Check cache size (requires sudo usually, but we try)
-                # DNF/YUM cache location varies, usually /var/cache/dnf or /var/cache/yum
-                cache_dir = "/var/cache/dnf" if self.pm_type == PackageManagerType.DNF else "/var/cache/yum"
-                result = subprocess.run(
-                    f"du -sb {cache_dir} 2>/dev/null | cut -f1",
-                    shell=True, capture_output=True, text=True
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    opportunities["cache_size_bytes"] = int(result.stdout.strip())
-                
-                # Check for autoremovable packages
-                cmd = [pm_cmd, "autoremove", "--assumeno"] if self.pm_type == PackageManagerType.DNF else [pm_cmd, "autoremove", "--assumeno"] 
-                # Note: dnf autoremove output parsing is complex, skipping precise list for now for safety
-                # We can return a generic command advice
-                
+                self._get_yum_cleanable_items(opportunities)
         except Exception:
             pass
             
         return opportunities
+
+    def _get_apt_cleanable_items(self, opportunities: Dict[str, any]):
+        # Check apt cache size
+        result = subprocess.run(
+            "du -sb /var/cache/apt/archives 2>/dev/null | cut -f1",
+            shell=True, capture_output=True, text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            opportunities["cache_size_bytes"] = int(result.stdout.strip())
+        
+        # Check for autoremovable packages
+        result = subprocess.run(
+            ["apt-get", "--dry-run", "autoremove"],
+            capture_output=True, text=True, env={"LANG": "C"}
+        )
+        
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if line.startswith("Remv"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        pkg_name = parts[1]
+                        opportunities["orphaned_packages"].append(pkg_name)
+            
+            # Estimate size
+            if opportunities["orphaned_packages"]:
+                self._estimate_apt_orphans_size(opportunities)
+
+    def _estimate_apt_orphans_size(self, opportunities: Dict[str, any]):
+        cmd = ["dpkg-query", "-W", "-f=${Installed-Size}\n"] + opportunities["orphaned_packages"]
+        size_res = subprocess.run(cmd, capture_output=True, text=True)
+        if size_res.returncode == 0:
+            total_kb = sum(int(s) for s in size_res.stdout.split() if s.isdigit())
+            opportunities["orphaned_size_bytes"] = total_kb * 1024
+
+    def _get_yum_cleanable_items(self, opportunities: Dict[str, any]):
+        pm_cmd = "yum" if self.pm_type == PackageManagerType.YUM else "dnf"
+        
+        # Check cache size
+        cache_dir = "/var/cache/dnf" if self.pm_type == PackageManagerType.DNF else "/var/cache/yum"
+        result = subprocess.run(
+            f"du -sb {cache_dir} 2>/dev/null | cut -f1",
+            shell=True, capture_output=True, text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            opportunities["cache_size_bytes"] = int(result.stdout.strip())
+        
+        # Check for autoremovable packages - unimplemented logic
+        pass
+
 
     def get_cleanup_commands(self, item_type: str) -> List[str]:
         """

@@ -39,26 +39,10 @@ class LogManager:
         patterns = ["**/*.1", "**/*.2", "**/*.log.old", "**/*.log"]
         cutoff = time.time() - (7 * 86400) # 7 days
 
-        # We need to be careful with permissions here. 
-        # Ideally this runs with permissions or handles errors gracefully.
         for pattern in patterns:
-            for log_file in glob.glob(os.path.join(self.log_dir, pattern), recursive=True):
-                try:
-                    # Skip if already compressed
-                    if log_file.endswith('.gz'):
-                        continue
-                        
-                    stat = os.stat(log_file)
-                    
-                    # For .log files, check age
-                    if log_file.endswith('.log'):
-                        if stat.st_mtime > cutoff:
-                            continue
-                            
-                    candidates.append(log_file)
-                    total_size += stat.st_size
-                except (OSError, PermissionError):
-                    pass
+            p_candidates, p_size = self._scan_pattern(pattern, cutoff)
+            candidates.extend(p_candidates)
+            total_size += p_size
         
         if candidates:
             return CleanupOpportunity(
@@ -68,6 +52,31 @@ class LogManager:
                 items=candidates
             )
         return None
+
+    def _scan_pattern(self, pattern: str, cutoff: float) -> tuple[List[str], int]:
+        """Scan for a specific pattern."""
+        candidates = []
+        total_size = 0
+        # We need to be careful with permissions here. 
+        for log_file in glob.glob(os.path.join(self.log_dir, pattern), recursive=True):
+            try:
+                # Skip if already compressed
+                if log_file.endswith('.gz'):
+                    continue
+                    
+                stat = os.stat(log_file)
+                
+                # For .log files, check age
+                if log_file.endswith('.log'):
+                    if stat.st_mtime > cutoff:
+                        continue
+                        
+                candidates.append(log_file)
+                total_size += stat.st_size
+            except OSError:
+                pass
+        return candidates, total_size
+
 
     def get_cleanup_commands(self) -> List[str]:
         """Generate commands to compress old logs."""
@@ -95,19 +104,10 @@ class TempCleaner:
         for d in self.temp_dirs:
             if not os.path.exists(d):
                 continue
-            try:
-                for root, _, files in os.walk(d):
-                    for name in files:
-                        fpath = os.path.join(root, name)
-                        try:
-                            stat = os.stat(fpath)
-                            if stat.st_atime < cutoff and stat.st_mtime < cutoff:
-                                candidates.append(fpath)
-                                total_size += stat.st_size
-                        except (OSError, PermissionError):
-                            pass
-            except (OSError, PermissionError):
-                pass
+            
+            d_candidates, d_size = self._scan_directory(d, cutoff)
+            candidates.extend(d_candidates)
+            total_size += d_size
                 
         if candidates:
             return CleanupOpportunity(
@@ -117,6 +117,25 @@ class TempCleaner:
                 items=candidates
             )
         return None
+
+    def _scan_directory(self, directory: str, cutoff: float) -> tuple[List[str], int]:
+        """Helper to scan a single directory safely."""
+        candidates = []
+        total_size = 0
+        try:
+            for root, _, files in os.walk(directory):
+                for name in files:
+                    fpath = os.path.join(root, name)
+                    try:
+                        stat = os.stat(fpath)
+                        if stat.st_atime < cutoff and stat.st_mtime < cutoff:
+                            candidates.append(fpath)
+                            total_size += stat.st_size
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+        return candidates, total_size
 
     def get_cleanup_commands(self) -> List[str]:
         """Generate commands to clean temp files."""
@@ -178,7 +197,7 @@ class CleanupOptimizer:
             
         return opportunities
 
-    def get_cleanup_plan(self, safe_mode: bool = True) -> List[str]:
+    def get_cleanup_plan(self) -> List[str]:
         """Generate a list of shell commands to execute the cleanup."""
         commands = []
         

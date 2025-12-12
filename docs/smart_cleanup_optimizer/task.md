@@ -33,3 +33,8 @@
 - [x] Manual verification of Safe Mode (`--safe`)
 - [x] Verify log compression (Dry run checked)
 - [x] Create Walkthrough
+
+## Refactoring (SonarCloud)
+- [x] Fix `cortex/optimizer.py`: Redundant exceptions, Cognitive Complexity, unused params
+- [x] Fix `cortex/cli.py`: Complexity, unused variables
+- [x] Fix `cortex/packages.py`: Complexity, logic errors

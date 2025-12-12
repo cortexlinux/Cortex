@@ -734,12 +734,12 @@ Cortex is ready to use! Here are some things to try:
     
     def _print_banner(self):
         """Print the Cortex banner."""
-        banner = """
+        banner = r"""
    ____           _            
   / ___|___  _ __| |_ _____  __
  | |   / _ \| '__| __/ _ \ \/ /
  | |__| (_) | |  | ||  __/>  < 
-  \____\___/|_|   \__\___/_/\_\\
+  \____\___/|_|   \__\___/_/\_\
                                
         Linux that understands you.
 """

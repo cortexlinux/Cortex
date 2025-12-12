@@ -138,9 +138,18 @@ class UserPreferences:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'UserPreferences':
-        """Create UserPreferences from dictionary"""
-        confirmations = ConfirmationSettings(**data.get("confirmations", {}))
-        auto_update = AutoUpdateSettings(**data.get("auto_update", {}))
+        """Create UserPreferences from dictionary (forward-compatible with unknown keys)"""
+        # Filter to known fields for forward compatibility
+        from dataclasses import fields as dataclass_fields
+        
+        conf_data = data.get("confirmations", {})
+        conf_fields = {f.name for f in dataclass_fields(ConfirmationSettings)}
+        confirmations = ConfirmationSettings(**{k: v for k, v in conf_data.items() if k in conf_fields})
+        
+        update_data = data.get("auto_update", {})
+        update_fields = {f.name for f in dataclass_fields(AutoUpdateSettings)}
+        auto_update = AutoUpdateSettings(**{k: v for k, v in update_data.items() if k in update_fields})
+        
         # Convert AI settings, ensuring creativity is an enum
         ai_data = data.get("ai", {})
         if 'creativity' in ai_data and not isinstance(ai_data['creativity'], AICreativity):
@@ -148,9 +157,16 @@ class UserPreferences:
                 ai_data['creativity'] = AICreativity(ai_data['creativity'])
             except Exception:
                 ai_data['creativity'] = AICreativity.BALANCED
-        ai = AISettings(**ai_data)
-        packages = PackageSettings(**data.get("packages", {}))
-        conflicts = ConflictSettings(**data.get("conflicts", {}))
+        ai_fields = {f.name for f in dataclass_fields(AISettings)}
+        ai = AISettings(**{k: v for k, v in ai_data.items() if k in ai_fields})
+        
+        pkg_data = data.get("packages", {})
+        pkg_fields = {f.name for f in dataclass_fields(PackageSettings)}
+        packages = PackageSettings(**{k: v for k, v in pkg_data.items() if k in pkg_fields})
+        
+        conf_data = data.get("conflicts", {})
+        conf_fields = {f.name for f in dataclass_fields(ConflictSettings)}
+        conflicts = ConflictSettings(**{k: v for k, v in conf_data.items() if k in conf_fields})
         # Convert verbosity to Enum if necessary
         verbosity_val = data.get("verbosity", VerbosityLevel.NORMAL.value)
         if not isinstance(verbosity_val, VerbosityLevel):
@@ -212,7 +228,7 @@ class PreferencesManager:
             # Ignore load errors here; callers can handle later
             pass
     
-    def _ensure_config_directory(self):
+    def _ensure_config_directory(self) -> None:
         """Ensure configuration directory exists"""
         self.config_dir.mkdir(parents=True, exist_ok=True)
     
@@ -285,7 +301,7 @@ class PreferencesManager:
         try:
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 if HAS_YAML:
-                    yaml.dump(
+                    yaml.safe_dump(
                         self._preferences.to_dict(),
                         f,
                         default_flow_style=False,
@@ -350,8 +366,12 @@ class PreferencesManager:
             # integer coercion
             if low.isdigit():
                 return int(low)
-            # list coercion
-            if "," in value:
+            # list coercion - only for known list fields
+            # Known list fields: packages.sources, packages.default_sources, ai.fallback_models
+            # Scalar fields that might contain commas: ai.model, theme
+            key_path = ".".join(key_parts)
+            list_fields = {"packages.sources", "packages.default_sources", "ai.fallback_models"}
+            if key_path in list_fields and "," in value:
                 return [p.strip() for p in value.split(",") if p.strip()]
 
         return value
@@ -606,8 +626,15 @@ def format_preference_value(value: Any) -> str:
     return str(value)
 
 
-def print_all_preferences(manager: PreferencesManager) -> None:
-    """Convenience helper used in tests to print all preferences (no-op for tests)."""
+def print_all_preferences(manager: PreferencesManager, quiet: bool = False) -> None:
+    """Print all preferences to stdout.
+    
+    Args:
+        manager: PreferencesManager instance
+        quiet: If True, suppress output (useful for tests). Default is False.
+    """
+    if quiet:
+        return
     data = manager.get_all_settings()
     for k, v in data.items():
         print(f"{k}: {format_preference_value(v)}")

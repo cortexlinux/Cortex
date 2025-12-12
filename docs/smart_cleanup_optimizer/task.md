@@ -45,3 +45,5 @@
 - [x] Delete `scripts/verify_ubuntu_compatibility.py`
 - [x] Delete `tests/test_health_monitor.py`
 - [x] Remove `health` command from `cortex/cli.py`
+- [x] Delete `src/` directory (Legacy duplicate)
+- [x] Delete `cortex-cleanup.sh` and `test_output.txt`

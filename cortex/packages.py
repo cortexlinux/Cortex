@@ -450,158 +450,96 @@ class PackageManager:
             pass
         
         return None
-
-
-    def clean_cache(self, execute: bool = False, dry_run: bool = False) -> Tuple[bool, str]:
+    def get_cleanable_items(self) -> Dict[str, any]:
         """
-        Clean package manager cache.
-        
-        Args:
-            execute: Whether to execute the command
-            dry_run: Whether to just show what would be done
-            
-        Returns:
-            Tuple of (success, message)
-        """
-        cmd = []
-        if self.pm_type == PackageManagerType.APT:
-            cmd = ["sudo", "apt-get", "clean"]
-        elif self.pm_type in (PackageManagerType.YUM, PackageManagerType.DNF):
-            pm_cmd = "yum" if self.pm_type == PackageManagerType.YUM else "dnf"
-            cmd = ["sudo", pm_cmd, "clean", "all"]
-        
-        if not cmd:
-            return False, "Unsupported package manager for cache cleaning"
-            
-        if dry_run:
-            return True, f"Would run: {' '.join(cmd)}"
-            
-        if execute:
-            try:
-                subprocess.run(cmd, check=True)
-                return True, "Cache cleaned successfully"
-            except subprocess.CalledProcessError as e:
-                return False, f"Failed to clean cache: {e}"
-        
-        return True, f"Command to run: {' '.join(cmd)}"
-
-    def get_orphaned_packages(self) -> List[str]:
-        """
-        Get list of orphaned (unused dependency) packages.
+        Identify cleanable items managed by the package manager.
         
         Returns:
-            List of package names
+            Dictionary containing cleanup opportunities (cache size, orphaned packages)
         """
-        orphans = []
+        opportunities = {
+            "cache_size_bytes": 0,
+            "orphaned_packages": [],
+            "orphaned_size_bytes": 0
+        }
         
-        if self.pm_type == PackageManagerType.APT:
-            # Try to use deborphan if available, otherwise parse autoremove
-            try:
-                # Check for deborphan first (more reliable)
+        try:
+            if self.pm_type == PackageManagerType.APT:
+                # Check apt cache size
                 result = subprocess.run(
-                    ["deborphan"], 
-                    capture_output=True, 
-                    text=True
+                    "du -sb /var/cache/apt/archives 2>/dev/null | cut -f1",
+                    shell=True, capture_output=True, text=True
                 )
-                if result.returncode == 0 and result.stdout:
-                    orphans = [line.strip() for line in result.stdout.split('\n') if line.strip()]
-                    return orphans
-            except FileNotFoundError:
-                pass
-            
-            # Fallback to apt-get autoremove --dry-run
-            try:
-                env = {"LANG": "C"} # Force English output for parsing
+                if result.returncode == 0 and result.stdout.strip():
+                    opportunities["cache_size_bytes"] = int(result.stdout.strip())
+                
+                # Check for autoremovable packages
+                # This simulates 'apt-get autoremove' to find orphans
                 result = subprocess.run(
                     ["apt-get", "--dry-run", "autoremove"],
-                    capture_output=True,
-                    text=True,
-                    env=env
+                    capture_output=True, text=True, env={"LANG": "C"}
                 )
                 
-                capture = False
-                for line in result.stdout.split('\n'):
-                    if "The following packages will be REMOVED" in line:
-                        capture = True
-                        continue
-                    if capture:
-                        if not line.strip():  # Empty line ends the list
-                            break
-                        # Filter out non-package lines (stats etc)
-                        if "upgraded," in line or "newly installed," in line:
-                            break
-                        
-                        # Add packages from this line
-                        parts = line.strip().split()
-                        for p in parts:
-                            if not p.startswith("*"):  # Skip bullet points if any
-                                orphans.append(p)
-                                
-            except Exception:
-                pass
+                if result.returncode == 0:
+                    for line in result.stdout.split('\n'):
+                        if line.startswith("Remv"):
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                pkg_name = parts[1]
+                                opportunities["orphaned_packages"].append(pkg_name)
+                    
+                    # Estimate size (rough estimate based on installed size)
+                    if opportunities["orphaned_packages"]:
+                        cmd = ["dpkg-query", "-W", "-f=${Installed-Size}\n"] + opportunities["orphaned_packages"]
+                        size_res = subprocess.run(cmd, capture_output=True, text=True)
+                        if size_res.returncode == 0:
+                            total_kb = sum(int(s) for s in size_res.stdout.split() if s.isdigit())
+                            opportunities["orphaned_size_bytes"] = total_kb * 1024
+
+            elif self.pm_type in (PackageManagerType.YUM, PackageManagerType.DNF):
+                pm_cmd = "yum" if self.pm_type == PackageManagerType.YUM else "dnf"
                 
-        elif self.pm_type in (PackageManagerType.YUM, PackageManagerType.DNF):
-            # For DNF/YUM usually 'autoremove' handles it, but listing is harder without executing
-            # simple 'package-cleanup --leaves' (yum-utils) or 'dnf repoquery --unneeded'
-            pm_cmd = "yum" if self.pm_type == PackageManagerType.YUM else "dnf"
+                # Check cache size (requires sudo usually, but we try)
+                # DNF/YUM cache location varies, usually /var/cache/dnf or /var/cache/yum
+                cache_dir = "/var/cache/dnf" if self.pm_type == PackageManagerType.DNF else "/var/cache/yum"
+                result = subprocess.run(
+                    f"du -sb {cache_dir} 2>/dev/null | cut -f1",
+                    shell=True, capture_output=True, text=True
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    opportunities["cache_size_bytes"] = int(result.stdout.strip())
+                
+                # Check for autoremovable packages
+                cmd = [pm_cmd, "autoremove", "--assumeno"] if self.pm_type == PackageManagerType.DNF else [pm_cmd, "autoremove", "--assumeno"] 
+                # Note: dnf autoremove output parsing is complex, skipping precise list for now for safety
+                # We can return a generic command advice
+                
+        except Exception:
+            pass
             
-            try:
-                # Try dnf repoquery if dnf
-                if self.pm_type == PackageManagerType.DNF:
-                    result = subprocess.run(
-                        ["dnf", "repoquery", "--unneeded", "--queryformat", "%{name}"],
-                        capture_output=True,
-                        text=True
-                    )
-                    if result.returncode == 0:
-                        orphans = [line.strip() for line in result.stdout.split('\n') if line.strip()]
-                else:
-                    # Yum fallback (requires yum-utils usually, checking package-cleanup)
-                    result = subprocess.run(
-                        ["package-cleanup", "--quiet", "--leaves"],
-                        capture_output=True,
-                        text=True
-                    )
-                    if result.returncode == 0:
-                        orphans = [line.strip() for line in result.stdout.split('\n') if line.strip()]
-            except FileNotFoundError:
-                pass
+        return opportunities
 
-        return sorted(list(set(orphans)))
-
-    def remove_packages(self, packages: List[str], execute: bool = False, dry_run: bool = False) -> Tuple[bool, str]:
+    def get_cleanup_commands(self, item_type: str) -> List[str]:
         """
-        Remove specified packages.
+        Get commands to clean specific items.
         
         Args:
-            packages: List of packages to remove
-            execute: Whether to execute command
-            dry_run: Whether to simulate
+            item_type: Type of item to clean ('cache', 'orphans')
             
         Returns:
-            Tuple of (success, message)
+            List of commands
         """
-        if not packages:
-            return True, "No packages to remove"
-            
-        cmd = []
         if self.pm_type == PackageManagerType.APT:
-            cmd = ["sudo", "apt-get", "remove", "-y"] + packages
+            if item_type == 'cache':
+                return ["apt-get clean"]
+            elif item_type == 'orphans':
+                return ["apt-get autoremove -y"]
+                
         elif self.pm_type in (PackageManagerType.YUM, PackageManagerType.DNF):
             pm_cmd = "yum" if self.pm_type == PackageManagerType.YUM else "dnf"
-            cmd = ["sudo", pm_cmd, "remove", "-y"] + packages
-            
-        if not cmd:
-            return False, "Unsupported package manager"
-            
-        if dry_run:
-            return True, f"Would run: {' '.join(cmd)}"
-            
-        if execute:
-            try:
-                subprocess.run(cmd, check=True)
-                return True, f"Successfully removed {len(packages)} packages"
-            except subprocess.CalledProcessError as e:
-                return False, f"Failed to remove packages: {e}"
+            if item_type == 'cache':
+                return [f"{pm_cmd} clean all"]
+            elif item_type == 'orphans':
+                return [f"{pm_cmd} autoremove -y"]
                 
-        return True, f"Command to run: {' '.join(cmd)}"
+        return []

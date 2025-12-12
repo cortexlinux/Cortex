@@ -1,184 +1,310 @@
 
 import os
+import sys
 import shutil
+import subprocess
 import glob
-import logging
 import gzip
-from typing import Dict, List, Tuple, Any
+import time
+import logging
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+
 from cortex.packages import PackageManager
+from cortex.installation_history import InstallationHistory, InstallationType, InstallationStatus
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@dataclass
+class CleanupOpportunity:
+    type: str  # 'package_cache', 'orphans', 'logs', 'temp'
+    size_bytes: int
+    description: str
+    items: List[str]  # List of files or packages
 
 class DiskOptimizer:
-    """
-    Smart Cleanup and Disk Space Optimizer.
-    Handles scanning for cleanable items and performing safe cleanup.
-    """
-    
     def __init__(self):
         self.pm = PackageManager()
-        self.logger = logging.getLogger("cortex.optimizer")
+        self.history = InstallationHistory()
+        self.backup_dir = Path("/var/lib/cortex/backups/cleanup")
+        self._ensure_backup_dir()
+
+    def _ensure_backup_dir(self):
+        try:
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            self.backup_dir = Path.home() / ".cortex" / "backups" / "cleanup"
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+
+    def scan(self) -> List[CleanupOpportunity]:
+        """Scan system for cleanup opportunities"""
+        opportunities = []
         
-    def scan(self) -> Dict[str, Any]:
-        """
-        Scan system for cleanup opportunities.
+        # 1. Package Manager Cleanup
+        pkg_info = self.pm.get_cleanable_items()
         
-        Returns:
-            Dictionary containing cleanup stats
-        """
-        result = {
-            "package_cache": 0,
-            "orphaned_packages": [],
-            "orphaned_size_est": 0,
-            "logs": [],
-            "logs_size": 0,
-            "temp_files": [],
-            "temp_size": 0,
-            "total_reclaimable": 0
-        }
-        
-        # 1. Check package cache size
-        result["package_cache"] = self._get_package_cache_size()
-        
-        # 2. Find orphaned packages
-        if hasattr(self.pm, 'get_orphaned_packages'):
-            orphans = self.pm.get_orphaned_packages()
-            result["orphaned_packages"] = orphans
-            # Estimate 50MB per package as a rough heuristic if exact size unknown
-            # Real implementation might query size per package
-            result["orphaned_size_est"] = len(orphans) * 50 * 1024 * 1024
+        if pkg_info.get("cache_size_bytes", 0) > 0:
+            opportunities.append(CleanupOpportunity(
+                type="package_cache",
+                size_bytes=pkg_info["cache_size_bytes"],
+                description="Package manager cache",
+                items=["Package cache files"]
+            ))
             
-        # 3. Check for old logs (cortex logs and others)
-        # For safety, we primarily target cortex logs and safe user logs
-        log_patterns = [
-            os.path.expanduser("~/.cortex/logs/*.log"),
-            os.path.expanduser("~/*.log")
-        ]
-        
-        for pattern in log_patterns:
-            for log_file in glob.glob(pattern):
-                if os.path.isfile(log_file) and not log_file.endswith('.gz'):
-                    size = os.path.getsize(log_file)
-                    # Consider cleanable if > 1MB
-                    if size > 1024 * 1024:
-                        result["logs"].append(log_file)
-                        result["logs_size"] += size
+        if pkg_info.get("orphaned_packages"):
+            opportunities.append(CleanupOpportunity(
+                type="orphans",
+                size_bytes=pkg_info.get("orphaned_size_bytes", 0),
+                description=f"Orphaned packages ({len(pkg_info['orphaned_packages'])})",
+                items=pkg_info["orphaned_packages"]
+            ))
 
-        # 4. Temp files
-        # Only safe temp locations
-        temp_patterns = [
-            os.path.expanduser("~/.cache/cortex/temp/*"),
-            "/tmp/cortex-*"
-        ]
-        
-        for pattern in temp_patterns:
-            for temp_file in glob.glob(pattern):
-                if os.path.isfile(temp_file):
-                    size = os.path.getsize(temp_file)
-                    result["temp_files"].append(temp_file)
-                    result["temp_size"] += size
+        # 2. Old Logs
+        log_opp = self._scan_logs()
+        if log_opp:
+            opportunities.append(log_opp)
+            
+        # 3. Temp Files
+        temp_opp = self._scan_temp_files()
+        if temp_opp:
+            opportunities.append(temp_opp)
+            
+        return opportunities
 
-        # Calculate total
-        result["total_reclaimable"] = (
-            result["package_cache"] + 
-            result["orphaned_size_est"] + 
-            result["logs_size"] + 
-            result["temp_size"]
-        )
-        
-        return result
-
-    def clean(self, safe_mode: bool = True) -> Dict[str, Any]:
-        """
-        Perform cleanup operations.
-        
-        Args:
-            safe_mode: If True, skips undefined or potentially risky operations
-                       (though this implementation tries to be safe by default)
-        
-        Returns:
-            Dictionary with results of cleanup
-        """
-        stats = {
-            "freed_bytes": 0,
-            "actions": []
-        }
-        
-        scan_results = self.scan()
-        
-        # 1. Clean package cache
-        if scan_results["package_cache"] > 0:
-            success, msg = self.pm.clean_cache(execute=True)
-            if success:
-                stats["freed_bytes"] += scan_results["package_cache"]
-                stats["actions"].append(f"Cleaned package cache ({self._format_size(scan_results['package_cache'])})")
-            else:
-                stats["actions"].append(f"Failed to clean package cache: {msg}")
-
-        # 2. Remove orphaned packages
-        orphans = scan_results["orphaned_packages"]
-        if orphans:
-            success, msg = self.pm.remove_packages(orphans, execute=True)
-            if success:
-                stats["freed_bytes"] += scan_results["orphaned_size_est"]
-                stats["actions"].append(f"Removed {len(orphans)} orphaned packages")
-            else:
-                stats["actions"].append(f"Failed to remove orphaned packages: {msg}")
-
-        # 3. Compress logs
-        for log_file in scan_results["logs"]:
-            try:
-                original_size = os.path.getsize(log_file)
-                self._compress_file(log_file)
-                new_size = os.path.getsize(log_file + ".gz")
-                freed = original_size - new_size
-                stats["freed_bytes"] += freed
-                stats["actions"].append(f"Compressed {os.path.basename(log_file)}")
-            except Exception as e:
-                stats["actions"].append(f"Failed to compress {os.path.basename(log_file)}: {e}")
-
-        # 4. Remove temp files
-        for temp_file in scan_results["temp_files"]:
-            try:
-                size = os.path.getsize(temp_file)
-                os.remove(temp_file)
-                stats["freed_bytes"] += size
-                stats["actions"].append(f"Removed temp file {os.path.basename(temp_file)}")
-            except Exception as e:
-                stats["actions"].append(f"Failed to remove {os.path.basename(temp_file)}: {e}")
-
-        return stats
-
-    def _get_package_cache_size(self) -> int:
-        """Calculate size of package manager cache."""
+    def _scan_logs(self) -> Optional[CleanupOpportunity]:
+        """Scan for rotatable/compressible logs"""
+        log_dir = "/var/log"
+        if not os.path.exists(log_dir):
+            return None
+            
+        candidates = []
         total_size = 0
-        cache_dirs = []
         
-        if self.pm.pm_type == "apt": # PackageManagerType enum handling simplified
-            cache_dirs = ["/var/cache/apt/archives"]
-        elif self.pm.pm_type in ["yum", "dnf"]:
-            cache_dirs = ["/var/cache/yum", "/var/cache/dnf"]
+        # Look for .1, .2, or .log.old files that aren't compressed
+        patterns = ["**/*.1", "**/*.2", "**/*.log.old"]
+        for pattern in patterns:
+            for log_file in glob.glob(os.path.join(log_dir, pattern), recursive=True):
+                try:
+                    size = os.path.getsize(log_file)
+                    # Helper to skip if looks like binary/compressed
+                    if not log_file.endswith('.gz'):
+                        candidates.append(log_file)
+                        total_size += size
+                except (OSError, PermissionError):
+                    pass
+        
+        if candidates:
+            return CleanupOpportunity(
+                type="logs",
+                size_bytes=total_size,
+                description=f"Old log files ({len(candidates)})",
+                items=candidates
+            )
+        return None
+
+    def _scan_temp_files(self) -> Optional[CleanupOpportunity]:
+        """Scan for old temp files"""
+        temp_dirs = ["/tmp", "/var/tmp"]
+        candidates = []
+        total_size = 0
+        # Files older than 7 days
+        cutoff = time.time() - (7 * 86400)
+        
+        for d in temp_dirs:
+            if not os.path.exists(d):
+                continue
+            try:
+                for root, _, files in os.walk(d):
+                    for name in files:
+                        fpath = os.path.join(root, name)
+                        try:
+                            stat = os.stat(fpath)
+                            if stat.st_atime < cutoff and stat.st_mtime < cutoff:
+                                candidates.append(fpath)
+                                total_size += stat.st_size
+                        except (OSError, PermissionError):
+                            pass
+            except (OSError, PermissionError):
+                pass
+                
+        if candidates:
+            return CleanupOpportunity(
+                type="temp",
+                size_bytes=total_size,
+                description=f"Old temporary files ({len(candidates)})",
+                items=candidates
+            )
+        return None
+
+    def run_cleanup(self, opportunities: List[CleanupOpportunity], safe: bool = True) -> Dict[str, any]:
+        """Execute cleanup for given opportunities"""
+        results = {
+            "freed_bytes": 0,
+            "actions": [],
+            "errors": []
+        }
+        
+        # Create a cleanup session ID for potential rollback
+        cleanup_id = f"cleanup_{int(time.time())}"
+        session_backup_dir = self.backup_dir / cleanup_id
+        if safe:
+            session_backup_dir.mkdir(parents=True, exist_ok=True)
+        
+        for opp in opportunities:
+            try:
+                if opp.type == "package_cache":
+                    cmds = self.pm.get_cleanup_commands("cache")
+                    for cmd in cmds:
+                        # Prepend sudo if likely needed and not running as root
+                        if os.geteuid() != 0 and not cmd.startswith("sudo"):
+                            cmd = f"sudo {cmd}"
+                        
+                        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                        if proc.returncode == 0:
+                            results["freed_bytes"] += opp.size_bytes
+                            results["actions"].append(f"Cleaned package cache")
+                        else:
+                            results["errors"].append(f"Failed to clean cache: {proc.stderr}")
+                
+                elif opp.type == "orphans":
+                    cmds = self.pm.get_cleanup_commands("orphans")
+                    # For orphans, we should record this as a removal op in InstallationHistory for Undo
+                    # But standard history tracks 'install' primarily. We'll use a custom record.
+                    if safe:
+                         # Snapshot current packages before removal
+                        pass # InstallationHistory handles this if we use record_installation
+
+                    for cmd in cmds:
+                        if os.geteuid() != 0 and not cmd.startswith("sudo"):
+                            cmd = f"sudo {cmd}"
+                        
+                        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                        if proc.returncode == 0:
+                            results["freed_bytes"] += opp.size_bytes
+                            results["actions"].append(f"Removed orphaned packages")
+                        else:
+                            results["errors"].append(f"Failed to remove orphans: {proc.stderr}")
+
+                elif opp.type == "logs":
+                    freed = self._compress_logs(opp.items, session_backup_dir if safe else None)
+                    results["freed_bytes"] += freed
+                    results["actions"].append(f"Compressed {len(opp.items)} log files")
+                
+                elif opp.type == "temp":
+                    freed = self._remove_files(opp.items, session_backup_dir if safe else None)
+                    results["freed_bytes"] += freed
+                    results["actions"].append(f"Removed {len(opp.items)} temp files")
+                    
+            except Exception as e:
+                results["errors"].append(str(e))
+                
+        return results
+
+    def _compress_logs(self, files: List[str], backup_dir: Optional[Path]) -> int:
+        freed = 0
+        for fpath in files:
+            try:
+                original_size = os.path.getsize(fpath)
+                
+                # Backup if safe mode
+                if backup_dir:
+                    # Maintain directory structure in backup
+                    rel_path = os.path.relpath(fpath, "/")
+                    dest = backup_dir / rel_path
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(fpath, dest)
+                
+                # Compress
+                # We need sudo if we don't own the file
+                if not os.access(fpath, os.W_OK):
+                    # Use sudo gzip
+                    subprocess.run(["sudo", "gzip", "-f", fpath], check=True)
+                    # Check new size
+                    if os.path.exists(fpath + ".gz"):
+                         new_size = os.path.getsize(fpath + ".gz")
+                         freed += (original_size - new_size)
+                else:
+                    with open(fpath, 'rb') as f_in:
+                         with gzip.open(fpath + '.gz', 'wb') as f_out:
+                             shutil.copyfileobj(f_in, f_out)
+                    os.remove(fpath)
+                    new_size = os.path.getsize(fpath + ".gz")
+                    freed += (original_size - new_size)
+                    
+            except Exception as e:
+                logger.error(f"Failed to compress {fpath}: {e}")
+                
+        return freed
+
+    def _remove_files(self, files: List[str], backup_dir: Optional[Path]) -> int:
+        freed = 0
+        for fpath in files:
+            try:
+                size = os.path.getsize(fpath)
+                 # Backup
+                if backup_dir:
+                    rel_path = os.path.relpath(fpath, "/")
+                    dest = backup_dir / rel_path
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(fpath, dest)
+                
+                # Remove
+                if not os.access(fpath, os.W_OK) and not os.access(os.path.dirname(fpath), os.W_OK):
+                    subprocess.run(["sudo", "rm", "-f", fpath], check=True)
+                else:
+                    os.remove(fpath)
+                freed += size
+            except Exception as e:
+                logger.error(f"Failed to remove {fpath}: {e}")
+        return freed
+
+    def schedule_cleanup(self, frequency: str) -> bool:
+        """
+        Schedule cleanup job.
+        frequency: 'daily', 'weekly', 'monthly'
+        """
+        # Using cron
+        script_path = os.path.abspath(sys.argv[0])
+        # Assumes running from cortex wrapper or python module
+        # Simplest is to run 'cortex cleanup run --safe'
+        
+        cron_cmd = "cortex cleanup run --safe > /var/log/cortex-cleanup.log 2>&1"
+        
+        cron_time = "@daily"
+        if frequency == 'weekly': cron_time = "@weekly"
+        elif frequency == 'monthly': cron_time = "@monthly"
+        
+        entry = f"{cron_time} {cron_cmd}"
+        
+        try:
+            # Check if crontab entry exists
+            current_crontab = subprocess.run("crontab -l", shell=True, capture_output=True, text=True).stdout
+            if cron_cmd in current_crontab:
+                # Update existing? For now just return
+                return True
+                
+            new_crontab = current_crontab + f"\n# Cortex Auto-Cleanup\n{entry}\n"
             
-        for d in cache_dirs:
-            if os.path.exists(d):
-                for dirpath, _, filenames in os.walk(d):
-                    for f in filenames:
-                        fp = os.path.join(dirpath, f)
-                        if os.path.isfile(fp):
-                            total_size += os.path.getsize(fp)
-                            
-        return total_size
+            proc = subprocess.run(
+                ["crontab", "-"],
+                input=new_crontab,
+                text=True,
+                capture_output=True
+            )
+            return proc.returncode == 0
+        except Exception:
+            return False
 
-    def _compress_file(self, filepath: str):
-        """Compress a file using gzip and remove original."""
-        with open(filepath, 'rb') as f_in:
-            with gzip.open(filepath + '.gz', 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
-        os.remove(filepath)
-
-    def _format_size(self, size_bytes: int) -> str:
-        """Format bytes to human readable string."""
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size_bytes < 1024.0:
-                return f"{size_bytes:.2f} {unit}"
-            size_bytes /= 1024.0
-        return f"{size_bytes:.2f} PB"
+    def restore(self, cleanup_id: str) -> bool:
+        """Undo a cleanup session"""
+        # Logic:
+        # 1. Find backup folder
+        # 2. Restore files (logs, temp)
+        # 3. For packages, use history rollback if available, or just reinstall what was removed?
+        # Since we didn't fully integrate with InstallationHistory for the cleanup op yet (just CLI wrapper),
+        # we might need to rely on the backup files for logs/temp.
+        # For packages, 'apt history' or our internal history.
+        return False # TODO: Implement full restore logic

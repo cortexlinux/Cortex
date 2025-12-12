@@ -1,23 +1,24 @@
-# Smart Cleanup and Disk Space Optimizer Task List
+# タスク: スマートクリーンアップとディスクスペース最適化
 
-- [x] リポジトリ構造の調査と設計
-- [x] ドキュメント作成 (`task.md`, `implementation_plan.md`)
-- [x] ユーザー実装承認
-- [x] `cortex/packages.py` の拡張
-    - [x] `clean_cache` メソッドの実装
-    - [x] `get_orphaned_packages` メソッドの実装
-    - [x] `remove_packages` メソッドの実装
-- [x] `cortex/optimizer.py` の新規作成 (クリーンアップロジックの中核)
-    - [x] `DiskOptimizer` クラスの設計
-    - [x] スキャン機能 (パッケージ、ログ、一時ファイル)
-    - [x] ログ圧縮・ローテーション機能
-    - [x] クリーンアップ実行機能
-- [x] `cortex/cli.py` へのコマンド追加
-    - [x] `cleanup` サブコマンド定義
-    - [x] `cleanup scan` ハンドラ
-    - [x] `cleanup run` ハンドラと `--safe` フラグ
-- [x] テストの作成
-    - [x] `tests/test_optimizer.py` の作成
-    - [x] 既存テストへの影響確認
-- [x] 動作確認 (Manual Verification)
-- [x] ドキュメント更新 (機能説明)
+- [x] `cortex/packages.py` の更新 <!-- id: 1 -->
+    - [x] パッケージキャッシュのサイズ取得機能の実装
+    - [x] キャッシュ削除、不要パッケージ削除コマンドのサポート
+- [ ] `cortex/optimizer.py` の新規作成 <!-- id: 2 -->
+    - [ ] `DiskOptimizer` クラスの設計
+    - [ ] スキャン機能 (`scan`) の実装
+    - [ ] クリーンアップ機能 (`clean`) の実装（バックアップ処理含む）
+    - [ ] ログ圧縮機能の実装
+    - [ ] Undo機能 (`restore`) の実装
+    - [ ] スケジューリング機能 (`schedule_cleanup`) の実装
+- [ ] `cortex/cli.py` へのコマンド追加 <!-- id: 3 -->
+    - [ ] `cleanup` コマンドの登録
+    - [ ] `scan`, `run` サブコマンドの実装
+    - [ ] `schedule`, `undo` サブコマンドの実装
+    - [ ] CLI出力の整形
+- [ ] テストの作成と実行 <!-- id: 4 -->
+    - [ ] `tests/test_optimizer.py` の作成
+    - [ ] ユニットテストの実行 (`pytest`)
+    - [ ] 手動検証 (`cortex cleanup scan`)
+- [ ] ドキュメントとGitプッシュ <!-- id: 5 -->
+    - [ ] ユーザーガイドの作成
+    - [ ] GitHubへプッシュ

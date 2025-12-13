@@ -54,26 +54,11 @@ class CortexCLI:
         if self.verbose:
             console.print(f"[dim][DEBUG] {message}[/dim]")
 
-    def _get_api_key(self) -> Optional[str]:
-        # Check if using Ollama (no API key needed)
-        provider = self._get_provider()
-        if provider == 'ollama':
-            self._debug("Using Ollama (no API key required)")
-            return "ollama-local"  # Placeholder for Ollama
-
-        is_valid, detected_provider, error = validate_api_key()
-        if not is_valid:
-            self._print_error(error)
-            cx_print("Run [bold]cortex wizard[/bold] to configure your API key.", "info")
-            cx_print("Or use [bold]CORTEX_PROVIDER=ollama[/bold] for offline mode.", "info")
-            return None
-        api_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('OPENAI_API_KEY')
-        return api_key
-
     def _get_provider(self) -> str:
+        """Detect which LLM provider to use based on configuration and credentials."""
         # Check environment variable for explicit provider choice
         explicit_provider = os.environ.get('CORTEX_PROVIDER', '').lower()
-        if explicit_provider in ['ollama', 'openai', 'claude']:
+        if explicit_provider in ['ollama', 'openai', 'claude', 'kimi', 'fake']:
             return explicit_provider
 
         # Auto-detect based on available API keys
@@ -81,10 +66,43 @@ class CortexCLI:
             return 'claude'
         elif os.environ.get('OPENAI_API_KEY'):
             return 'openai'
+        elif os.environ.get('KIMI_API_KEY'):
+            return 'kimi'
+        elif os.environ.get('CORTEX_FAKE_COMMANDS'):
+            return 'fake'
 
         # Fallback to Ollama for offline mode
         return 'ollama'
 
+    def _get_api_key(self, provider: Optional[str] = None) -> Optional[str]:
+        """Return the API key for the specified provider or emit guidance if missing."""
+        # If no provider specified, detect it
+        if provider is None:
+            provider = self._get_provider()
+        
+        # Check if using Ollama (no API key needed)
+        if provider == 'ollama':
+            self._debug("Using Ollama (no API key required)")
+            return "ollama-local"  # Placeholder for Ollama
+
+        env_map = {
+            'openai': 'OPENAI_API_KEY',
+            'claude': 'ANTHROPIC_API_KEY',
+            'kimi': 'KIMI_API_KEY',
+        }
+
+        env_var = env_map.get(provider)
+        if not env_var:
+            return None
+
+        api_key = os.environ.get(env_var)
+        if not api_key:
+            self._print_error(f"API key not found. Set {env_var} environment variable.")
+            cx_print("Run [bold]cortex wizard[/bold] to configure your API key.", "info")
+            cx_print("Or use [bold]CORTEX_PROVIDER=ollama[/bold] for offline mode.", "info")
+            return None
+        return api_key
+    
     def _print_status(self, emoji: str, message: str):
         """Legacy status print - maps to cx_print for Rich output"""
         status_map = {
@@ -183,12 +201,16 @@ class CortexCLI:
             self._print_error(error)
             return 1
 
-        api_key = self._get_api_key()
-        if not api_key:
-            return 1
-
         provider = self._get_provider()
         self._debug(f"Using provider: {provider}")
+        
+        if provider == 'fake':
+            api_key = os.environ.get('CORTEX_FAKE_API_KEY', 'fake-api-key')
+        else:
+            api_key = self._get_api_key(provider)
+            if not api_key:
+                return 1
+        
         self._debug(f"API key: {api_key[:10]}...{api_key[-4:]}")
 
         # Initialize installation history

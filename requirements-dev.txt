@@ -1,6 +1,30 @@
 # Development Dependencies
 pytest>=7.0.0
 pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+requests>=2.32.4
+
+# LLM Provider APIs (required by core modules)
+anthropic>=0.18.0
+openai>=1.0.0
+
+# Terminal UI (required by cortex modules)
+rich>=13.0.0
+
+# Configuration
+PyYAML>=6.0.0
+
+# Code Quality
+pylint>=2.17.0
+mypy>=1.0.0
+
+# Security
+bandit>=1.7.0
+safety>=2.3.0
+
+# Documentation
+sphinx>=6.0.0
+sphinx-rtd-theme>=1.0.0
 black>=24.0.0
 ruff>=0.8.0
 isort>=5.13.0

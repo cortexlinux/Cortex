@@ -23,6 +23,11 @@ class TestCortexCLI(unittest.TestCase):
         api_key = self.cli._get_api_key()
         self.assertEqual(api_key, 'sk-ant-test-claude-key-123')
     
+    @patch.dict(os.environ, {'KIMI_API_KEY': 'test-kimi-key'}, clear=True)
+    def test_get_api_key_kimi(self):
+        api_key = self.cli._get_api_key('kimi')
+        self.assertEqual(api_key, 'test-kimi-key')
+    
     @patch.dict(os.environ, {}, clear=True)
     @patch('sys.stderr')
     def test_get_api_key_not_found(self, mock_stderr):
@@ -39,6 +44,16 @@ class TestCortexCLI(unittest.TestCase):
     def test_get_provider_claude(self):
         provider = self.cli._get_provider()
         self.assertEqual(provider, 'claude')
+    
+    @patch.dict(os.environ, {'KIMI_API_KEY': 'test-key'}, clear=True)
+    def test_get_provider_kimi(self):
+        provider = self.cli._get_provider()
+        self.assertEqual(provider, 'kimi')
+    
+    @patch.dict(os.environ, {'CORTEX_PROVIDER': 'fake'}, clear=True)
+    def test_get_provider_override(self):
+        provider = self.cli._get_provider()
+        self.assertEqual(provider, 'fake')
     
     @patch('sys.stdout')
     def test_print_status(self, mock_stdout):

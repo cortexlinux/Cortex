@@ -196,11 +196,11 @@ class CortexCLI:
             # Install a stack (only remaining path)
             return self._handle_stack_install(manager, args)
 
-        except FileNotFoundError:
-            self._print_error("stacks.json not found. Make sure it exists in the expected location.")
+        except FileNotFoundError as e:
+            self._print_error(f"stacks.json not found. Ensure cortex/stacks.json exists: {e}")
             return 1
-        except ValueError:
-            self._print_error("stacks.json is invalid or malformed.")
+        except ValueError as e:
+            self._print_error(f"stacks.json is invalid or malformed: {e}")
             return 1
 
         
@@ -212,9 +212,9 @@ class CortexCLI:
         cx_print("\n📦 Available Stacks:\n", "info")
         for stack in stacks:
             pkg_count = len(stack.get("packages", []))
-            console.print(f"  [green]{stack['id']}[/green]")
-            console.print(f"    {stack['name']}")
-            console.print(f"    {stack['description']}")
+            console.print(f"  [green]{stack.get('id', 'unknown')}[/green]")
+            console.print(f"    {stack.get('name', 'Unnamed Stack')}")
+            console.print(f"    {stack.get('description', 'No description')}")
             console.print(f"    [dim]({pkg_count} packages)[/dim]\n")
         cx_print("Use: cortex stack <name> to install a stack", "info")
         return 0
@@ -736,11 +736,11 @@ def main():
 
     # Stack command
     stack_parser = subparsers.add_parser('stack', help='Manage pre-built package stacks')
-    stack_parser.add_argument('name', nargs='?', help='Stack name (ml, ml-cpu, webdev, devops, data)')
-    stack_parser.add_argument('--list', '-l', action='store_true', help='List all available stacks')
-    stack_parser.add_argument('--describe', '-d', metavar='STACK', help='Show details about a stack')
-    stack_parser.add_argument('--dry-run', action='store_true', help='Show what would be installed')
-
+    stack_parser.add_argument('name', nargs='?', help='Stack name to install (ml, ml-cpu, webdev, devops, data)')
+    stack_group = stack_parser.add_mutually_exclusive_group()
+    stack_group.add_argument('--list', '-l', action='store_true', help='List all available stacks')
+    stack_group.add_argument('--describe', '-d', metavar='STACK', help='Show details about a stack')
+    stack_parser.add_argument('--dry-run', action='store_true', help='Show what would be installed (requires stack name)')
     args = parser.parse_args()
 
     if not args.command:
@@ -768,10 +768,9 @@ def main():
             return cli.edit_pref(action=args.action, key=args.key, value=args.value)
         # Handle the new notify command
         elif args.command == 'notify':
-            return cli.notify(args)                
+            return cli.notify(args)
         elif args.command == 'stack':
             return cli.stack(args)
-        
         else:
             parser.print_help()
             return 1

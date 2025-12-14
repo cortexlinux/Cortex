@@ -297,9 +297,11 @@ class SandboxExecutor:
         Returns:
             Tuple of (is_valid, violation_reason)
         """
-        # Check for dangerous patterns
+        # Check for dangerous patterns.
+        # Some tests generate commands with escaped '+' (e.g. "chmod \+s").
+        command_for_pattern = command.replace('\\+', '+')
         for pattern in self.DANGEROUS_PATTERNS:
-            if re.search(pattern, command, re.IGNORECASE):
+            if re.search(pattern, command_for_pattern, re.IGNORECASE):
                 return False, f"Dangerous pattern detected: {pattern}"
 
         # Parse command

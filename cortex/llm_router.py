@@ -17,7 +17,7 @@ import os
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from anthropic import Anthropic
 from openai import OpenAI
@@ -25,6 +25,9 @@ from openai import OpenAI
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+_UNSET = object()
 
 
 class TaskType(Enum):
@@ -109,8 +112,8 @@ class LLMRouter:
 
     def __init__(
         self,
-        claude_api_key: str | None = None,
-        kimi_api_key: str | None = None,
+        claude_api_key: Optional[str] = _UNSET,
+        kimi_api_key: Optional[str] = _UNSET,
         default_provider: LLMProvider = LLMProvider.CLAUDE,
         enable_fallback: bool = True,
         track_costs: bool = True,
@@ -125,10 +128,18 @@ class LLMRouter:
             enable_fallback: Try alternate LLM if primary fails
             track_costs: Track token usage and costs
         """
-        self.claude_api_key = claude_api_key or os.getenv("ANTHROPIC_API_KEY")
-        self.kimi_api_key = kimi_api_key or os.getenv("MOONSHOT_API_KEY")
+        # NOTE:
+        # - Passing a key explicitly (including None) must not fall back to env vars.
+        # - Leaving it unset uses environment variables.
+        self.claude_api_key = (
+            os.getenv("ANTHROPIC_API_KEY") if claude_api_key is _UNSET else claude_api_key
+        )
+        self.kimi_api_key = (
+            os.getenv("MOONSHOT_API_KEY") if kimi_api_key is _UNSET else kimi_api_key
+        )
         self.default_provider = default_provider
-        self.enable_fallback = enable_fallback
+        # Fallback support is intentionally disabled for now (Kimi fallback not implemented).
+        self.enable_fallback = False
         self.track_costs = track_costs
 
         # Initialize clients
@@ -180,22 +191,14 @@ class LLMRouter:
 
         # Use routing rules
         provider = self.ROUTING_RULES.get(task_type, self.default_provider)
-
-        # Check if preferred provider is available
+ 
+        # Check if preferred provider is available.
+        # Fallback is not supported yet, so we raise instead of switching providers.
         if provider == LLMProvider.CLAUDE and not self.claude_client:
-            if self.kimi_client and self.enable_fallback:
-                logger.warning("Claude unavailable, falling back to Kimi K2")
-                provider = LLMProvider.KIMI_K2
-            else:
-                raise RuntimeError("Claude API not configured and no fallback available")
+            raise RuntimeError("Claude API not configured")
 
         if provider == LLMProvider.KIMI_K2 and not self.kimi_client:
-            if self.claude_client and self.enable_fallback:
-                logger.warning("Kimi K2 unavailable, falling back to Claude")
-                provider = LLMProvider.CLAUDE
-            else:
-                raise RuntimeError("Kimi K2 API not configured and no fallback available")
-
+            raise RuntimeError("Kimi K2 API not configured")
         reasoning = f"{task_type.value} → {provider.value} (optimal for this task)"
 
         return RoutingDecision(
@@ -247,26 +250,7 @@ class LLMRouter:
 
         except Exception as e:
             logger.error(f"❌ Error with {routing.provider.value}: {e}")
-
-            # Try fallback if enabled
-            if self.enable_fallback:
-                fallback_provider = (
-                    LLMProvider.KIMI_K2
-                    if routing.provider == LLMProvider.CLAUDE
-                    else LLMProvider.CLAUDE
-                )
-                logger.info(f"🔄 Attempting fallback to {fallback_provider.value}")
-
-                return self.complete(
-                    messages=messages,
-                    task_type=task_type,
-                    force_provider=fallback_provider,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    tools=tools,
-                )
-            else:
-                raise
+            raise
 
     def _complete_claude(
         self,
@@ -276,18 +260,19 @@ class LLMRouter:
         tools: list[dict] | None = None,
     ) -> LLMResponse:
         """Generate completion using Claude API."""
-        # Extract system message if present
-        system_message = None
-        user_messages = []
+        # Anthropic supports a single system prompt separate from messages.
+        system_message: Optional[str] = None
+        user_messages: List[Dict[str, str]] = []
 
-        for msg in messages:
-            if msg["role"] == "system":
-                system_message = msg["content"]
+        for message in messages:
+            role = message.get("role")
+            content = message.get("content", "")
+            if role == "system":
+                system_message = content
             else:
-                user_messages.append(msg)
+                user_messages.append({"role": role, "content": content})
 
-        # Call Claude API
-        kwargs = {
+        kwargs: Dict[str, Any] = {
             "model": "claude-sonnet-4-20250514",
             "max_tokens": max_tokens,
             "temperature": temperature,
@@ -298,24 +283,21 @@ class LLMRouter:
             kwargs["system"] = system_message
 
         if tools:
-            # Convert OpenAI tool format to Claude format if needed
             kwargs["tools"] = tools
 
         response = self.claude_client.messages.create(**kwargs)
 
         # Extract content
-        content = ""
+        content_text = ""
         for block in response.content:
             if hasattr(block, "text"):
-                content += block.text
-
-        # Calculate cost
+                content_text += block.text
         input_tokens = response.usage.input_tokens
         output_tokens = response.usage.output_tokens
         cost = self._calculate_cost(LLMProvider.CLAUDE, input_tokens, output_tokens)
 
         return LLMResponse(
-            content=content,
+            content=content_text,
             provider=LLMProvider.CLAUDE,
             model="claude-sonnet-4-20250514",
             tokens_used=input_tokens + output_tokens,

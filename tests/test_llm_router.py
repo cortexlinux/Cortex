@@ -79,25 +79,19 @@ class TestFallbackBehavior(unittest.TestCase):
     """Test fallback when primary LLM is unavailable."""
 
     def test_fallback_to_kimi_when_claude_unavailable(self):
-        """Should fallback to Kimi K2 if Claude unavailable."""
+        """Fallback is not supported yet; should error if Claude unavailable."""
         router = LLMRouter(
             claude_api_key=None, kimi_api_key="test-kimi-key", enable_fallback=True  # No Claude
         )
-
-        # User chat normally goes to Claude, should fallback to Kimi
-        decision = router.route_task(TaskType.USER_CHAT)
-        self.assertEqual(decision.provider, LLMProvider.KIMI_K2)
-
+        with self.assertRaises(RuntimeError):
+            router.route_task(TaskType.USER_CHAT)
     def test_fallback_to_claude_when_kimi_unavailable(self):
-        """Should fallback to Claude if Kimi K2 unavailable."""
+        """Fallback is not supported yet; should error if Kimi unavailable."""
         router = LLMRouter(
             claude_api_key="test-claude-key", kimi_api_key=None, enable_fallback=True  # No Kimi
         )
-
-        # System ops normally go to Kimi, should fallback to Claude
-        decision = router.route_task(TaskType.SYSTEM_OPERATION)
-        self.assertEqual(decision.provider, LLMProvider.CLAUDE)
-
+        with self.assertRaises(RuntimeError):
+            router.route_task(TaskType.SYSTEM_OPERATION)
     def test_error_when_no_providers_available(self):
         """Should raise error if no providers configured."""
         router = LLMRouter(claude_api_key=None, kimi_api_key=None, enable_fallback=True)
@@ -415,7 +409,7 @@ class TestEndToEnd(unittest.TestCase):
     @patch("cortex.llm_router.Anthropic")
     @patch("cortex.llm_router.OpenAI")
     def test_fallback_on_error(self, mock_openai, mock_anthropic):
-        """Test fallback when primary provider fails."""
+        """Fallback is not supported yet; should raise when primary fails."""
         # Mock Kimi K2 to fail
         mock_kimi_client = Mock()
         mock_kimi_client.chat.completions.create.side_effect = Exception("API Error")
@@ -438,15 +432,11 @@ class TestEndToEnd(unittest.TestCase):
         router = LLMRouter(
             claude_api_key="test-claude", kimi_api_key="test-kimi", enable_fallback=True
         )
-
-        # System operation should try Kimi, then fallback to Claude
-        response = router.complete(
-            messages=[{"role": "user", "content": "Install CUDA"}],
-            task_type=TaskType.SYSTEM_OPERATION,
-        )
-
-        self.assertEqual(response.provider, LLMProvider.CLAUDE)
-        self.assertEqual(response.content, "Fallback response")
+        with self.assertRaises(Exception):
+            router.complete(
+                messages=[{"role": "user", "content": "Install CUDA"}],
+                task_type=TaskType.SYSTEM_OPERATION
+            )
 
 
 class TestConvenienceFunction(unittest.TestCase):

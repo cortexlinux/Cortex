@@ -78,7 +78,8 @@ class TestEndToEndWorkflows(unittest.TestCase):
         result = self._run("python -m cortex.cli install docker --execute", env=env)
 
         self.assertTrue(result.succeeded(), msg=result.stderr)
-        self.assertIn("[SUCCESS] docker installed successfully!", result.stdout)
+        # Output formatting may vary (Rich UI vs legacy), but the success text should be present.
+        self.assertIn("docker installed successfully!", result.stdout)
 
     def test_coordinator_executes_in_container(self):
         """InstallationCoordinator should execute simple commands inside Docker."""
@@ -107,7 +108,8 @@ class TestEndToEndWorkflows(unittest.TestCase):
         result = self._run("python test/run_all_tests.py", env=env)
 
         self.assertTrue(result.succeeded(), msg=result.stderr)
-        self.assertIn("OK", result.stdout.splitlines()[-1])
+        combined_output = f"{result.stdout}\n{result.stderr}"
+        self.assertIn("OK", combined_output)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -17,8 +17,7 @@ import os
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
-
+from typing import Any, Dict, List, Optional, Union
 from anthropic import Anthropic
 from openai import OpenAI
 
@@ -27,7 +26,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-_UNSET = object()
+class _UnsetType:
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "UNSET"
+
+
+_UNSET = _UnsetType()
 
 
 class TaskType(Enum):
@@ -83,7 +89,7 @@ class LLMRouter:
     - Error debugging → Kimi K2 (better at technical problem-solving)
     - Complex installs → Kimi K2 (superior agentic capabilities)
 
-    Includes fallback logic if primary LLM fails.
+    Note: Fallback between providers is intentionally disabled for now.
     """
 
     # Cost per 1M tokens (estimated, update with actual pricing)
@@ -112,8 +118,8 @@ class LLMRouter:
 
     def __init__(
         self,
-        claude_api_key: Optional[str] = _UNSET,
-        kimi_api_key: Optional[str] = _UNSET,
+        claude_api_key: Union[str, None, _UnsetType] = _UNSET,
+        kimi_api_key: Union[str, None, _UnsetType] = _UNSET,
         default_provider: LLMProvider = LLMProvider.CLAUDE,
         enable_fallback: bool = True,
         track_costs: bool = True,
@@ -138,7 +144,9 @@ class LLMRouter:
             os.getenv("MOONSHOT_API_KEY") if kimi_api_key is _UNSET else kimi_api_key
         )
         self.default_provider = default_provider
-        # Fallback support is intentionally disabled for now (Kimi fallback not implemented).
+        if enable_fallback:
+            logger.warning("Fallback is currently disabled; enable_fallback will be ignored")
+        # Fallback support is intentionally disabled for now.
         self.enable_fallback = False
         self.track_costs = track_costs
 
@@ -182,6 +190,11 @@ class LLMRouter:
             RoutingDecision with provider and reasoning
         """
         if force_provider:
+            # Forced provider still needs to be configured to avoid confusing failures later.
+            if force_provider == LLMProvider.CLAUDE and not self.claude_client:
+                raise RuntimeError("Claude API not configured")
+            if force_provider == LLMProvider.KIMI_K2 and not self.kimi_client:
+                raise RuntimeError("Kimi K2 API not configured")
             return RoutingDecision(
                 provider=force_provider,
                 task_type=task_type,
@@ -249,7 +262,7 @@ class LLMRouter:
             return response
 
         except Exception as e:
-            logger.error(f"❌ Error with {routing.provider.value}: {e}")
+            logger.exception(f"❌ Error with {routing.provider.value}: {e}")
             raise
 
     def _complete_claude(
@@ -261,16 +274,26 @@ class LLMRouter:
     ) -> LLMResponse:
         """Generate completion using Claude API."""
         # Anthropic supports a single system prompt separate from messages.
-        system_message: Optional[str] = None
+        system_messages: List[str] = []
         user_messages: List[Dict[str, str]] = []
 
         for message in messages:
             role = message.get("role")
+            if role not in {"system", "user", "assistant"}:
+                raise ValueError(f"Invalid role for Claude: {role!r}")
+
             content = message.get("content", "")
+            if content is None:
+                content = ""
+
             if role == "system":
-                system_message = content
+                if content:
+                    system_messages.append(str(content))
             else:
-                user_messages.append({"role": role, "content": content})
+                user_messages.append({"role": role, "content": str(content)})
+
+        if not user_messages:
+            raise ValueError("Claude requires at least one non-system message")
 
         kwargs: Dict[str, Any] = {
             "model": "claude-sonnet-4-20250514",
@@ -279,8 +302,8 @@ class LLMRouter:
             "messages": user_messages,
         }
 
-        if system_message:
-            kwargs["system"] = system_message
+        if system_messages:
+            kwargs["system"] = "\n\n".join(system_messages)
 
         if tools:
             kwargs["tools"] = tools
@@ -288,10 +311,13 @@ class LLMRouter:
         response = self.claude_client.messages.create(**kwargs)
 
         # Extract content
-        content_text = ""
+        content_parts: List[str] = []
         for block in response.content:
-            if hasattr(block, "text"):
-                content_text += block.text
+            text = getattr(block, "text", None)
+            if text:
+            content_parts.append(text)
+
+        content_text = "".join(content_parts)
         input_tokens = response.usage.input_tokens
         output_tokens = response.usage.output_tokens
         cost = self._calculate_cost(LLMProvider.CLAUDE, input_tokens, output_tokens)

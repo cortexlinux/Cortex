@@ -339,11 +339,18 @@ class CortexCLI:
         """Run preflight simulation check for installation"""
         try:
             # Get API key for LLM-powered package info (optional).
-            api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
-            provider = self._get_provider() if api_key else 'openai'
+            # Keep provider selection consistent with the rest of the CLI.
+            provider = self._get_provider()
+            provider_for_preflight = provider if provider in {'openai', 'claude'} else 'openai'
+            if provider == 'openai':
+                api_key = os.environ.get('OPENAI_API_KEY')
+            elif provider == 'claude':
+                api_key = os.environ.get('ANTHROPIC_API_KEY')
+            else:
+                api_key = None
             
             # Create checker with optional API key for enhanced accuracy
-            checker = PreflightChecker(api_key=api_key, provider=provider)
+            checker = PreflightChecker(api_key=api_key, provider=provider_for_preflight)
             report = checker.run_all_checks(software)
             
             # Print formatted report
@@ -685,9 +692,10 @@ Environment Variables:
     # Install command
     install_parser = subparsers.add_parser("install", help="Install software")
     install_parser.add_argument("software", type=str, help="Software to install")
-    install_parser.add_argument("--execute", action="store_true", help="Execute commands")
-    install_parser.add_argument("--dry-run", action="store_true", help="Show commands only")
-    install_parser.add_argument(
+    install_mode_group = install_parser.add_mutually_exclusive_group()
+    install_mode_group.add_argument("--execute", action="store_true", help="Execute commands")
+    install_mode_group.add_argument("--dry-run", action="store_true", help="Show commands only")
+    install_mode_group.add_argument(
         "--simulate",
         action="store_true",
         help="Simulate installation without making changes",

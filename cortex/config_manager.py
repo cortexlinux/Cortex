@@ -6,6 +6,7 @@ Part of Cortex Linux - AI-native OS that needs to export/import system configura
 """
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -14,6 +15,9 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import yaml
+
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
@@ -77,8 +81,8 @@ class ConfigManager:
         if not (hasattr(os, 'getuid') and hasattr(os, 'getgid') and hasattr(os, 'chown')):
             try:
                 os.chmod(directory, 0o700)
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug("Unable to chmod %s on non-POSIX platform: %s", directory, e)
             return
 
         try:

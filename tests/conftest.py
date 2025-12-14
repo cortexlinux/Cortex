@@ -26,7 +26,7 @@ def _prepend_sys_path(path: Path) -> None:
         sys.path.insert(0, path_str)
 
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT: Path = Path(__file__).resolve().parents[1]
 
 # Prepend in reverse order (each insert goes to index 0), resulting in:
 #   src/ -> cortex/

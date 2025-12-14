@@ -83,27 +83,35 @@ class TestFallbackBehavior(unittest.TestCase):
         router = LLMRouter(
             claude_api_key=None, kimi_api_key="test-kimi-key", enable_fallback=True  # No Claude
         )
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, "Claude API not configured"):
             router.route_task(TaskType.USER_CHAT)
     def test_fallback_to_claude_when_kimi_unavailable(self):
         """Fallback is not supported yet; should error if Kimi unavailable."""
         router = LLMRouter(
             claude_api_key="test-claude-key", kimi_api_key=None, enable_fallback=True  # No Kimi
         )
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, "Kimi K2 API not configured"):
             router.route_task(TaskType.SYSTEM_OPERATION)
     def test_error_when_no_providers_available(self):
         """Should raise error if no providers configured."""
-        router = LLMRouter(claude_api_key=None, kimi_api_key=None, enable_fallback=True)
-
-        with self.assertRaises(RuntimeError):
+        router = LLMRouter(
+            claude_api_key=None,
+            kimi_api_key=None,
+            enable_fallback=True
+        )
+        
+        with self.assertRaisesRegex(RuntimeError, "Claude API not configured"):
             router.route_task(TaskType.USER_CHAT)
 
     def test_error_when_fallback_disabled(self):
         """Should raise error if primary unavailable and fallback disabled."""
-        router = LLMRouter(claude_api_key=None, kimi_api_key="test-kimi-key", enable_fallback=False)
-
-        with self.assertRaises(RuntimeError):
+        router = LLMRouter(
+            claude_api_key=None,
+            kimi_api_key="test-kimi-key",
+            enable_fallback=False
+        )
+        
+        with self.assertRaisesRegex(RuntimeError, "Claude API not configured"):
             router.route_task(TaskType.USER_CHAT)
 
 
@@ -432,7 +440,7 @@ class TestEndToEnd(unittest.TestCase):
         router = LLMRouter(
             claude_api_key="test-claude", kimi_api_key="test-kimi", enable_fallback=True
         )
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(Exception, "API Error"):
             router.complete(
                 messages=[{"role": "user", "content": "Install CUDA"}],
                 task_type=TaskType.SYSTEM_OPERATION

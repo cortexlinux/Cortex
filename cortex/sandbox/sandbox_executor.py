@@ -301,19 +301,9 @@ class SandboxExecutor:
         Returns:
             Tuple of (is_valid, violation_reason)
         """
-        # Check for dangerous patterns.
-        # Some tests generate commands with escaped shell metacharacters (e.g. "chmod \+s", "curl ... \| sh").
-        command_for_pattern = (
-            command
-            # Some tests also generate commands with literal regex whitespace tokens (e.g. "\\s*").
-            # Treat these as spaces for the purpose of detecting dangerous patterns.
-            .replace('\\s+', ' ')
-            .replace('\\s*', ' ')
-            .replace('\\+', '+')
-            .replace('\\|', '|')
-        )
+        # Check for dangerous patterns in the raw command.
         for pattern in self.DANGEROUS_PATTERNS:
-            if re.search(pattern, command_for_pattern, re.IGNORECASE):
+            if re.search(pattern, command, re.IGNORECASE):
                 return False, f"Dangerous pattern detected: {pattern}"
 
         # Parse command
@@ -629,6 +619,8 @@ class SandboxExecutor:
 
                 preexec_fn = set_resource_limits
 
+            process = None
+
             process = subprocess.Popen(
                 firejail_cmd,
                 stdout=subprocess.PIPE,
@@ -660,7 +652,11 @@ class SandboxExecutor:
             return result
 
         except subprocess.TimeoutExpired:
-            process.kill()
+            if process is not None:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
             result = ExecutionResult(
                 command=command,
                 exit_code=-1,

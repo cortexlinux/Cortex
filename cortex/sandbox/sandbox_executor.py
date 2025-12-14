@@ -160,7 +160,7 @@ class SandboxExecutor:
         r">\s*/dev/",  # Redirect to device files
         r"chmod\s+[0-7]{3,4}\s+/",  # chmod on root
         r"chmod\s+777",  # World-writable permissions
-        r"chmod\s+\+s",  # Setuid bit
+        r"chmod\s+\\?\+s",  # Setuid bit (also matches escaped + from tests)
         r"chown\s+.*\s+/",  # chown on root
         # Remote code execution patterns
         r"curl\s+.*\|\s*sh",  # curl pipe to shell

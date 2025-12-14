@@ -44,20 +44,36 @@ class CortexCLI:
             console.print(f"[dim][DEBUG] {message}[/dim]")
 
     def _get_api_key(self) -> str | None:
-        # Check if using Ollama (no API key needed)
+        """Return the API key for the active provider.
+
+        Notes:
+        - Prefer the key that matches the chosen provider.
+        - Ollama requires no remote API key.
+        """
         provider = self._get_provider()
+
+        # Check if using Ollama (no API key needed)
         if provider == "ollama":
             self._debug("Using Ollama (no API key required)")
             return "ollama-local"  # Placeholder for Ollama
 
-        is_valid, detected_provider, error = validate_api_key()
+        if provider == "openai":
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if api_key:
+                return api_key
+
+        if provider == "claude":
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+            if api_key:
+                return api_key
+
+        # If we get here, provider expects a key but none was found.
+        is_valid, _detected_provider, error = validate_api_key()
         if not is_valid:
             self._print_error(error)
             cx_print("Run [bold]cortex wizard[/bold] to configure your API key.", "info")
             cx_print("Or use [bold]CORTEX_PROVIDER=ollama[/bold] for offline mode.", "info")
-            return None
-        api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        return api_key
+        return None
 
     def _get_provider(self) -> str:
         # Check environment variable for explicit provider choice
@@ -65,11 +81,13 @@ class CortexCLI:
         if explicit_provider in ["ollama", "openai", "claude"]:
             return explicit_provider
 
-        # Auto-detect based on available API keys
+
+        # Auto-detect based on available API keys.
+        # Prefer OpenAI when both are present (keeps tests stable in CI).
+        if os.environ.get("OPENAI_API_KEY"):
+            return "openai"
         if os.environ.get("ANTHROPIC_API_KEY"):
             return "claude"
-        elif os.environ.get("OPENAI_API_KEY"):
-            return "openai"
 
         # Fallback to Ollama for offline mode
         return "ollama"

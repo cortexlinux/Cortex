@@ -1,3 +1,9 @@
+"""Semantic caching for LLM responses with SQLite backend and LRU eviction.
+
+Provides semantic similarity matching for cached responses to reduce API calls
+and enable offline operation.
+"""
+
 import json
 import os
 import sqlite3
@@ -11,27 +17,47 @@ from typing import List, Optional, Tuple
 
 @dataclass(frozen=True)
 class CacheStats:
+    """Statistics for cache performance.
+    
+    Attributes:
+        hits: Number of cache hits
+        misses: Number of cache misses
+    """
     hits: int
     misses: int
 
     @property
     def total(self) -> int:
+        """Total number of cache lookups."""
         return self.hits + self.misses
 
     @property
     def hit_rate(self) -> float:
+        """Cache hit rate as a fraction (0.0 to 1.0)."""
         if self.total == 0:
             return 0.0
         return self.hits / self.total
 
 
 class SemanticCache:
+    """Semantic cache for LLM command responses.
+    
+    Uses SQLite for persistence, simple embedding for semantic matching,
+    and LRU eviction policy for size management.
+    """
     def __init__(
         self,
         db_path: str = "/var/lib/cortex/cache.db",
         max_entries: Optional[int] = None,
         similarity_threshold: Optional[float] = None,
     ):
+        """Initialize semantic cache.
+        
+        Args:
+            db_path: Path to SQLite database file
+            max_entries: Maximum cache entries before LRU eviction (default: 500)
+            similarity_threshold: Cosine similarity threshold for matches (default: 0.86)
+        """
         self.db_path = db_path
         self.max_entries = max_entries if max_entries is not None else int(os.environ.get("CORTEX_CACHE_MAX_ENTRIES", "500"))
         self.similarity_threshold = (
@@ -174,6 +200,20 @@ class SemanticCache:
         system_prompt: str,
         candidate_limit: int = 200,
     ) -> Optional[List[str]]:
+        """Retrieve cached commands for a prompt.
+        
+        First tries exact match, then falls back to semantic similarity search.
+        
+        Args:
+            prompt: User's natural language request
+            provider: LLM provider name
+            model: Model name
+            system_prompt: System prompt used for generation
+            candidate_limit: Max candidates to check for similarity
+            
+        Returns:
+            List of commands if found, None otherwise
+        """
         system_hash = self._system_hash(system_prompt)
         prompt_hash = self._hash_text(prompt)
         now = self._utcnow_iso()
@@ -252,6 +292,15 @@ class SemanticCache:
         system_prompt: str,
         commands: List[str],
     ) -> None:
+        """Store commands in cache for future retrieval.
+        
+        Args:
+            prompt: User's natural language request
+            provider: LLM provider name
+            model: Model name
+            system_prompt: System prompt used for generation
+            commands: List of shell commands to cache
+        """
         system_hash = self._system_hash(system_prompt)
         prompt_hash = self._hash_text(prompt)
         now = self._utcnow_iso()
@@ -312,6 +361,11 @@ class SemanticCache:
         )
 
     def stats(self) -> CacheStats:
+        """Get current cache statistics.
+        
+        Returns:
+            CacheStats object with hits, misses, and computed metrics
+        """
         conn = sqlite3.connect(self.db_path)
         try:
             cur = conn.cursor()

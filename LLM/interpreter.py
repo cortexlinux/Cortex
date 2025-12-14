@@ -1,7 +1,11 @@
 import os
 import json
-from typing import List, Optional, Dict, Any
+import sqlite3
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
+
+if TYPE_CHECKING:
+    from cortex.semantic_cache import SemanticCache
 
 
 class APIProvider(Enum):
@@ -11,14 +15,29 @@ class APIProvider(Enum):
 
 
 class CommandInterpreter:
+    """Interprets natural language commands into executable shell commands using LLM APIs.
+    
+    Supports multiple providers (OpenAI, Claude, Ollama) with optional semantic caching
+    and offline mode for cached responses.
+    """
+    
     def __init__(
         self,
         api_key: str,
         provider: str = "openai",
         model: Optional[str] = None,
         offline: bool = False,
-        cache=None,
+        cache: Optional["SemanticCache"] = None,
     ):
+        """Initialize the command interpreter.
+        
+        Args:
+            api_key: API key for the LLM provider
+            provider: Provider name ("openai", "claude", or "ollama")
+            model: Optional model name override
+            offline: If True, only use cached responses
+            cache: Optional SemanticCache instance for response caching
+        """
         self.api_key = api_key
         self.provider = APIProvider(provider.lower())
         self.offline = offline
@@ -27,8 +46,9 @@ class CommandInterpreter:
             try:
                 from cortex.semantic_cache import SemanticCache
 
-                self.cache = SemanticCache()
-            except Exception:
+                self.cache: Optional["SemanticCache"] = SemanticCache()
+            except (ImportError, OSError) as e:
+                # Cache initialization can fail due to missing dependencies or permissions
                 self.cache = None
         else:
             self.cache = cache
@@ -186,6 +206,19 @@ Example response: {"commands": ["sudo apt update", "sudo apt install -y docker.i
         return validated
     
     def parse(self, user_input: str, validate: bool = True) -> List[str]:
+        """Parse natural language input into shell commands.
+        
+        Args:
+            user_input: Natural language description of desired action
+            validate: If True, validate commands for dangerous patterns
+            
+        Returns:
+            List of shell commands to execute
+            
+        Raises:
+            ValueError: If input is empty
+            RuntimeError: If offline mode is enabled and no cached response exists
+        """
         if not user_input or not user_input.strip():
             raise ValueError("User input cannot be empty")
 
@@ -225,7 +258,8 @@ Example response: {"commands": ["sudo apt update", "sudo apt install -y docker.i
                     system_prompt=cache_system_prompt,
                     commands=commands,
                 )
-            except Exception:
+            except (OSError, sqlite3.Error):
+                # Silently fail cache writes - not critical for operation
                 pass
         
         return commands

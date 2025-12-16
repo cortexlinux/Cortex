@@ -262,7 +262,7 @@ Cortex uses AI to understand your commands. You can use:
         existing_openai = os.environ.get("OPENAI_API_KEY")
         
         if existing_claude:
-            print(f"✓ Found existing Claude API key: {existing_claude[:8]}...")
+            print("✓ Found existing Claude API key: ********...")
             self.config["api_provider"] = "anthropic"
             self.config["api_key_configured"] = True
             return StepResult(
@@ -271,7 +271,7 @@ Cortex uses AI to understand your commands. You can use:
             )
         
         if existing_openai:
-            print(f"✓ Found existing OpenAI API key: {existing_openai[:8]}...")
+            print("✓ Found existing OpenAI API key: ********...")
             self.config["api_provider"] = "openai"
             self.config["api_key_configured"] = True
             return StepResult(
@@ -772,7 +772,7 @@ Cortex is ready to use! Here are some things to try:
         shell_name = os.path.basename(shell)
         config_file = self._get_shell_config(shell_name)
         
-        export_line = f'\nexport {name}="{value}"\n'
+        export_line = f'\nexport {name}="{value}"\n'  # nosec - intentional user config storage
         
         try:
             with open(config_file, 'a') as f:

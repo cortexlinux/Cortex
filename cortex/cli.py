@@ -15,6 +15,8 @@ from cortex.branding import VERSION, console, cx_header, cx_print, show_banner
 from cortex.coordinator import InstallationCoordinator, StepStatus
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 from cortex.llm.interpreter import CommandInterpreter
+
+# Import the new Notification Manager
 from cortex.notification_manager import NotificationManager
 from cortex.user_preferences import (
     PreferencesManager,
@@ -33,13 +35,14 @@ class CortexCLI:
         self.spinner_idx = 0
         self.prefs_manager = None  # Lazy initialization
         self.verbose = verbose
+        self.offline = False
 
     def _debug(self, message: str):
         """Print debug info only in verbose mode"""
         if self.verbose:
             console.print(f"[dim][DEBUG] {message}[/dim]")
 
-    def _get_api_key(self) -> Optional[str]:
+    def _get_api_key(self) -> str | None:
         # Check if using Ollama (no API key needed)
         provider = self._get_provider()
         if provider == "ollama":
@@ -56,9 +59,7 @@ class CortexCLI:
                 "Or use [bold]CORTEX_PROVIDER=ollama[/bold] for offline mode.", "info"
             )
             return None
-        api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get(
-            "OPENAI_API_KEY"
-        )
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
         return api_key
 
     def _get_provider(self) -> str:
@@ -116,9 +117,7 @@ class CortexCLI:
         mgr = NotificationManager()
 
         if args.notify_action == "config":
-            console.print(
-                "[bold cyan]🔧 Current Notification Configuration:[/bold cyan]"
-            )
+            console.print("[bold cyan]🔧 Current Notification Configuration:[/bold cyan]")
             status = (
                 "[green]Enabled[/green]"
                 if mgr.config.get("enabled", True)
@@ -210,7 +209,9 @@ class CortexCLI:
         try:
             self._print_status("🧠", "Understanding request...")
 
-            interpreter = CommandInterpreter(api_key=api_key, provider=provider)
+            interpreter = CommandInterpreter(
+                api_key=api_key, provider=provider, offline=self.offline
+            )
 
             self._print_status("📦", "Planning installation...")
 
@@ -330,12 +331,25 @@ class CortexCLI:
             self._print_error(f"Unexpected error: {str(e)}")
             return 1
 
-    def history(
-        self,
-        limit: int = 20,
-        status: Optional[str] = None,
-        show_id: Optional[str] = None,
-    ):
+    def cache_stats(self) -> int:
+        try:
+            from cortex.semantic_cache import SemanticCache
+
+            cache = SemanticCache()
+            stats = cache.stats()
+            hit_rate = f"{stats.hit_rate * 100:.1f}%" if stats.total else "0.0%"
+
+            cx_header("Cache Stats")
+            cx_print(f"Hits: {stats.hits}", "info")
+            cx_print(f"Misses: {stats.misses}", "info")
+            cx_print(f"Hit rate: {hit_rate}", "info")
+            cx_print(f"Saved calls (approx): {stats.hits}", "info")
+            return 0
+        except Exception as e:
+            self._print_error(f"Unable to read cache stats: {e}")
+            return 1
+
+    def history(self, limit: int = 20, status: str | None = None, show_id: str | None = None):
         """Show installation history"""
         history = InstallationHistory()
 
@@ -425,7 +439,7 @@ class CortexCLI:
             self.prefs_manager = PreferencesManager()
         return self.prefs_manager
 
-    def check_pref(self, key: Optional[str] = None):
+    def check_pref(self, key: str | None = None):
         """Check/display user preferences"""
         manager = self._get_prefs_manager()
 
@@ -448,9 +462,7 @@ class CortexCLI:
             self._print_error(f"Failed to read preferences: {str(e)}")
             return 1
 
-    def edit_pref(
-        self, action: str, key: Optional[str] = None, value: Optional[str] = None
-    ):
+    def edit_pref(self, action: str, key: str | None = None, value: str | None = None):
         """Edit user preferences (add/set, delete/remove, list)"""
         manager = self._get_prefs_manager()
 
@@ -575,10 +587,27 @@ def show_rich_help():
     table.add_row("rollback <id>", "Undo installation")
     table.add_row("notify", "Manage desktop notifications")  # Added this line
     table.add_row("doctor", "System health check")
+    table.add_row("cache stats", "Show LLM cache statistics")
 
     console.print(table)
     console.print()
     console.print("[dim]Learn more: https://cortexlinux.com/docs[/dim]")
+
+
+def shell_suggest(text: str) -> int:
+    """
+    Internal helper used by shell hotkey integration.
+    Prints a single suggested command to stdout.
+    """
+    try:
+        from cortex.shell_integration import suggest_command
+
+        suggestion = suggest_command(text)
+        if suggestion:
+            print(suggestion)
+        return 0
+    except Exception:
+        return 1
 
 
 def main():
@@ -594,6 +623,9 @@ def main():
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Show detailed output"
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
+    parser.add_argument(
+        "--offline", action="store_true", help="Use cached responses only (no network calls)"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -602,9 +634,7 @@ def main():
     demo_parser = subparsers.add_parser("demo", help="See Cortex in action")
 
     # Wizard command
-    wizard_parser = subparsers.add_parser(
-        "wizard", help="Configure API key interactively"
-    )
+    wizard_parser = subparsers.add_parser("wizard", help="Configure API key interactively")
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Show system status")
@@ -612,12 +642,8 @@ def main():
     # Install command
     install_parser = subparsers.add_parser("install", help="Install software")
     install_parser.add_argument("software", type=str, help="Software to install")
-    install_parser.add_argument(
-        "--execute", action="store_true", help="Execute commands"
-    )
-    install_parser.add_argument(
-        "--dry-run", action="store_true", help="Show commands only"
-    )
+    install_parser.add_argument("--execute", action="store_true", help="Execute commands")
+    install_parser.add_argument("--dry-run", action="store_true", help="Show commands only")
 
     # History command
     history_parser = subparsers.add_parser("history", help="View history")
@@ -635,17 +661,13 @@ def main():
     check_pref_parser.add_argument("key", nargs="?")
 
     edit_pref_parser = subparsers.add_parser("edit-pref", help="Edit preferences")
-    edit_pref_parser.add_argument(
-        "action", choices=["set", "add", "delete", "list", "validate"]
-    )
+    edit_pref_parser.add_argument("action", choices=["set", "add", "delete", "list", "validate"])
     edit_pref_parser.add_argument("key", nargs="?")
     edit_pref_parser.add_argument("value", nargs="?")
 
     # --- New Notify Command ---
     notify_parser = subparsers.add_parser("notify", help="Manage desktop notifications")
-    notify_subs = notify_parser.add_subparsers(
-        dest="notify_action", help="Notify actions"
-    )
+    notify_subs = notify_parser.add_subparsers(dest="notify_action", help="Notify actions")
 
     notify_subs.add_parser("config", help="Show configuration")
     notify_subs.add_parser("enable", help="Enable notifications")
@@ -665,6 +687,14 @@ def main():
     # --------------------------
 
     doctor_parser = subparsers.add_parser("doctor", help="Run system health check")
+    send_parser.add_argument("--level", choices=["low", "normal", "critical"], default="normal")
+    send_parser.add_argument("--actions", nargs="*", help="Action buttons")
+    # --------------------------
+
+    # Cache commands
+    cache_parser = subparsers.add_parser("cache", help="Cache operations")
+    cache_subs = cache_parser.add_subparsers(dest="cache_action", help="Cache actions")
+    cache_subs.add_parser("stats", help="Show cache statistics")
 
     args = parser.parse_args()
 
@@ -673,6 +703,7 @@ def main():
         return 0
 
     cli = CortexCLI(verbose=args.verbose)
+    cli.offline = bool(getattr(args, "offline", False))
 
     try:
         if args.command == "demo":
@@ -682,13 +713,9 @@ def main():
         elif args.command == "status":
             return cli.status()
         elif args.command == "install":
-            return cli.install(
-                args.software, execute=args.execute, dry_run=args.dry_run
-            )
+            return cli.install(args.software, execute=args.execute, dry_run=args.dry_run)
         elif args.command == "history":
-            return cli.history(
-                limit=args.limit, status=args.status, show_id=args.show_id
-            )
+            return cli.history(limit=args.limit, status=args.status, show_id=args.show_id)
         elif args.command == "rollback":
             return cli.rollback(args.id, dry_run=args.dry_run)
         elif args.command == "check-pref":
@@ -700,6 +727,11 @@ def main():
             return cli.notify(args)
         elif args.command == "doctor":
             return cli.doctor()
+        elif args.command == "cache":
+            if getattr(args, "cache_action", None) == "stats":
+                return cli.cache_stats()
+            parser.print_help()
+            return 1
         else:
             parser.print_help()
             return 1

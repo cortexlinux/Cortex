@@ -8,9 +8,9 @@ This module provides disk cleanup functionality including:
 - Scheduling automatic cleanup tasks
 """
 
-from cortex.cleanup.scanner import CleanupScanner, ScanResult
 from cortex.cleanup.cleaner import DiskCleaner
 from cortex.cleanup.manager import CleanupManager, QuarantineItem
+from cortex.cleanup.scanner import CleanupScanner, ScanResult
 
 __all__ = [
     "CleanupScanner",

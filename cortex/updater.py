@@ -74,7 +74,9 @@ class UpdateService:
         system_info: SystemInfo | None = None,
         log_file: Path | None = None,
     ) -> None:
-        self.manifest_url = manifest_url or os.environ.get("CORTEX_UPDATE_MANIFEST_URL", DEFAULT_MANIFEST_URL)
+        self.manifest_url = manifest_url or os.environ.get(
+            "CORTEX_UPDATE_MANIFEST_URL", DEFAULT_MANIFEST_URL
+        )
         self.state_file = state_file or STATE_FILE
         self.system_info = system_info or SystemInfo.current()
         self.log_file = log_file or DEFAULT_LOG_FILE
@@ -142,7 +144,9 @@ class UpdateService:
         if not force and self._should_use_cache(state.get("last_checked")):
             cached_release = state.get("cached_release")
             release = ReleaseEntry.from_dict(cached_release) if cached_release else None
-            last_checked = datetime.fromisoformat(state.get("last_checked")).astimezone(timezone.utc)
+            last_checked = datetime.fromisoformat(state.get("last_checked")).astimezone(
+                timezone.utc
+            )
             return UpdateCheckResult(
                 update_available=bool(release),
                 release=release,
@@ -181,7 +185,9 @@ class UpdateService:
         dry_run: bool = False,
     ) -> UpdatePerformResult:
         current_version = get_installed_version()
-        check_result = self.check_for_updates(force=force, channel=channel, current_version=current_version)
+        check_result = self.check_for_updates(
+            force=force, channel=channel, current_version=current_version
+        )
 
         if not check_result.update_available or not check_result.release:
             return UpdatePerformResult(
@@ -318,4 +324,3 @@ def _release_to_dict(release: ReleaseEntry | None) -> dict[str, Any] | None:
             for rule in release.compatibility
         ],
     }
-

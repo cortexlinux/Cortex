@@ -176,4 +176,3 @@ class UpdateManifest:
 
         eligible.sort(key=lambda release: release.version.parsed, reverse=True)
         return eligible[0]
-

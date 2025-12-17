@@ -59,7 +59,9 @@ def test_manifest_selects_newer_release():
         }
     )
     current = CortexVersion.from_string("0.1.0")
-    latest = manifest.find_latest(current_version=current, channel=UpdateChannel.STABLE, system=current_system())
+    latest = manifest.find_latest(
+        current_version=current, channel=UpdateChannel.STABLE, system=current_system()
+    )
 
     assert latest is not None
     assert latest.version.raw == "0.2.0"
@@ -100,7 +102,9 @@ def test_perform_update_dry_run(monkeypatch, tmp_path):
 
     manifest = make_manifest()
 
-    monkeypatch.setattr("cortex.updater.get_installed_version", lambda: CortexVersion.from_string("0.1.0"))
+    monkeypatch.setattr(
+        "cortex.updater.get_installed_version", lambda: CortexVersion.from_string("0.1.0")
+    )
     monkeypatch.setattr(UpdateService, "_fetch_manifest", lambda self: manifest)
 
     result = service.perform_update(dry_run=True)
@@ -109,4 +113,3 @@ def test_perform_update_dry_run(monkeypatch, tmp_path):
     assert result.updated is False
     assert result.release.version.raw == "0.2.0"
     assert "dry run" in (result.message or "").lower()
-

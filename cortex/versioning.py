@@ -64,5 +64,3 @@ def is_newer_version(current: CortexVersion, candidate: CortexVersion) -> bool:
     """Return True when ``candidate`` is newer than ``current``."""
 
     return candidate.parsed > current.parsed
-
-

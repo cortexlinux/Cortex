@@ -111,7 +111,7 @@ security-pkg/stable 1.0.1 amd64 [upgradable from: 1.0.0] - Security Update
         # Expected score: 100 - 14 = 86 pts
 
         self.assertEqual(result.score, 86)
-        self.assertIn("3 pending", result.details)
+        self.assertIn("2 packages", result.details)
 
 
 class TestHealthMonitor(unittest.TestCase):

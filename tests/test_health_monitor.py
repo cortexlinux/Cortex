@@ -104,12 +104,13 @@ security-pkg/stable 1.0.1 amd64 [upgradable from: 1.0.0] - Security Update
         result = check.run()
 
         # Calculation:
-        # Total packages: 3
-        # Security packages: 1 (line containing "security")
-        # Penalty: (3 * 2) + (1 * 10) = 6 + 10 = 16 pts
-        # Expected score: 100 - 16 = 84 pts
+        # Total packages: 3 (but security counted separately)
+        # Regular packages: 2 (pkg_count)
+        # Security packages: 1 (sec_count)
+        # Penalty: (2 * 2) + (1 * 10) = 4 + 10 = 14 pts
+        # Expected score: 100 - 14 = 86 pts
 
-        self.assertEqual(result.score, 84)
+        self.assertEqual(result.score, 86)
         self.assertIn("3 pending", result.details)
 
 

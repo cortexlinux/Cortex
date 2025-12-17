@@ -7,6 +7,7 @@ Tests for CleanupManager class and QuarantineItem dataclass.
 import pytest
 import json
 import time
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,16 +19,17 @@ class TestQuarantineItem:
     
     def test_create_item(self):
         """Test creating a quarantine item."""
+        temp_path = str(Path(tempfile.gettempdir()) / "test.txt")
         item = QuarantineItem(
             id="abc123",
-            original_path="/tmp/test.txt",
+            original_path=temp_path,
             quarantine_path="/home/user/.cortex/trash/abc123_test.txt",
             timestamp=1234567890.0,
             size_bytes=1024
         )
         
         assert item.id == "abc123"
-        assert item.original_path == "/tmp/test.txt"
+        assert item.original_path == temp_path
         assert item.size_bytes == 1024
 
 

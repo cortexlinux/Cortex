@@ -155,7 +155,10 @@ class CleanupScanner:
         """
         for line in stdout.splitlines():
             if "disk space will be freed" in line:
-                # Use {0,20} instead of * to prevent potential ReDoS
+                # Pre-check to prevent ReDoS by avoiding regex on lines without units
+                line_upper = line.upper()
+                if not any(unit in line_upper for unit in ["KB", "MB", "GB"]):
+                    continue
                 match = re.search(r'([\d.]+)\s{0,20}(KB|MB|GB)', line, re.IGNORECASE)
                 if match:
                     value = float(match.group(1))

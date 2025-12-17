@@ -31,7 +31,8 @@ class TestScanResult:
     
     def test_with_items(self):
         """Test with items list."""
-        items = ["/tmp/file1", "/tmp/file2"]
+        temp_dir = tempfile.gettempdir()
+        items = [f"{temp_dir}/file1", f"{temp_dir}/file2"]
         result = ScanResult(
             category="Temp Files",
             size_bytes=2048,

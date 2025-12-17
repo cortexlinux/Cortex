@@ -192,7 +192,7 @@ class TestDiskCleaner:
         scan_results = [
             ScanResult("Package Cache", 1000, 5, []),
             ScanResult("Orphaned Packages", 2000, 3, ["pkg1"]),
-            ScanResult("Temporary Files", 500, 2, ["/tmp/f1"]),
+            ScanResult("Temporary Files", 500, 2, [str(Path(tempfile.gettempdir()) / "f1")]),
             ScanResult("Old Logs", 800, 1, ["/var/log/old.log"]),
         ]
         

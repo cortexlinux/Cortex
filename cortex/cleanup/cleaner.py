@@ -116,7 +116,11 @@ class DiskCleaner:
         Returns:
             int: Size in bytes.
         """
-        # Use {0,20} instead of * to prevent potential ReDoS
+        # Pre-check to prevent ReDoS by avoiding regex on lines without units
+        line_upper = line.upper()
+        if not any(unit in line_upper for unit in ["KB", "MB", "GB"]):
+            return 0
+        
         match = re.search(r'([\d.]+)\s{0,20}(KB|MB|GB)', line, re.IGNORECASE)
         if match:
             value = float(match.group(1))

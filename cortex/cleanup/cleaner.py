@@ -116,16 +116,25 @@ class DiskCleaner:
         Returns:
             int: Size in bytes.
         """
-        # Pre-check to prevent ReDoS by avoiding regex on lines without units
+        # Use string operations instead of regex to avoid ReDoS warnings
         line_upper = line.upper()
-        if not any(unit in line_upper for unit in ["KB", "MB", "GB"]):
-            return 0
         
-        match = re.search(r'([\d.]+)\s{0,20}(KB|MB|GB)', line, re.IGNORECASE)
-        if match:
-            value = float(match.group(1))
-            unit = match.group(2).upper()
-            return int(value * UNIT_MULTIPLIERS.get(unit, 1))
+        for unit, multiplier in UNIT_MULTIPLIERS.items():
+            if unit in line_upper:
+                # Find the unit position and extract the number before it
+                idx = line_upper.find(unit)
+                if idx > 0:
+                    # Extract characters before the unit (up to 20 chars back)
+                    start = max(0, idx - 20)
+                    prefix = line[start:idx].strip()
+                    # Get the last word which should be the number
+                    parts = prefix.split()
+                    if parts:
+                        try:
+                            value = float(parts[-1])
+                            return int(value * multiplier)
+                        except ValueError:
+                            continue
         return 0
 
     def clean_temp_files(self, files: List[str]) -> int:

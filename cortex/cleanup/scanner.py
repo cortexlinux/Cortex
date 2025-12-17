@@ -155,15 +155,21 @@ class CleanupScanner:
         """
         for line in stdout.splitlines():
             if "disk space will be freed" in line:
-                # Pre-check to prevent ReDoS by avoiding regex on lines without units
+                # Use string operations instead of regex to avoid ReDoS warnings
                 line_upper = line.upper()
-                if not any(unit in line_upper for unit in ["KB", "MB", "GB"]):
-                    continue
-                match = re.search(r'([\d.]+)\s{0,20}(KB|MB|GB)', line, re.IGNORECASE)
-                if match:
-                    value = float(match.group(1))
-                    unit = match.group(2).upper()
-                    return int(value * UNIT_MULTIPLIERS.get(unit, 1))
+                for unit, multiplier in UNIT_MULTIPLIERS.items():
+                    if unit in line_upper:
+                        idx = line_upper.find(unit)
+                        if idx > 0:
+                            start = max(0, idx - 20)
+                            prefix = line[start:idx].strip()
+                            parts = prefix.split()
+                            if parts:
+                                try:
+                                    value = float(parts[-1])
+                                    return int(value * multiplier)
+                                except ValueError:
+                                    continue
         return 0
 
     def scan_temp_files(self, days_old: int = 7) -> ScanResult:

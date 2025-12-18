@@ -408,7 +408,7 @@ class TestBuiltinRoles:
         manager = RoleManager()
         try:
             role = manager.get_role("default")
-            assert "reliability" in role.priorities or len(role.priorities) >= 0
+            assert "reliability" in role.priorities or len(role.priorities) > 0
         except RoleNotFoundError:
             pass  # Skip if not in correct directory
 

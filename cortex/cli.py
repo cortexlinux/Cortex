@@ -196,6 +196,14 @@ class CortexCLI:
         dry_run: bool = False,
         simulate: bool = False,
     ):
+    # Run system health checks
+    def doctor(self):
+        from cortex.doctor import SystemDoctor
+
+        doctor = SystemDoctor()
+        return doctor.run_checks()
+
+    def install(self, software: str, execute: bool = False, dry_run: bool = False):
         # Validate input first
         is_valid, error = validate_install_request(software)
         if not is_valid:
@@ -621,6 +629,7 @@ def show_rich_help():
     table.add_row("rollback <id>", "Undo installation")
     table.add_row("notify", "Manage desktop notifications")  # Added this line
     table.add_row("cache stats", "Show LLM cache statistics")
+    table.add_row("doctor", "System health check")
 
     console.print(table)
     console.print()
@@ -687,6 +696,9 @@ Environment Variables:
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Show system status")
+
+    # doctor command
+    doctor_parser = subparsers.add_parser("doctor", help="Run system health check")
 
     # Install command
     install_parser = subparsers.add_parser("install", help="Install software")
@@ -777,6 +789,8 @@ Environment Variables:
         # Handle the new notify command
         elif args.command == "notify":
             return cli.notify(args)
+        elif args.command == "doctor":
+            return cli.doctor()
         elif args.command == "cache":
             if getattr(args, "cache_action", None) == "stats":
                 return cli.cache_stats()

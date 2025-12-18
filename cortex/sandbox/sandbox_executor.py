@@ -16,10 +16,6 @@ import json
 import logging
 import os
 import re
-try:
-    import resource
-except Exception:
-    resource = None
 import shlex
 import shutil
 import subprocess
@@ -27,6 +23,11 @@ import sys
 import time
 from datetime import datetime
 from typing import Any
+
+try:
+    import resource
+except Exception:
+    resource = None
 
 
 class CommandBlocked(Exception):

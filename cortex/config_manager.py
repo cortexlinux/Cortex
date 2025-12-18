@@ -72,6 +72,11 @@ class ConfigManager:
         Raises:
             PermissionError: If ownership or permissions cannot be secured
         """
+        # Windows (and some restricted environments) do not provide POSIX ownership APIs.
+        # The uid/gid + 0o700 invariant is only enforceable on POSIX.
+        if os.name == 'nt' or not hasattr(os, 'getuid') or not hasattr(os, 'getgid'):
+            return
+
         try:
             # Get directory statistics
             stat_info = directory.stat()

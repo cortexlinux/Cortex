@@ -16,12 +16,16 @@ import json
 import logging
 import os
 import re
-import resource
 import shlex
 import shutil
 import subprocess
 import sys
 import time
+
+try:
+    import resource  # POSIX-only
+except ImportError:  # pragma: no cover
+    resource = None
 from datetime import datetime
 from typing import Any
 
@@ -595,8 +599,7 @@ class SandboxExecutor:
 
             # Set resource limits if not using Firejail
             preexec_fn = None
-            if not self.firejail_path:
-
+            if os.name != "nt" and not self.firejail_path and resource is not None:
                 def set_resource_limits():
                     """Set resource limits for the subprocess."""
                     try:
@@ -614,14 +617,16 @@ class SandboxExecutor:
 
                 preexec_fn = set_resource_limits
 
-            process = subprocess.Popen(
-                firejail_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                preexec_fn=preexec_fn,
-            )
+            popen_kwargs = {
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+                "text": True,
+            }
+            # preexec_fn is unsupported on Windows; only pass it when set.
+            if preexec_fn is not None:
+                popen_kwargs["preexec_fn"] = preexec_fn
 
+            process = subprocess.Popen(firejail_cmd, **popen_kwargs)
             stdout, stderr = process.communicate(timeout=self.timeout_seconds)
             exit_code = process.returncode
             execution_time = time.time() - start_time
@@ -689,15 +694,10 @@ class SandboxExecutor:
         Returns:
             List of audit log entries
         """
-        if limit:
-            return self.audit_log[-limit:]
-        return self.audit_log.copy()
 
-    def save_audit_log(self, file_path: str | None = None):
-        """Save audit log to file."""
-        file_path = file_path or self.log_file.replace(".log", "_audit.json")
-        with open(file_path, "w") as f:
-            json.dump(self.audit_log, f, indent=2)
+        if limit is None:
+            return list(self.audit_log)
+        return list(self.audit_log)[-limit:]
 
 
 def main():

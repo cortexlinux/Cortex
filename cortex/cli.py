@@ -681,6 +681,7 @@ def show_rich_help():
     table.add_row("rollback <id>", "Undo installation")
     table.add_row("notify", "Manage desktop notifications")  # Added this line
     table.add_row("cache stats", "Show LLM cache statistics")
+    table.add_row("stack <name>", "Install the stack")
 
     console.print(table)
     console.print()

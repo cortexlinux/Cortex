@@ -142,7 +142,7 @@ class SystemDoctor:
         """Check Python version compatibility."""
         version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
 
-        if sys.version_info >= (3, 10):
+        if sys.version_info >= (3, 10):  # noqa: UP036
             self._print_check("PASS", f"Python {version}")
         else:
             self._print_check(

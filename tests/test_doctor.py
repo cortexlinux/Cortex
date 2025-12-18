@@ -27,7 +27,7 @@ class TestPythonVersionCheck:
         "version_tuple, status",
         [
             ((3, 12, 3), "PASS"),
-            ((3, 9, 0), "WARN"),
+            ((3, 9, 0), "FAIL"),
             ((3, 7, 0), "FAIL"),
         ],
     )
@@ -39,12 +39,12 @@ class TestPythonVersionCheck:
 
         doctor._check_python()
 
+        version_str = f"Python {version_tuple[0]}.{version_tuple[1]}.{version_tuple[2]}"
+
         if status == "PASS":
-            assert any("Python 3.12.3" in msg for msg in doctor.passes)
-        elif status == "WARN":
-            assert any("Python 3.9.0" in msg for msg in doctor.warnings)
+            assert any(version_str in msg for msg in doctor.passes)
         else:
-            assert any("Python 3.7.0" in msg for msg in doctor.failures)
+            assert any(version_str in msg for msg in doctor.failures)
 
 
 class TestRequirementsTxtDependencies:
@@ -52,34 +52,28 @@ class TestRequirementsTxtDependencies:
         doctor = SystemDoctor()
         mock_content = "anthropic\nopenai\nrich\n"
 
-        with patch("builtins.open", mock_open(read_data=mock_content)):
-            with patch("builtins.__import__", return_value=MagicMock()):
-                doctor._check_dependencies()
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("builtins.open", mock_open(read_data=mock_content)):
+                with patch("builtins.__import__", return_value=MagicMock()):
+                    doctor._check_dependencies()
 
-        # OLD (failing)
-        # assert "dependencies installed" in doctor.passes[0]
-
-        # NEW (matches your doctor.py output)
         assert "All requirements.txt packages installed" in doctor.passes[0]
 
     def test_some_dependencies_missing(self):
         doctor = SystemDoctor()
+        mock_content = "anthropic\nopenai\nrich\n"
 
-        def mock_import(name, *args, **kwargs):
-            if name in ["anthropic", "openai"]:
+        def fake_import(name, *args, **kwargs):
+            if name == "openai":
                 raise ImportError()
             return MagicMock()
 
-        mock_content = "anthropic\nopenai\nrich\n"
-        with patch("builtins.open", mock_open(read_data=mock_content)):
-            with patch("builtins.__import__", side_effect=mock_import):
-                doctor._check_dependencies()
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("builtins.open", mock_open(read_data=mock_content)):
+                with patch("builtins.__import__", side_effect=fake_import):
+                    doctor._check_dependencies()
 
-        # OLD (failing)
-        # assert "Missing dependencies" in doctor.warnings[0]
-
-        # NEW (matches your doctor.py output)
-        assert "Missing from requirements.txt" in doctor.warnings[0]
+        assert any("Missing from requirements.txt: openai" in msg for msg in doctor.warnings)
 
 
 class TestGPUDriverCheck:

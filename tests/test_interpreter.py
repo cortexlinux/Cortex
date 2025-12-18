@@ -93,6 +93,7 @@ class TestCommandInterpreter(unittest.TestCase):
 
         interpreter = CommandInterpreter(api_key=self.api_key, provider="openai")
         interpreter.client = mock_client
+        interpreter.cache = None
 
         result = interpreter._call_openai("install docker")
         self.assertEqual(result, ["apt update"])
@@ -180,6 +181,7 @@ class TestCommandInterpreter(unittest.TestCase):
 
         interpreter = CommandInterpreter(api_key=self.api_key, provider="openai", cache=mock_cache)
         interpreter.client = mock_client
+        interpreter.cache = None
 
         system_info = {"os": "ubuntu", "version": "22.04"}
         result = interpreter.parse_with_context("install docker", system_info=system_info)

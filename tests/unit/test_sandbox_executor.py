@@ -308,9 +308,9 @@ class TestSecurityFeatures(unittest.TestCase):
             # Some patterns include regex character classes/lookaheads that can't be
             # naively converted by string replacement.
             if "python\\s+-c" in pattern and "exec" in pattern:
-                test_cmd = 'python -c "exec(\'print(1)\')"'
+                test_cmd = "python -c \"exec('print(1)')\""
             elif "python\\s+-c" in pattern and "__import__" in pattern:
-                test_cmd = 'python -c "__import__(\'os\')"'
+                test_cmd = "python -c \"__import__('os')\""
             elif "/dev/(?!null" in pattern:
                 test_cmd = "echo hi > /dev/sda"
             else:

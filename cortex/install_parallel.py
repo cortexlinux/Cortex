@@ -4,6 +4,7 @@ import re
 import subprocess
 import time
 from collections.abc import Callable
+from concurrent.futures import Executor
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -40,7 +41,7 @@ class ParallelTask:
 
 async def run_single_task(
     task: ParallelTask,
-    executor,
+    executor: Executor,
     timeout: int,
     log_callback: Callable[[str, str], None] | None = None,
 ) -> bool:

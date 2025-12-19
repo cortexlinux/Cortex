@@ -72,13 +72,9 @@ class ConfigManager:
         Raises:
             PermissionError: If ownership or permissions cannot be secured
         """
-        # Windows and some non-POSIX platforms don't expose uid/gid ownership APIs.
-        # Cortex primarily targets Linux; on non-POSIX, treat this as best-effort.
-        if os.name == "nt" or not hasattr(os, "getuid") or not hasattr(os, "getgid"):
-            try:
-                os.chmod(directory, 0o700)
-            except OSError:
-                pass
+        # Cortex targets Linux. On non-POSIX systems (e.g., Windows), uid/gid ownership
+        # APIs like os.getuid/os.chown are unavailable, so skip strict enforcement.
+        if os.name != "posix" or not hasattr(os, "getuid") or not hasattr(os, "getgid"):
             return
 
         try:

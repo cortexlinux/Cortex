@@ -77,7 +77,12 @@ class ConfigManager:
         """
         # Cortex targets Linux. On non-POSIX systems (e.g., Windows), uid/gid ownership
         # APIs like os.getuid/os.chown are unavailable, so skip strict enforcement.
-        if os.name != "posix" or not hasattr(os, "getuid") or not hasattr(os, "getgid") or not hasattr(os, "chown"):
+        if (
+            os.name != "posix"
+            or not hasattr(os, "getuid")
+            or not hasattr(os, "getgid")
+            or not hasattr(os, "chown")
+        ):
             return
 
         try:

@@ -3,26 +3,26 @@ Cortex Dashboard - Enhanced Terminal UI with Progress Tracking
 Supports real-time monitoring, system metrics, process tracking, and installation management
 """
 
-import os
-import sys
-import time
-import threading
 import logging
-from typing import Dict, List, Optional, Tuple, Callable
+import os
+import queue
+import sys
+import threading
+import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import queue
 
 try:
-    from rich.console import Console, Group
-    from rich.table import Table
-    from rich.panel import Panel
-    from rich.live import Live
-    from rich.text import Text
-    from rich.columns import Columns
     from rich.box import ROUNDED
+    from rich.columns import Columns
+    from rich.console import Console, Group
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
 except ImportError as e:
     raise ImportError(f"rich library required: {e}. Install with: pip install rich")
 
@@ -33,21 +33,24 @@ except ImportError as e:
 
 try:
     import pynvml
+
     GPU_AVAILABLE = True
 except ImportError:
     pynvml = None  # type: ignore
     GPU_AVAILABLE = False
 
 # Cross-platform keyboard input
-if sys.platform == 'win32':
+if sys.platform == "win32":
     import msvcrt
+
     termios = None  # type: ignore
     tty = None  # type: ignore
     select = None  # type: ignore
 else:
     import select
-    import tty
     import termios
+    import tty
+
     msvcrt = None  # type: ignore
 
 # Suppress verbose logging
@@ -57,12 +60,14 @@ logger = logging.getLogger(__name__)
 
 class DashboardTab(Enum):
     """Available dashboard tabs"""
+
     HOME = "home"
     PROGRESS = "progress"
 
 
 class InstallationState(Enum):
     """Installation states"""
+
     IDLE = "idle"
     WAITING_INPUT = "waiting_input"
     PROCESSING = "processing"
@@ -73,6 +78,7 @@ class InstallationState(Enum):
 
 class ActionType(Enum):
     """Action types for dashboard"""
+
     NONE = "none"
     INSTALL = "install"
     BENCH = "bench"
@@ -83,13 +89,14 @@ class ActionType(Enum):
 @dataclass
 class SystemMetrics:
     """Container for system metrics"""
+
     cpu_percent: float
     ram_percent: float
     ram_used_gb: float
     ram_total_gb: float
-    gpu_percent: Optional[float] = None
-    gpu_memory_percent: Optional[float] = None
-    timestamp: Optional[datetime] = None
+    gpu_percent: float | None = None
+    gpu_memory_percent: float | None = None
+    timestamp: datetime | None = None
 
     def __post_init__(self):
         if self.timestamp is None:
@@ -99,15 +106,16 @@ class SystemMetrics:
 @dataclass
 class InstallationProgress:
     """Tracks installation progress"""
+
     state: InstallationState = InstallationState.IDLE
     package: str = ""
     current_step: int = 0
     total_steps: int = 0
     current_library: str = ""
-    libraries: List[str] = field(default_factory=list)
+    libraries: list[str] = field(default_factory=list)
     error_message: str = ""
     success_message: str = ""
-    start_time: Optional[float] = None
+    start_time: float | None = None
     elapsed_time: float = 0.0
     estimated_remaining: float = 0.0
 
@@ -120,15 +128,15 @@ class InstallationProgress:
 class SystemMonitor:
     """
     Monitors CPU, RAM, and GPU metrics in a thread-safe manner.
-    
+
     This class collects system metrics using psutil and, if available, pynvml for GPU monitoring.
     Metrics are updated synchronously via `update_metrics()` and accessed via `get_metrics()`.
     Thread safety is ensured using a threading.Lock to protect access to the current metrics.
-    
+
     Threading Model:
     - All access to metrics is protected by a lock.
     - Safe to call `update_metrics()` and `get_metrics()` from multiple threads.
-    
+
     Example:
         monitor = SystemMonitor()
         monitor.update_metrics()
@@ -138,10 +146,7 @@ class SystemMonitor:
 
     def __init__(self):
         self.current_metrics = SystemMetrics(
-            cpu_percent=0.0,
-            ram_percent=0.0,
-            ram_used_gb=0.0,
-            ram_total_gb=0.0
+            cpu_percent=0.0, ram_percent=0.0, ram_used_gb=0.0, ram_total_gb=0.0
         )
         self.lock = threading.Lock()
         self.gpu_initialized = False
@@ -167,10 +172,10 @@ class SystemMonitor:
         try:
             cpu_percent = psutil.cpu_percent(interval=0.1)
             vm = psutil.virtual_memory()
-            
+
             gpu_percent = None
             gpu_memory_percent = None
-            
+
             if self.gpu_initialized and pynvml is not None:
                 try:
                     device_count = pynvml.nvmlDeviceGetCount()
@@ -181,16 +186,16 @@ class SystemMonitor:
                         gpu_memory_percent = float(mem_info.used) / float(mem_info.total) * 100
                 except Exception as e:
                     logger.debug(f"GPU metrics error: {e}")
-            
+
             metrics = SystemMetrics(
                 cpu_percent=cpu_percent,
                 ram_percent=vm.percent,
-                ram_used_gb=vm.used / (1024 ** 3),
-                ram_total_gb=vm.total / (1024 ** 3),
+                ram_used_gb=vm.used / (1024**3),
+                ram_total_gb=vm.total / (1024**3),
                 gpu_percent=gpu_percent,
-                gpu_memory_percent=gpu_memory_percent
+                gpu_memory_percent=gpu_memory_percent,
             )
-            
+
             with self.lock:
                 self.current_metrics = metrics
         except Exception as e:
@@ -201,9 +206,18 @@ class ProcessLister:
     """Lists running inference processes"""
 
     KEYWORDS = {
-        'python', 'node', 'ollama', 'llama', 'bert', 'gpt',
-        'transformers', 'inference', 'pytorch', 'tensorflow',
-        'cortex', 'cuda'
+        "python",
+        "node",
+        "ollama",
+        "llama",
+        "bert",
+        "gpt",
+        "transformers",
+        "inference",
+        "pytorch",
+        "tensorflow",
+        "cortex",
+        "cuda",
     }
 
     def __init__(self):
@@ -214,27 +228,30 @@ class ProcessLister:
         """Update process list"""
         try:
             processes = []
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
                 try:
-                    name = proc.info.get('name', '').lower()
-                    cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
-                    
-                    if any(kw in name for kw in self.KEYWORDS) or \
-                       any(kw in cmdline for kw in self.KEYWORDS):
-                        processes.append({
-                            'pid': proc.info.get('pid'),
-                            'name': proc.info.get('name', 'unknown'),
-                            'cmdline': ' '.join(proc.info.get('cmdline') or [])[:60]
-                        })
+                    name = proc.info.get("name", "").lower()
+                    cmdline = " ".join(proc.info.get("cmdline") or []).lower()
+
+                    if any(kw in name for kw in self.KEYWORDS) or any(
+                        kw in cmdline for kw in self.KEYWORDS
+                    ):
+                        processes.append(
+                            {
+                                "pid": proc.info.get("pid"),
+                                "name": proc.info.get("name", "unknown"),
+                                "cmdline": " ".join(proc.info.get("cmdline") or [])[:60],
+                            }
+                        )
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
-            
+
             with self.lock:
                 self.processes = processes[:15]
         except Exception as e:
             logger.error(f"Process listing error: {e}")
 
-    def get_processes(self) -> List[Dict]:
+    def get_processes(self) -> list[dict]:
         """Get current processes"""
         with self.lock:
             return list(self.processes)
@@ -252,15 +269,15 @@ class CommandHistory:
     def _load_shell_history(self):
         """Load from shell history files"""
         for history_file in [
-            os.path.expanduser('~/.bash_history'),
-            os.path.expanduser('~/.zsh_history')
+            os.path.expanduser("~/.bash_history"),
+            os.path.expanduser("~/.zsh_history"),
         ]:
             if os.path.exists(history_file):
                 try:
-                    with open(history_file, 'r', encoding='utf-8', errors='ignore') as f:
-                        for line in f.readlines()[-self.max_size:]:
+                    with open(history_file, encoding="utf-8", errors="ignore") as f:
+                        for line in f.readlines()[-self.max_size :]:
                             cmd = line.strip()
-                            if cmd and not cmd.startswith(':'):
+                            if cmd and not cmd.startswith(":"):
                                 self.history.append(cmd)
                     break
                 except Exception as e:
@@ -272,7 +289,7 @@ class CommandHistory:
             with self.lock:
                 self.history.append(command)
 
-    def get_history(self) -> List[str]:
+    def get_history(self) -> list[str]:
         """Get history"""
         with self.lock:
             return list(self.history)
@@ -280,7 +297,7 @@ class CommandHistory:
 
 class UIRenderer:
     """Renders the dashboard UI with multi-tab support"""
-    
+
     MAX_LIBRARIES_DISPLAY = 5  # Maximum number of libraries to display in progress
 
     def __init__(self, monitor: SystemMonitor, lister: ProcessLister, history: CommandHistory):
@@ -291,21 +308,21 @@ class UIRenderer:
         self.running = False
         self.should_quit = False
         self.current_tab = DashboardTab.HOME
-        
+
         # Installation state
         self.installation_progress = InstallationProgress()
         self.input_text = ""
         self.input_active = False
-        
+
         # Current action state (for display)
         self.current_action = ActionType.NONE
         self.last_pressed_key = ""
         self.status_message = ""
-        
+
         # Doctor results
         self.doctor_results = []
         self.doctor_running = False
-        
+
         # Bench results
         self.bench_status = "Ready to run benchmark"
         self.bench_running = False
@@ -314,21 +331,21 @@ class UIRenderer:
         """Create a resource bar"""
         if percent is None:
             return f"{label}: N/A"
-        
+
         filled = int((percent / 100) * width)
         bar = "[green]" + "█" * filled + "[/green]" + "░" * (width - filled)
         if percent > 75:
             bar = "[red]" + "█" * filled + "[/red]" + "░" * (width - filled)
         elif percent > 50:
             bar = "[yellow]" + "█" * filled + "[/yellow]" + "░" * (width - filled)
-        
+
         return f"{label}: {bar} {percent:.1f}%"
 
     def _render_header(self) -> Panel:
         """Render header with tab indicator"""
         title = Text("🚀 CORTEX DASHBOARD", style="bold cyan")
         timestamp = Text(datetime.now().strftime("%H:%M:%S"), style="dim")
-        
+
         # Tab indicator
         tab_text = ""
         for tab in DashboardTab:
@@ -336,7 +353,7 @@ class UIRenderer:
                 tab_text += f"[bold cyan]▸ {tab.value.upper()} ◂[/bold cyan] "
             else:
                 tab_text += f"[dim]{tab.value}[/dim] "
-        
+
         content = f"{title}  {timestamp}\n[dim]{tab_text}[/dim]"
         return Panel(content, style="blue", box=ROUNDED)
 
@@ -348,12 +365,12 @@ class UIRenderer:
             self._create_bar("RAM", metrics.ram_percent),
             f"     Used: {metrics.ram_used_gb:.1f}GB / {metrics.ram_total_gb:.1f}GB",
         ]
-        
+
         if metrics.gpu_percent is not None:
             lines.append(self._create_bar("GPU", metrics.gpu_percent))
         if metrics.gpu_memory_percent is not None:
             lines.append(self._create_bar("VRAM", metrics.gpu_memory_percent))
-        
+
         return Panel("\n".join(lines), title="📊 System Resources", padding=(1, 1), box=ROUNDED)
 
     def _render_processes(self) -> Panel:
@@ -364,7 +381,7 @@ class UIRenderer:
         else:
             lines = [f"  {p['pid']} {p['name'][:20]}" for p in processes[:8]]
             content = "\n".join(lines)
-        
+
         return Panel(content, title="⚙️  Running Processes", padding=(1, 1), box=ROUNDED)
 
     def _render_history(self) -> Panel:
@@ -375,7 +392,7 @@ class UIRenderer:
         else:
             lines = [f"  {c[:50]}" for c in reversed(list(cmds)[-5:])]
             content = "\n".join(lines)
-        
+
         return Panel(content, title="📝 Recent Commands", padding=(1, 1), box=ROUNDED)
 
     def _render_actions(self) -> Panel:
@@ -385,19 +402,21 @@ class UIRenderer:
             ("1", "Install", ActionType.INSTALL),
             ("2", "Bench", ActionType.BENCH),
             ("3", "Doctor", ActionType.DOCTOR),
-            ("4", "Cancel", ActionType.CANCEL)
+            ("4", "Cancel", ActionType.CANCEL),
         ]
-        
+
         actions = []
         for key, name, action_type in action_items:
             actions.append(f"[cyan]{key}[/cyan] {name}")
-        
+
         content = "  ".join(actions)
-        
+
         # Add pressed indicator if a key was recently pressed
         if self.last_pressed_key:
-            content += f"  [dim]|[/dim]  [bold yellow]► {self.last_pressed_key} pressed[/bold yellow]"
-        
+            content += (
+                f"  [dim]|[/dim]  [bold yellow]► {self.last_pressed_key} pressed[/bold yellow]"
+            )
+
         return Panel(content, title="⚡ Actions", padding=(1, 1), box=ROUNDED)
 
     def _render_home_tab(self) -> Group:
@@ -410,29 +429,25 @@ class UIRenderer:
             self._render_history(),
             "",
             self._render_actions(),
-            ""
+            "",
         )
 
     def _render_input_dialog(self) -> Panel:
         """Render input dialog for package selection"""
         instructions = "[cyan]Enter package name[/cyan] (e.g., nginx, docker, python)\n[dim]Press Enter to install, Esc to cancel[/dim]"
-        
-        content = f"{instructions}\n\n[bold]>[/bold] {self.input_text}[blink_fast]█[/blink_fast]"
-        return Panel(content, title="📦 What would you like to install?", padding=(2, 2), box=ROUNDED)
 
-    def _render_progress_panel(self) -> Panel:
-        """Render progress panel with support for install, bench, doctor"""
-        progress = self.installation_progress
-        
-        if progress.state == InstallationState.WAITING_INPUT:
-            return self._render_input_dialog()
-        
-        lines = []
-        
+        content = f"{instructions}\n\n[bold]>[/bold] {self.input_text}[blink_fast]█[/blink_fast]"
+        return Panel(
+            content, title="📦 What would you like to install?", padding=(2, 2), box=ROUNDED
+        )
+
+    def _build_progress_lines(self, progress: InstallationProgress) -> list[str]:
+        lines: list[str] = []
+
         # Operation name and status
         if progress.package:
             lines.append(f"[bold cyan]Operation:[/bold cyan] {progress.package}")
-        
+
         # Progress bar
         if progress.total_steps > 0:
             filled = int((progress.current_step / progress.total_steps) * 20)
@@ -440,67 +455,96 @@ class UIRenderer:
             percentage = int((progress.current_step / progress.total_steps) * 100)
             lines.append(f"\n[cyan]Progress:[/cyan] {bar} {percentage}%")
             lines.append(f"[dim]Step {progress.current_step}/{progress.total_steps}[/dim]")
-        
+
         # Current step being processed
         if progress.current_library:
             lines.append(f"\n[bold]Current:[/bold] {progress.current_library}")
-        
+
         # Time info
         if progress.elapsed_time > 0:
             lines.append(f"\n[dim]Elapsed: {progress.elapsed_time:.1f}s[/dim]")
-        
-        # Doctor results display
-        if self.doctor_results:
-            lines.append("\n[bold]Check Results:[/bold]")
-            for name, passed, detail in self.doctor_results:
-                icon = "[green]✓[/green]" if passed else "[red]✗[/red]"
-                lines.append(f"  {icon} {name}: {detail}")
-        
-        # Show installed libraries for install operations
-        if progress.libraries and progress.package not in ["System Benchmark", "System Doctor"]:
-            lines.append(f"\n[dim]Libraries: {', '.join(progress.libraries[:self.MAX_LIBRARIES_DISPLAY])}[/dim]")
-            if len(progress.libraries) > self.MAX_LIBRARIES_DISPLAY:
-                lines.append(f"[dim]... and {len(progress.libraries) - self.MAX_LIBRARIES_DISPLAY} more[/dim]")
-        
-        # Status messages
+
+        self._append_doctor_results(lines)
+        self._append_installed_libraries(lines, progress)
+        self._append_status_message(lines, progress)
+        self._append_idle_hint(lines, progress)
+
+        return lines
+
+    def _append_doctor_results(self, lines: list[str]) -> None:
+        if not self.doctor_results:
+            return
+
+        lines.append("\n[bold]Check Results:[/bold]")
+        for name, passed, detail in self.doctor_results:
+            icon = "[green]✓[/green]" if passed else "[red]✗[/red]"
+            lines.append(f"  {icon} {name}: {detail}")
+
+    def _append_installed_libraries(self, lines: list[str], progress: InstallationProgress) -> None:
+        if not progress.libraries:
+            return
+        if progress.package in ["System Benchmark", "System Doctor"]:
+            return
+
+        lines.append(
+            f"\n[dim]Libraries: {', '.join(progress.libraries[:self.MAX_LIBRARIES_DISPLAY])}[/dim]"
+        )
+        if len(progress.libraries) > self.MAX_LIBRARIES_DISPLAY:
+            lines.append(
+                f"[dim]... and {len(progress.libraries) - self.MAX_LIBRARIES_DISPLAY} more[/dim]"
+            )
+
+    def _append_status_message(self, lines: list[str], progress: InstallationProgress) -> None:
         if progress.error_message:
             lines.append(f"\n[red]✗ {progress.error_message}[/red]")
-        elif progress.success_message:
+            return
+        if progress.success_message:
             lines.append(f"\n[green]✓ {progress.success_message}[/green]")
-        
-        # Idle state message
-        if progress.state == InstallationState.IDLE:
-            lines.append("[dim]Press 1 for Install, 2 for Bench, 3 for Doctor[/dim]")
-        
-        content = "\n".join(lines) if lines else "[dim]No operation in progress\nPress 1 for Install, 2 for Bench, 3 for Doctor[/dim]"
-        
+
+    def _append_idle_hint(self, lines: list[str], progress: InstallationProgress) -> None:
+        if progress.state != InstallationState.IDLE:
+            return
+        lines.append("[dim]Press 1 for Install, 2 for Bench, 3 for Doctor[/dim]")
+
+    def _render_progress_content(self, lines: list[str]) -> str:
+        if lines:
+            return "\n".join(lines)
+        return "[dim]No operation in progress\nPress 1 for Install, 2 for Bench, 3 for Doctor[/dim]"
+
+    def _get_progress_title(self, state: InstallationState) -> str:
         title_map = {
             InstallationState.IDLE: "📋 Progress",
             InstallationState.WAITING_INPUT: "📦 Installation",
             InstallationState.PROCESSING: "🔄 Processing",
             InstallationState.IN_PROGRESS: "⏳ In Progress",
             InstallationState.COMPLETED: "✅ Completed",
-            InstallationState.FAILED: "❌ Failed"
+            InstallationState.FAILED: "❌ Failed",
         }
-        
-        title = title_map.get(progress.state, "📋 Progress")
-        
+        return title_map.get(state, "📋 Progress")
+
+    def _render_progress_panel(self) -> Panel:
+        """Render progress panel with support for install, bench, doctor"""
+        progress = self.installation_progress
+
+        if progress.state == InstallationState.WAITING_INPUT:
+            return self._render_input_dialog()
+
+        lines = self._build_progress_lines(progress)
+        content = self._render_progress_content(lines)
+        title = self._get_progress_title(progress.state)
         return Panel(content, title=title, padding=(1, 2), box=ROUNDED)
 
     def _render_progress_tab(self) -> Group:
         """Render progress tab with actions"""
         return Group(
-            self._render_header(),
-            "",
-            self._render_progress_panel(),
-            "",
-            self._render_actions(),
-            ""
+            self._render_header(), "", self._render_progress_panel(), "", self._render_actions(), ""
         )
 
     def _render_footer(self) -> Panel:
         """Render footer"""
-        footer_text = "[cyan]q[/cyan] Quit  |  [cyan]Tab[/cyan] Switch Tab  |  [cyan]1-4[/cyan] Actions"
+        footer_text = (
+            "[cyan]q[/cyan] Quit  |  [cyan]Tab[/cyan] Switch Tab  |  [cyan]1-4[/cyan] Actions"
+        )
         return Panel(footer_text, style="dim", box=ROUNDED)
 
     def _render_screen(self):
@@ -511,59 +555,59 @@ class UIRenderer:
             content = self._render_progress_tab()
         else:
             content = self._render_home_tab()
-        
-        return Group(
-            content,
-            self._render_footer()
-        )
+
+        return Group(content, self._render_footer())
 
     def _handle_key_press(self, key: str):
         """Handle key press"""
         # Clear previous pressed indicator after a short time
         self.last_pressed_key = ""
-        
-        if key == 'q':
+
+        if key == "q":
             self.should_quit = True
             return
-        
-        elif key == '\t':  # Tab key
+
+        elif key == "\t":  # Tab key
             # Switch tabs
             tabs = list(DashboardTab)
             current_idx = tabs.index(self.current_tab)
             self.current_tab = tabs[(current_idx + 1) % len(tabs)]
             self.last_pressed_key = "Tab"
             return
-        
+
         # Handle input mode first if active
         if self.input_active:
-            if key == '\n' or key == '\r':  # Enter
+            if key == "\n" or key == "\r":  # Enter
                 self._submit_installation_input()
-            elif key == '\x1b':  # Escape
+            elif key == "\x1b":  # Escape
                 self._cancel_operation()
-            elif key == '\b' or key == '\x7f':  # Backspace
+            elif key == "\b" or key == "\x7f":  # Backspace
                 self.input_text = self.input_text[:-1]
             elif key.isprintable() and len(self.input_text) < 50:
                 self.input_text += key
             return
-        
+
         # Handle action keys
-        if key == '1':
+        if key == "1":
             self.last_pressed_key = "Install"
             self._start_installation()
-        elif key == '2':
+        elif key == "2":
             self.last_pressed_key = "Bench"
             self._start_bench()
-        elif key == '3':
+        elif key == "3":
             self.last_pressed_key = "Doctor"
             self._start_doctor()
-        elif key == '4':
+        elif key == "4":
             self.last_pressed_key = "Cancel"
             self._cancel_operation()
 
     def _start_bench(self):
         """Start benchmark"""
         # Allow starting if not currently running
-        if not self.bench_running and self.installation_progress.state not in [InstallationState.IN_PROGRESS, InstallationState.PROCESSING]:
+        if not self.bench_running and self.installation_progress.state not in [
+            InstallationState.IN_PROGRESS,
+            InstallationState.PROCESSING,
+        ]:
             # Reset state for new benchmark
             self.installation_progress = InstallationProgress()
             self.doctor_results = []
@@ -572,14 +616,14 @@ class UIRenderer:
             self.current_tab = DashboardTab.PROGRESS
             self.installation_progress.state = InstallationState.PROCESSING
             self.installation_progress.package = "System Benchmark"
-            
+
             # Run benchmark in background thread
             def run_bench():
                 steps = ["CPU Test", "Memory Test", "Disk I/O Test", "Network Test"]
                 self.installation_progress.total_steps = len(steps)
                 self.installation_progress.start_time = time.time()
                 self.installation_progress.state = InstallationState.IN_PROGRESS
-                
+
                 for i, step in enumerate(steps, 1):
                     if not self.running or not self.bench_running:
                         break
@@ -587,19 +631,22 @@ class UIRenderer:
                     self.installation_progress.current_library = step
                     self.installation_progress.update_elapsed()
                     time.sleep(0.8)
-                
+
                 self.bench_status = "Benchmark complete - System OK"
                 self.installation_progress.state = InstallationState.COMPLETED
                 self.installation_progress.success_message = "Benchmark completed successfully!"
                 self.installation_progress.current_library = ""
                 self.bench_running = False
-            
+
             threading.Thread(target=run_bench, daemon=True).start()
-    
+
     def _start_doctor(self):
         """Start doctor system check"""
         # Allow starting if not currently running
-        if not self.doctor_running and self.installation_progress.state not in [InstallationState.IN_PROGRESS, InstallationState.PROCESSING]:
+        if not self.doctor_running and self.installation_progress.state not in [
+            InstallationState.IN_PROGRESS,
+            InstallationState.PROCESSING,
+        ]:
             # Reset state for new doctor check
             self.installation_progress = InstallationProgress()
             self.doctor_running = True
@@ -607,22 +654,34 @@ class UIRenderer:
             self.current_tab = DashboardTab.PROGRESS
             self.installation_progress.state = InstallationState.PROCESSING
             self.installation_progress.package = "System Doctor"
-            
+
             # Run doctor in background thread
             def run_doctor():
                 checks = [
-                    ("Python version", True, f"Python {sys.version_info.major}.{sys.version_info.minor}"),
+                    (
+                        "Python version",
+                        True,
+                        f"Python {sys.version_info.major}.{sys.version_info.minor}",
+                    ),
                     ("psutil module", True, "Installed"),
                     ("rich module", True, "Installed"),
-                    ("Disk space", psutil.disk_usage('/').percent < 90, f"{psutil.disk_usage('/').percent:.1f}% used"),
-                    ("Memory available", psutil.virtual_memory().percent < 95, f"{psutil.virtual_memory().percent:.1f}% used"),
-                    ("CPU load", psutil.cpu_percent() < 90, f"{psutil.cpu_percent():.1f}% load")
+                    (
+                        "Disk space",
+                        psutil.disk_usage("/").percent < 90,
+                        f"{psutil.disk_usage('/').percent:.1f}% used",
+                    ),
+                    (
+                        "Memory available",
+                        psutil.virtual_memory().percent < 95,
+                        f"{psutil.virtual_memory().percent:.1f}% used",
+                    ),
+                    ("CPU load", psutil.cpu_percent() < 90, f"{psutil.cpu_percent():.1f}% load"),
                 ]
-                
+
                 self.installation_progress.total_steps = len(checks)
                 self.installation_progress.start_time = time.time()
                 self.installation_progress.state = InstallationState.IN_PROGRESS
-                
+
                 for i, (name, passed, detail) in enumerate(checks, 1):
                     if not self.running or not self.doctor_running:
                         break
@@ -631,46 +690,58 @@ class UIRenderer:
                     self.doctor_results.append((name, passed, detail))
                     self.installation_progress.update_elapsed()
                     time.sleep(0.5)
-                
+
                 all_passed = all(r[1] for r in self.doctor_results)
                 self.installation_progress.state = InstallationState.COMPLETED
                 if all_passed:
-                    self.installation_progress.success_message = "All checks passed! System is healthy."
+                    self.installation_progress.success_message = (
+                        "All checks passed! System is healthy."
+                    )
                 else:
-                    self.installation_progress.success_message = "Some checks failed. Review results above."
+                    self.installation_progress.success_message = (
+                        "Some checks failed. Review results above."
+                    )
                 self.installation_progress.current_library = ""
                 self.doctor_running = False
-            
+
             threading.Thread(target=run_doctor, daemon=True).start()
-    
+
     def _cancel_operation(self):
         """Cancel any ongoing operation"""
         # Cancel installation
-        if self.installation_progress.state in [InstallationState.IN_PROGRESS, InstallationState.PROCESSING, InstallationState.WAITING_INPUT]:
+        if self.installation_progress.state in [
+            InstallationState.IN_PROGRESS,
+            InstallationState.PROCESSING,
+            InstallationState.WAITING_INPUT,
+        ]:
             self.installation_progress.state = InstallationState.FAILED
             self.installation_progress.error_message = "Operation cancelled by user"
             self.installation_progress.current_library = ""
-        
+
         # Cancel bench
         if self.bench_running:
             self.bench_running = False
             self.bench_status = "Benchmark cancelled"
-        
+
         # Cancel doctor
         if self.doctor_running:
             self.doctor_running = False
-        
+
         # Reset input
         self.input_active = False
         self.input_text = ""
-        
+
         # Return to home after a moment
         self.status_message = "Operation cancelled"
 
     def _start_installation(self):
         """Start installation process"""
         # Allow starting new installation if not currently in progress
-        if self.installation_progress.state not in [InstallationState.IN_PROGRESS, InstallationState.PROCESSING, InstallationState.WAITING_INPUT]:
+        if self.installation_progress.state not in [
+            InstallationState.IN_PROGRESS,
+            InstallationState.PROCESSING,
+            InstallationState.WAITING_INPUT,
+        ]:
             # Reset progress state for new installation
             self.installation_progress = InstallationProgress()
             self.installation_progress.state = InstallationState.WAITING_INPUT
@@ -686,7 +757,7 @@ class UIRenderer:
             self.installation_progress.package = package
             self.installation_progress.state = InstallationState.PROCESSING
             self.input_active = False
-            
+
             # Simulate processing - in real implementation, this would call CLI
             self._simulate_installation()
 
@@ -694,21 +765,21 @@ class UIRenderer:
         """Run installation in background thread"""
         progress = self.installation_progress
         package_name = progress.package
-        
+
         progress.state = InstallationState.IN_PROGRESS
         progress.start_time = time.time()
         progress.total_steps = 5
         progress.libraries = []
-        
+
         # Simulate library installation steps (will be replaced with actual CLI call)
         install_steps = [
             f"Preparing {package_name}",
             "Resolving dependencies",
             "Downloading packages",
             "Installing components",
-            "Verifying installation"
+            "Verifying installation",
         ]
-        
+
         for i, step in enumerate(install_steps, 1):
             if not self.running or progress.state == InstallationState.FAILED:
                 break
@@ -717,12 +788,12 @@ class UIRenderer:
             progress.libraries.append(step)
             progress.update_elapsed()
             time.sleep(0.6)  # Simulate work
-        
+
         if progress.state != InstallationState.FAILED:
             progress.state = InstallationState.COMPLETED
             progress.success_message = f"Successfully installed {package_name}!"
         progress.current_library = ""
-    
+
     def _simulate_installation(self):
         """Start installation in background thread"""
         threading.Thread(target=self._run_installation, daemon=True).start()
@@ -739,9 +810,9 @@ class UIRenderer:
     def _check_keyboard_input(self):
         """Check for keyboard input (cross-platform)"""
         try:
-            if sys.platform == 'win32':
+            if sys.platform == "win32":
                 if msvcrt.kbhit():
-                    key = msvcrt.getch().decode('utf-8', errors='ignore')
+                    key = msvcrt.getch().decode("utf-8", errors="ignore")
                     return key
             else:
                 if select.select([sys.stdin], [], [], 0)[0]:
@@ -751,71 +822,85 @@ class UIRenderer:
             logger.debug(f"Keyboard check error: {e}")
         return None
 
+    def _setup_terminal(self):
+        """Save and adjust terminal settings on Unix-like systems."""
+        if sys.platform == "win32":
+            return None
+        try:
+            old_settings = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())
+            return old_settings
+        except Exception as e:
+            # It's safe to ignore errors when setting terminal attributes (e.g., not a tty)
+            logger.debug(f"Failed to set terminal attributes: {e}")
+            return None
+
+    def _restore_terminal(self, old_settings) -> None:
+        """Restore terminal settings on Unix-like systems."""
+        if old_settings is None or termios is None:
+            return
+        try:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        except Exception as e:
+            logger.warning(f"Failed to restore terminal settings: {e}")
+
+    def _monitor_loop(self) -> None:
+        while self.running:
+            try:
+                self.monitor.update_metrics()
+                self.lister.update_processes()
+
+                # Update progress if in progress tab
+                if self.current_tab == DashboardTab.PROGRESS:
+                    self.installation_progress.update_elapsed()
+
+            except Exception as e:
+                logger.error(f"Monitor error: {e}")
+            time.sleep(1.0)
+
+    def _start_monitor_thread(self) -> threading.Thread:
+        monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        monitor_thread.start()
+        return monitor_thread
+
     def run(self):
         """Run dashboard"""
         self.running = True
         self.should_quit = False
-        
-        # Save terminal settings on Unix
-        old_settings = None
-        if sys.platform != 'win32':
-            try:
-                old_settings = termios.tcgetattr(sys.stdin)
-                tty.setcbreak(sys.stdin.fileno())
-            except Exception as e:
-                # It's safe to ignore errors when setting terminal attributes (e.g., not a tty)
-                logger.debug(f"Failed to set terminal attributes: {e}")
-        
-        def monitor_loop():
-            while self.running:
-                try:
-                    self.monitor.update_metrics()
-                    self.lister.update_processes()
-                    
-                    # Update progress if in progress tab
-                    if self.current_tab == DashboardTab.PROGRESS:
-                        self.installation_progress.update_elapsed()
-                
-                except Exception as e:
-                    logger.error(f"Monitor error: {e}")
-                time.sleep(1.0)
-        
-        monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
-        monitor_thread.start()
-        
+
+        old_settings = self._setup_terminal()
+        self._start_monitor_thread()
+
         try:
-            with Live(self._render_screen(), console=self.console, refresh_per_second=2, screen=True) as live:
+            with Live(
+                self._render_screen(), console=self.console, refresh_per_second=2, screen=True
+            ) as live:
                 while self.running and not self.should_quit:
                     # Check for keyboard input
                     key = self._check_keyboard_input()
                     if key:
                         self._handle_key_press(key)
-                    
+
                     # Update display
                     live.update(self._render_screen())
                     time.sleep(0.1)  # More frequent updates for responsiveness
-        
+
         except KeyboardInterrupt:
             self.should_quit = True
-        
+
         finally:
             self.running = False
-            # Restore terminal settings on Unix
-            if old_settings is not None and termios is not None:
-                try:
-                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-                except Exception as e:
-                    logger.warning(f"Failed to restore terminal settings: {e}")
+            self._restore_terminal(old_settings)
 
 
 class DashboardApp:
     """
     Main dashboard application orchestrator.
-    
+
     Coordinates all dashboard components including system monitoring,
     process listing, command history, and UI rendering. Provides the
     main entry point for running the dashboard.
-    
+
     Example:
         app = DashboardApp()
         app.run()
@@ -836,7 +921,9 @@ class DashboardApp:
             time.sleep(1)
             self.ui.run()
         except KeyboardInterrupt:
-            console.print("\n[yellow]Keyboard interrupt received. Shutting down dashboard...[/yellow]")
+            console.print(
+                "\n[yellow]Keyboard interrupt received. Shutting down dashboard...[/yellow]"
+            )
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
         finally:

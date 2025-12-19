@@ -667,7 +667,7 @@ class CortexCLI:
         """Launch the real-time system monitoring dashboard"""
         try:
             from cortex.dashboard import DashboardApp
-            
+
             app = DashboardApp()
             app.run()
             return 0
@@ -751,7 +751,9 @@ def main():
     demo_parser = subparsers.add_parser("demo", help="See Cortex in action")
 
     # Dashboard command
-    dashboard_parser = subparsers.add_parser('dashboard', help='Real-time system monitoring dashboard')
+    dashboard_parser = subparsers.add_parser(
+        "dashboard", help="Real-time system monitoring dashboard"
+    )
 
     # Wizard command
     wizard_parser = subparsers.add_parser("wizard", help="Configure API key interactively")

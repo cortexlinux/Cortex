@@ -33,7 +33,6 @@ from cortex.validators import (
 )
 
 
-
 class CortexCLI:
     def __init__(self, verbose: bool = False):
         self.spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -229,9 +228,7 @@ class CortexCLI:
                     console.print(f"   {i}. {rec}")
 
                 console.print()
-                console.print(
-                    "[dim]Run suggested commands manually to improve your score.[/dim]"
-                )
+                console.print("[dim]Run suggested commands manually to improve your score.[/dim]")
             else:
                 self._print_success("System is in excellent health! No actions needed.")
 
@@ -447,7 +444,7 @@ class CortexCLI:
 
                 coordinator = InstallationCoordinator(
                     commands=commands,
-                    descriptions=[f"Step {i+1}" for i in range(len(commands))],
+                    descriptions=[f"Step {i + 1}" for i in range(len(commands))],
                     timeout=300,
                     stop_on_error=True,
                     progress_callback=progress_callback,
@@ -576,7 +573,7 @@ class CortexCLI:
                     date = r.timestamp[:19].replace("T", " ")
                     packages = ", ".join(r.packages[:2])
                     if len(r.packages) > 2:
-                        packages += f" +{len(r.packages)-2}"
+                        packages += f" +{len(r.packages) - 2}"
 
                     print(
                         f"{r.id:<18} {date:<20} {r.operation_type.value:<12} {packages:<30} {r.status.value:<15}"

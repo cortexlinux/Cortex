@@ -6,14 +6,9 @@ import time
 from datetime import datetime
 from typing import Any
 
-# Suppress noisy log messages in normal operation
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("cortex.installation_history").setLevel(logging.ERROR)
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from cortex.branding import VERSION, console, cx_header, cx_print, show_banner
 from cortex.coordinator import InstallationCoordinator, StepStatus
+from cortex.demo import run_demo
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 from cortex.llm.interpreter import CommandInterpreter
 from cortex.notification_manager import NotificationManager
@@ -27,6 +22,12 @@ from cortex.validators import (
     validate_api_key,
     validate_install_request,
 )
+
+# Suppress noisy log messages in normal operation
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("cortex.installation_history").setLevel(logging.ERROR)
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 class CortexCLI:
@@ -170,121 +171,13 @@ class CortexCLI:
             return 1
 
     # -------------------------------
+    def demo(self):
+        """
+        Run the one-command investor demo
+        """
+        return run_demo()
 
-    def stack(self, args: argparse.Namespace) -> int:
-        """Handle `cortex stack` commands (list/describe/install/dry-run)."""
-        try:
-            manager = StackManager()
-
-            # Validate --dry-run requires a stack name
-            if args.dry_run and not args.name:
-                self._print_error(
-                    "--dry-run requires a stack name (e.g., `cortex stack ml --dry-run`)"
-                )
-                return 1
-
-            # List stacks (default when no name/describe)
-            if args.list or (not args.name and not args.describe):
-                return self._handle_stack_list(manager)
-
-            # Describe a specific stack
-            if args.describe:
-                return self._handle_stack_describe(manager, args.describe)
-
-            # Install a stack (only remaining path)
-            return self._handle_stack_install(manager, args)
-
-        except FileNotFoundError as e:
-            self._print_error(f"stacks.json not found. Ensure cortex/stacks.json exists: {e}")
-            return 1
-        except ValueError as e:
-            self._print_error(f"stacks.json is invalid or malformed: {e}")
-            return 1
-
-    def _handle_stack_list(self, manager: StackManager) -> int:
-        """List all available stacks."""
-        stacks = manager.list_stacks()
-        cx_print("\n📦 Available Stacks:\n", "info")
-        for stack in stacks:
-            pkg_count = len(stack.get("packages", []))
-            console.print(f"  [green]{stack.get('id', 'unknown')}[/green]")
-            console.print(f"    {stack.get('name', 'Unnamed Stack')}")
-            console.print(f"    {stack.get('description', 'No description')}")
-            console.print(f"    [dim]({pkg_count} packages)[/dim]\n")
-        cx_print("Use: cortex stack <name> to install a stack", "info")
-        return 0
-
-    def _handle_stack_describe(self, manager: StackManager, stack_id: str) -> int:
-        """Describe a specific stack."""
-        stack = manager.find_stack(stack_id)
-        if not stack:
-            self._print_error(f"Stack '{stack_id}' not found. Use --list to see available stacks.")
-            return 1
-        description = manager.describe_stack(stack_id)
-        console.print(description)
-        return 0
-
-    def _handle_stack_install(self, manager: StackManager, args: argparse.Namespace) -> int:
-        """Install a stack with optional hardware-aware selection."""
-        original_name = args.name
-        suggested_name = manager.suggest_stack(args.name)
-
-        if suggested_name != original_name:
-            cx_print(
-                f"💡 No GPU detected, using '{suggested_name}' instead of '{original_name}'",
-                "info",
-            )
-
-        stack = manager.find_stack(suggested_name)
-        if not stack:
-            self._print_error(
-                f"Stack '{suggested_name}' not found. Use --list to see available stacks."
-            )
-            return 1
-
-        packages = stack.get("packages", [])
-        if not packages:
-            self._print_error(f"Stack '{suggested_name}' has no packages configured.")
-            return 1
-
-        if args.dry_run:
-            return self._handle_stack_dry_run(stack, packages)
-
-        return self._handle_stack_real_install(stack, packages)
-
-    def _handle_stack_dry_run(self, stack: dict[str, Any], packages: list[str]) -> int:
-        """Preview packages that would be installed without executing."""
-        cx_print(f"\n📋 Stack: {stack['name']}", "info")
-        console.print("\nPackages that would be installed:")
-        for pkg in packages:
-            console.print(f"  • {pkg}")
-        console.print(f"\nTotal: {len(packages)} packages")
-        cx_print("\nDry run only - no commands executed", "warning")
-        return 0
-
-    def _handle_stack_real_install(self, stack: dict[str, Any], packages: list[str]) -> int:
-        """Install all packages in the stack."""
-        cx_print(f"\n🚀 Installing stack: {stack['name']}\n", "success")
-
-        # Batch into a single LLM request
-        packages_str = " ".join(packages)
-        result = self.install(software=packages_str, execute=True, dry_run=False)
-
-        if result != 0:
-            self._print_error(f"Failed to install stack '{stack['name']}'")
-            return 1
-
-        self._print_success(f"\n✅ Stack '{stack['name']}' installed successfully!")
-        console.print(f"Installed {len(packages)} packages")
-        return 0
-
-    # Run system health checks
-    def doctor(self):
-        from cortex.doctor import SystemDoctor
-
-        doctor = SystemDoctor()
-        return doctor.run_checks()
-
+    # -------------------------------
     def install(self, software: str, execute: bool = False, dry_run: bool = False):
         is_valid, error = validate_install_request(software)
         if not is_valid:
@@ -655,13 +548,34 @@ class CortexCLI:
         cx_print("Please export your API key in your shell profile.", "info")
         return 0
 
-    def demo(self):
-        """Run a demo showing Cortex capabilities without API key"""
-        show_banner()
-        console.print()
-        cx_print("Running Demo...", "info")
-        # (Keep existing demo logic)
-        return 0
+    def config(self, args):
+        """
+        Handle `cortex config` commands
+        """
+        if args.config_action == "set":
+            key = args.key
+            value = args.value
+
+            if key != "approval-mode":
+                print(f"❌ Unknown config key: {key}")
+                return 1
+
+            if value not in ("suggest", "auto-edit", "full-auto"):
+                print("❌ Invalid approval-mode. Allowed values:")
+                print("  - suggest")
+                print("  - auto-edit")
+                print("  - full-auto")
+                return 1
+
+            # ✅ Use PreferencesManager (correct for this repo)
+            manager = self._get_prefs_manager()
+            manager.set("approval_mode", value)
+
+            print(f"✅ approval-mode set to '{value}'")
+            return 0
+
+        print("❌ Unknown config action")
+        return 1
 
 
 def show_rich_help():
@@ -733,6 +647,14 @@ def main():
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Config command
+    config_parser = subparsers.add_parser("config", help="Manage configuration")
+    config_subs = config_parser.add_subparsers(dest="config_action", help="Config actions")
+
+    config_set = config_subs.add_parser("set", help="Set configuration value")
+    config_set.add_argument("key", help="Config key (e.g. approval-mode)")
+    config_set.add_argument("value", help="Config value")
 
     # Demo command
     demo_parser = subparsers.add_parser("demo", help="See Cortex in action")
@@ -833,6 +755,8 @@ def main():
             return cli.check_pref(key=args.key)
         elif args.command == "edit-pref":
             return cli.edit_pref(action=args.action, key=args.key, value=args.value)
+        elif args.command == "config":
+            return cli.config(args)
         # Handle the new notify command
         elif args.command == "notify":
             return cli.notify(args)

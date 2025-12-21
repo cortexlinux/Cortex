@@ -37,3 +37,12 @@ class GitManager:
             raise RuntimeError(result.stderr.strip())
 
         return True
+    def history(self) -> str:
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--relative-date"],
+            cwd=self.config_path,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()

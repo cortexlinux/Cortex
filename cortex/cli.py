@@ -30,10 +30,22 @@ logging.getLogger("cortex.installation_history").setLevel(logging.ERROR)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
+def read_stdin():
+    """
+    Read piped stdin safely (if present).
+    """
+    if not sys.stdin.isatty():
+        data = sys.stdin.read()
+        data = data.strip()
+        return data if data else None
+    return None
+
+
 class CortexCLI:
     def __init__(self, verbose: bool = False):
         self.spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self.spinner_idx = 0
+        self.stdin_data = read_stdin()
         self.prefs_manager = None  # Lazy initialization
         self.verbose = verbose
         self.offline = False

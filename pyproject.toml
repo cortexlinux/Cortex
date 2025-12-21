@@ -133,8 +133,6 @@ exclude = [
     "dist",
     "node_modules",
     "venv",
-    "examples/parallel_llm_demo.py",
-    "test_parallel_line.py",
 ]
 
 [tool.ruff.lint]

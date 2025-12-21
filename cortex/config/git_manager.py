@@ -15,3 +15,25 @@ class GitManager:
             check=True
         )
         return True
+    def commit_all(self, message: str) -> bool:
+        subprocess.run(
+            ["git", "add", "."],
+            cwd=self.config_path,
+            check=True
+        )
+
+        result = subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=self.config_path,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if "nothing to commit" in result.stdout.lower():
+            return False
+
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip())
+
+        return True

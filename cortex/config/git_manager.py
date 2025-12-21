@@ -50,4 +50,11 @@ class GitManager:
             return ""
 
         return result.stdout.strip()
+    def rollback(self, commit_hash: str) -> None:
+        subprocess.run(
+            ["git", "checkout", commit_hash, "--", "."],
+            cwd=self.config_path,
+            check=True
+        )
+
 

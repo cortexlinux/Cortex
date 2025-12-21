@@ -180,6 +180,29 @@ class CortexCLI:
         """
         return run_demo()
 
+    def config(self):
+        from cortex.hardware_detection import detect_hardware
+
+        print("\n🧠 CORTEX INTERACTIVE SETUP")
+        print("=" * 32)
+
+        print("\n🔍 Detecting hardware...")
+        hw = detect_hardware()
+
+        if getattr(hw, "gpu", None):
+            print(f"✔ GPU detected: {hw.gpu}")
+        else:
+            print("⚠️ No GPU detected (CPU mode)")
+
+        if getattr(hw, "cpu", None):
+            print(f"✔ CPU: {hw.cpu}")
+
+        if getattr(hw, "memory_gb", None):
+            print(f"✔ RAM: {hw.memory_gb} GB")
+
+        print("\nHardware detection complete.\n")
+        return 0
+
     def stack(self, args: argparse.Namespace) -> int:
         """Handle `cortex stack` commands (list/describe/install/dry-run)."""
         try:
@@ -824,6 +847,9 @@ def main():
     # Wizard command
     wizard_parser = subparsers.add_parser("wizard", help="Configure API key interactively")
 
+    #config command
+    config_parser = subparsers.add_parser("config", help="Interactive setup wizard for Contex Configuration")
+
     # Status command
     status_parser = subparsers.add_parser("status", help="Show system status")
 
@@ -910,6 +936,8 @@ def main():
             return cli.demo()
         elif args.command == "wizard":
             return cli.wizard()
+        elif args.command == "config":
+            return cli.config()
         elif args.command == "status":
             return cli.status()
         elif args.command == "install":

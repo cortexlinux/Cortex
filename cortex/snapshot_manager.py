@@ -80,65 +80,87 @@ class SnapshotManager:
         """Get path to snapshot metadata file"""
         return self._get_snapshot_path(snapshot_id) / "metadata.json"
 
-    def _detect_apt_packages(self) -> list[dict[str, str]]:
-        """Detect installed APT packages"""
+    def _run_package_detection(
+        self,
+        cmd: list[str],
+        parser_func,
+        manager_name: str
+    ) -> list[dict[str, str]]:
+        """Generic package detection with command execution and parsing.
+        
+        Args:
+            cmd: Command to execute as list
+            parser_func: Function to parse stdout into package list
+            manager_name: Name of package manager for logging
+            
+        Returns:
+            List of package dictionaries with 'name' and 'version' keys
+        """
         packages = []
         try:
             result = subprocess.run(
-                ["dpkg-query", "-W", "-f=${Package}\t${Version}\n"],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=self.TIMEOUT,
                 check=False,
             )
             if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    if line.strip():
-                        parts = line.split("\t")
-                        if len(parts) >= 2:
-                            packages.append({"name": parts[0], "version": parts[1]})
-        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.warning(f"APT package detection failed: {e}")
+                packages = parser_func(result.stdout)
+        except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"{manager_name} package detection failed: {e}")
         return packages
+
+    def _parse_apt_output(self, stdout: str) -> list[dict[str, str]]:
+        """Parse APT package output."""
+        packages = []
+        for line in stdout.strip().split("\n"):
+            if line.strip():
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    packages.append({"name": parts[0], "version": parts[1]})
+        return packages
+
+    def _parse_pip_output(self, stdout: str) -> list[dict[str, str]]:
+        """Parse PIP package output."""
+        packages = []
+        pip_packages = json.loads(stdout)
+        for pkg in pip_packages:
+            packages.append({"name": pkg["name"], "version": pkg["version"]})
+        return packages
+
+    def _parse_npm_output(self, stdout: str) -> list[dict[str, str]]:
+        """Parse NPM package output."""
+        packages = []
+        npm_data = json.loads(stdout)
+        if "dependencies" in npm_data:
+            for name, info in npm_data["dependencies"].items():
+                packages.append({"name": name, "version": info.get("version", "unknown")})
+        return packages
+
+    def _detect_apt_packages(self) -> list[dict[str, str]]:
+        """Detect installed APT packages"""
+        return self._run_package_detection(
+            ["dpkg-query", "-W", "-f=${Package}\t${Version}\n"],
+            self._parse_apt_output,
+            "APT"
+        )
 
     def _detect_pip_packages(self) -> list[dict[str, str]]:
         """Detect installed PIP packages"""
-        packages = []
-        try:
-            result = subprocess.run(
-                ["pip", "list", "--format=json"],
-                capture_output=True,
-                text=True,
-                timeout=self.TIMEOUT,
-                check=False,
-            )
-            if result.returncode == 0:
-                pip_packages = json.loads(result.stdout)
-                for pkg in pip_packages:
-                    packages.append({"name": pkg["name"], "version": pkg["version"]})
-        except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError) as e:
-            logger.warning(f"PIP package detection failed: {e}")
-        return packages
+        return self._run_package_detection(
+            ["pip", "list", "--format=json"],
+            self._parse_pip_output,
+            "PIP"
+        )
 
     def _detect_npm_packages(self) -> list[dict[str, str]]:
         """Detect installed NPM packages (global)"""
-        packages = []
-        try:
-            result = subprocess.run(
-                ["npm", "list", "-g", "--json", "--depth=0"],
-                capture_output=True,
-                text=True,
-                timeout=self.TIMEOUT,
-                check=False,
-            )
-            if result.returncode == 0:
-                npm_data = json.loads(result.stdout)
-                if "dependencies" in npm_data:
-                    for name, info in npm_data["dependencies"].items():
-                        packages.append({"name": name, "version": info.get("version", "unknown")})
-        except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError) as e:
-            logger.warning(f"NPM package detection failed: {e}")
-        return packages
+        return self._run_package_detection(
+            ["npm", "list", "-g", "--json", "--depth=0"],
+            self._parse_npm_output,
+            "NPM"
+        )
 
     def _get_system_info(self) -> dict[str, str]:
         """Gather system information"""

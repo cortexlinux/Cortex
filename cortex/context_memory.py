@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cortex.utils.db_pool import SQLiteConnectionPool, get_connection_pool
+from cortex.utils.db_pool import get_connection_pool, SQLiteConnectionPool
 
 
 @dataclass
@@ -92,7 +92,7 @@ class ContextMemory:
         """Initialize SQLite database schema"""
         # Initialize connection pool (thread-safe singleton)
         self._pool = get_connection_pool(str(self.db_path), pool_size=5)
-
+        
         with self._pool.get_connection() as conn:
             cursor = conn.cursor()
 
@@ -161,9 +161,7 @@ class ContextMemory:
             )
 
             # Create indexes for performance
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_memory_category ON memory_entries(category)"
-            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_memory_category ON memory_entries(category)")
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_memory_timestamp ON memory_entries(timestamp)"
             )
@@ -649,9 +647,7 @@ class ContextMemory:
                 FROM memory_entries
             """
             )
-            stats["success_rate"] = (
-                round(cursor.fetchone()[0], 2) if stats["total_entries"] > 0 else 0
-            )
+            stats["success_rate"] = round(cursor.fetchone()[0], 2) if stats["total_entries"] > 0 else 0
 
             # Total patterns
             cursor.execute("SELECT COUNT(*) FROM patterns")

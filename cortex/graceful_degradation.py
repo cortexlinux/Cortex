@@ -20,7 +20,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from cortex.utils.db_pool import SQLiteConnectionPool, get_connection_pool
+from cortex.utils.db_pool import get_connection_pool, SQLiteConnectionPool
 
 logger = logging.getLogger(__name__)
 

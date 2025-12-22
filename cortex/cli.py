@@ -10,15 +10,6 @@ from cortex.ask import AskHandler
 from cortex.branding import VERSION, console, cx_header, cx_print, show_banner
 from cortex.coordinator import InstallationCoordinator, InstallationStep, StepStatus
 from cortex.demo import run_demo
-<<<<<<< HEAD
-from cortex.dependency_importer import (
-    DependencyImporter,
-    PackageEcosystem,
-    ParseResult,
-    format_package_list,
-)
-=======
->>>>>>> 94c0fa4 (feat: add environment variable manager with encryption and templates)
 from cortex.env_manager import EnvironmentManager, get_env_manager
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 from cortex.llm.interpreter import CommandInterpreter

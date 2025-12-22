@@ -21,7 +21,3 @@ cortex <your-idea-here>
 ## Alternatives considered
 
 Any workarounds you've tried.
-
-## Bounty interest
-
-Are you interested in implementing this for a bounty? (Yes/No)

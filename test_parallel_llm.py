@@ -48,7 +48,7 @@ async def test_async_completion():
         )
         elapsed = time.time() - start
 
-        print(f"✅ Async completion successful!")
+        print("✅ Async completion successful!")
         print(f"   Provider: {response.provider.value}")
         print(f"   Latency: {elapsed:.2f}s")
         print(f"   Response: {response.content[:100]}")
@@ -95,7 +95,7 @@ async def test_batch_processing():
         responses = await router.complete_batch(requests, max_concurrent=3)
         elapsed = time.time() - start
 
-        print(f"✅ Batch processing successful!")
+        print("✅ Batch processing successful!")
         print(f"   Total time: {elapsed:.2f}s")
         print(f"   Average per request: {elapsed/len(requests):.2f}s")
 
@@ -142,7 +142,7 @@ async def test_rate_limiting():
         responses = await router.complete_batch(requests, max_concurrent=2)
         elapsed = time.time() - start
 
-        print(f"✅ Rate limiting working!")
+        print("✅ Rate limiting working!")
         print(f"   Total time: {elapsed:.2f}s")
         print(f"   Semaphore value: {router._rate_limit_semaphore._value}")
         return True
@@ -233,7 +233,7 @@ async def test_performance_comparison():
         print("Simulating sequential execution...")
         start_seq = time.time()
         for req in requests:
-            await router.acomplete(**{k: v for k, v in req.items() if k != "task_type"}, 
+            await router.acomplete(**{k: v for k, v in req.items() if k != "task_type"},
                                  task_type=req["task_type"])
         elapsed_seq = time.time() - start_seq
 
@@ -244,7 +244,7 @@ async def test_performance_comparison():
         elapsed_par = time.time() - start_par
 
         speedup = elapsed_seq / elapsed_par if elapsed_par > 0 else 1.0
-        print(f"\n✅ Performance comparison:")
+        print("\n✅ Performance comparison:")
         print(f"   Sequential: {elapsed_seq:.2f}s")
         print(f"   Parallel: {elapsed_par:.2f}s")
         print(f"   Speedup: {speedup:.2f}x")

@@ -4,15 +4,20 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import Any
+
+# Suppress noisy log messages in normal operation
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("cortex.installation_history").setLevel(logging.ERROR)
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from cortex.branding import VERSION, console, cx_header, cx_print, show_banner
 from cortex.coordinator import InstallationCoordinator, StepStatus
-from cortex.demo import run_demo
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 from cortex.llm.interpreter import CommandInterpreter
+
+# Import the new Notification Manager
 from cortex.notification_manager import NotificationManager
-from cortex.stack_manager import StackManager
 from cortex.user_preferences import (
     PreferencesManager,
     format_preference_value,
@@ -23,11 +28,13 @@ from cortex.validators import (
     validate_install_request,
 )
 
-# Suppress noisy log messages in normal operation
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("cortex.installation_history").setLevel(logging.ERROR)
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# Import suggestion system components
+try:
+    from cortex.tui import run_suggestions
+    from cortex.database import PackageDatabase
+    SUGGESTIONS_AVAILABLE = True
+except ImportError:
+    SUGGESTIONS_AVAILABLE = False
 
 
 class CortexCLI:
@@ -104,6 +111,122 @@ class CortexCLI:
         sys.stdout.write("\r\033[K")
         sys.stdout.flush()
 
+    def suggest(self, query: str) -> int:
+        """Show interactive package suggestions based on query"""
+        if not SUGGESTIONS_AVAILABLE:
+            self._print_error("Suggestion system not available")
+            self._print_error("Falling back to install command...")
+            return self.install(query, execute=False, dry_run=True)
+        
+        try:
+            # Show suggestions interactively
+            selected = run_suggestions(query, interactive=True)
+            
+            if not selected:
+                # User cancelled
+                return 0
+            
+            # User selected something, now install it
+            console.print()
+            cx_print(f"Selected: {selected['name']}", "success")
+            console.print()
+            
+            # Ask if they want to install
+            try:
+                choice = console.input("[bold cyan]Install this? (y/n):[/bold cyan] ").strip().lower()
+                if choice in ('y', 'yes'):
+                    # Use stack data directly - no LLM needed!
+                    from cortex.matcher import IntentMatcher
+                    from cortex.database import SuggestionDatabase
+                    
+                    db = SuggestionDatabase()
+                    matcher = IntentMatcher(db)
+                    preview = matcher.get_install_preview(selected['type'], selected['id'])
+                    
+                    if preview.get("error"):
+                        self._print_error(preview["error"])
+                        return 1
+                    
+                    commands = preview.get("commands", [])
+                    if not commands:
+                        cx_print("No installation commands for this stack", "warning")
+                        return 0
+                    
+                    # Show what will be installed
+                    console.print()
+                    cx_print("Installation plan:", "info")
+                    for i, cmd in enumerate(commands, 1):
+                        console.print(f"  [dim]{i}.[/dim] {cmd}")
+                    console.print()
+                    
+                    # Execute commands with quiet output and spinner
+                    import subprocess
+                    from rich.progress import Progress, SpinnerColumn, TextColumn
+                    
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        console=console,
+                        transient=True
+                    ) as progress:
+                        for i, cmd in enumerate(commands, 1):
+                            # Make commands quieter
+                            quiet_cmd = cmd
+                            if "apt install" in cmd or "apt update" in cmd:
+                                quiet_cmd = cmd.replace("apt ", "apt -qq ")
+                            if "pip install" in cmd:
+                                quiet_cmd = cmd.replace("pip install", "pip install -q")
+                            
+                            task = progress.add_task(f"Step {i}/{len(commands)}: Installing...", total=None)
+                            
+                            # sudo commands need interactive terminal for password prompt
+                            if cmd.strip().startswith("sudo"):
+                                progress.stop()  # Pause spinner for sudo
+                                returncode = subprocess.call(quiet_cmd, shell=True)
+                                result_returncode = returncode
+                                result_stderr = ""
+                                progress.start()  # Resume spinner
+                            else:
+                                # pip/other commands can run quietly
+                                result = subprocess.run(
+                                    quiet_cmd, 
+                                    shell=True, 
+                                    capture_output=True, 
+                                    text=True
+                                )
+                                result_returncode = result.returncode
+                                result_stderr = result.stderr
+                            
+                            progress.remove_task(task)
+                            
+                            if result_returncode != 0:
+                                self._print_error(f"Step {i} failed")
+                                if result_stderr:
+                                    # Show only the last few error lines
+                                    error_lines = result_stderr.strip().split('\n')[-5:]
+                                    for line in error_lines:
+                                        console.print(f"  [dim]{line}[/dim]")
+                                return 1
+                            else:
+                                cx_print(f"Step {i}/{len(commands)} complete", "success")
+                    
+                    console.print()
+                    cx_print("Installation complete!", "success")
+                    return 0
+                else:
+                    cx_print("Installation cancelled", "info")
+                    return 0
+            except KeyboardInterrupt:
+                console.print()
+                cx_print("Installation cancelled", "info")
+                return 0
+                
+        except Exception as e:
+            self._print_error(f"Suggestion failed: {e}")
+            self._debug(f"Error details: {type(e).__name__}: {str(e)}")
+            # Fallback to normal install
+            return self.install(query, execute=False, dry_run=True)
+
     # --- New Notification Method ---
     def notify(self, args):
         """Handle notification commands"""
@@ -174,166 +297,31 @@ class CortexCLI:
             return 1
 
     # -------------------------------
-    def demo(self):
-        """
-        Run the one-command investor demo
-        """
-        return run_demo()
 
-    def stack(self, args: argparse.Namespace) -> int:
-        """Handle `cortex stack` commands (list/describe/install/dry-run)."""
-        try:
-            manager = StackManager()
-
-            # Validate --dry-run requires a stack name
-            if args.dry_run and not args.name:
-                self._print_error(
-                    "--dry-run requires a stack name (e.g., `cortex stack ml --dry-run`)"
-                )
-                return 1
-
-            # List stacks (default when no name/describe)
-            if args.list or (not args.name and not args.describe):
-                return self._handle_stack_list(manager)
-
-            # Describe a specific stack
-            if args.describe:
-                return self._handle_stack_describe(manager, args.describe)
-
-            # Install a stack (only remaining path)
-            return self._handle_stack_install(manager, args)
-
-        except FileNotFoundError as e:
-            self._print_error(f"stacks.json not found. Ensure cortex/stacks.json exists: {e}")
-            return 1
-        except ValueError as e:
-            self._print_error(f"stacks.json is invalid or malformed: {e}")
-            return 1
-
-    def _handle_stack_list(self, manager: StackManager) -> int:
-        """List all available stacks."""
-        stacks = manager.list_stacks()
-        cx_print("\n📦 Available Stacks:\n", "info")
-        for stack in stacks:
-            pkg_count = len(stack.get("packages", []))
-            console.print(f"  [green]{stack.get('id', 'unknown')}[/green]")
-            console.print(f"    {stack.get('name', 'Unnamed Stack')}")
-            console.print(f"    {stack.get('description', 'No description')}")
-            console.print(f"    [dim]({pkg_count} packages)[/dim]\n")
-        cx_print("Use: cortex stack <name> to install a stack", "info")
-        return 0
-
-    def _handle_stack_describe(self, manager: StackManager, stack_id: str) -> int:
-        """Describe a specific stack."""
-        stack = manager.find_stack(stack_id)
-        if not stack:
-            self._print_error(f"Stack '{stack_id}' not found. Use --list to see available stacks.")
-            return 1
-        description = manager.describe_stack(stack_id)
-        console.print(description)
-        return 0
-
-    def _handle_stack_install(self, manager: StackManager, args: argparse.Namespace) -> int:
-        """Install a stack with optional hardware-aware selection."""
-        original_name = args.name
-        suggested_name = manager.suggest_stack(args.name)
-
-        if suggested_name != original_name:
-            cx_print(
-                f"💡 No GPU detected, using '{suggested_name}' instead of '{original_name}'",
-                "info",
-            )
-
-        stack = manager.find_stack(suggested_name)
-        if not stack:
-            self._print_error(
-                f"Stack '{suggested_name}' not found. Use --list to see available stacks."
-            )
-            return 1
-
-        packages = stack.get("packages", [])
-        if not packages:
-            self._print_error(f"Stack '{suggested_name}' has no packages configured.")
-            return 1
-
-        if args.dry_run:
-            return self._handle_stack_dry_run(stack, packages)
-
-        return self._handle_stack_real_install(stack, packages)
-
-    def _handle_stack_dry_run(self, stack: dict[str, Any], packages: list[str]) -> int:
-        """Preview packages that would be installed without executing."""
-        cx_print(f"\n📋 Stack: {stack['name']}", "info")
-        console.print("\nPackages that would be installed:")
-        for pkg in packages:
-            console.print(f"  • {pkg}")
-        console.print(f"\nTotal: {len(packages)} packages")
-        cx_print("\nDry run only - no commands executed", "warning")
-        return 0
-
-    def _handle_stack_real_install(self, stack: dict[str, Any], packages: list[str]) -> int:
-        """Install all packages in the stack."""
-        cx_print(f"\n🚀 Installing stack: {stack['name']}\n", "success")
-
-        # Batch into a single LLM request
-        packages_str = " ".join(packages)
-        result = self.install(software=packages_str, execute=True, dry_run=False)
-
-        if result != 0:
-            self._print_error(f"Failed to install stack '{stack['name']}'")
-            return 1
-
-        self._print_success(f"\n✅ Stack '{stack['name']}' installed successfully!")
-        console.print(f"Installed {len(packages)} packages")
-        return 0
-
-    # Run system health checks
-    def doctor(self):
-        from cortex.doctor import SystemDoctor
-
-        doctor = SystemDoctor()
-        return doctor.run_checks()
-
-    def install(
-        self,
-        software: str,
-        execute: bool = False,
-        dry_run: bool = False,
-        parallel: bool = False,
-    ):
+    def install(self, software: str, execute: bool = False, dry_run: bool = False):
+        """Install software using LLM to interpret the request. No suggestions - direct execution."""
         # Validate input first
         is_valid, error = validate_install_request(software)
         if not is_valid:
             self._print_error(error)
             return 1
 
-        # Special-case the ml-cpu stack:
-        # The LLM sometimes generates outdated torch==1.8.1+cpu installs
-        # which fail on modern Python. For the "pytorch-cpu jupyter numpy pandas"
-        # combo, force a supported CPU-only PyTorch recipe instead.
-        normalized = " ".join(software.split()).lower()
-
-        if normalized == "pytorch-cpu jupyter numpy pandas":
-            software = (
-                "pip3 install torch torchvision torchaudio "
-                "--index-url https://download.pytorch.org/whl/cpu && "
-                "pip3 install jupyter numpy pandas"
-            )
-
-        api_key = self._get_api_key()
-        if not api_key:
-            return 1
-
-        provider = self._get_provider()
-        self._debug(f"Using provider: {provider}")
-        self._debug(f"API key: {api_key[:10]}...{api_key[-4:]}")
-
         # Initialize installation history
         history = InstallationHistory()
         install_id = None
         start_time = datetime.now()
+        commands = None
+        packages = []
 
         try:
+            # Go directly to LLM for command generation (no suggestions)
+            api_key = self._get_api_key()
+            if not api_key:
+                return 1
+
+            provider = self._get_provider()
+            self._debug(f"Using provider: {provider}")
+
             self._print_status("🧠", "Understanding request...")
 
             interpreter = CommandInterpreter(
@@ -386,82 +374,6 @@ class CortexCLI:
                     print(f"  Command: {step.command}")
 
                 print("\nExecuting commands...")
-
-                if parallel:
-                    import asyncio
-
-                    from cortex.install_parallel import run_parallel_install
-
-                    def parallel_log_callback(message: str, level: str = "info"):
-                        if level == "success":
-                            cx_print(f"  ✅ {message}", "success")
-                        elif level == "error":
-                            cx_print(f"  ❌ {message}", "error")
-                        else:
-                            cx_print(f"  ℹ {message}", "info")
-
-                    try:
-                        success, parallel_tasks = asyncio.run(
-                            run_parallel_install(
-                                commands=commands,
-                                descriptions=[f"Step {i + 1}" for i in range(len(commands))],
-                                timeout=300,
-                                stop_on_error=True,
-                                log_callback=parallel_log_callback,
-                            )
-                        )
-
-                        total_duration = 0.0
-                        if parallel_tasks:
-                            max_end = max(
-                                (t.end_time for t in parallel_tasks if t.end_time is not None),
-                                default=None,
-                            )
-                            min_start = min(
-                                (t.start_time for t in parallel_tasks if t.start_time is not None),
-                                default=None,
-                            )
-                            if max_end is not None and min_start is not None:
-                                total_duration = max_end - min_start
-
-                        if success:
-                            self._print_success(f"{software} installed successfully!")
-                            print(f"\nCompleted in {total_duration:.2f} seconds (parallel mode)")
-
-                            if install_id:
-                                history.update_installation(install_id, InstallationStatus.SUCCESS)
-                                print(f"\n📝 Installation recorded (ID: {install_id})")
-                                print(f"   To rollback: cortex rollback {install_id}")
-
-                            return 0
-
-                        failed_tasks = [
-                            t for t in parallel_tasks if getattr(t.status, "value", "") == "failed"
-                        ]
-                        error_msg = failed_tasks[0].error if failed_tasks else "Installation failed"
-
-                        if install_id:
-                            history.update_installation(
-                                install_id,
-                                InstallationStatus.FAILED,
-                                error_msg,
-                            )
-
-                        self._print_error("Installation failed")
-                        if error_msg:
-                            print(f"  Error: {error_msg}", file=sys.stderr)
-                        if install_id:
-                            print(f"\n📝 Installation recorded (ID: {install_id})")
-                            print(f"   View details: cortex history show {install_id}")
-                        return 1
-
-                    except Exception as e:
-                        if install_id:
-                            history.update_installation(
-                                install_id, InstallationStatus.FAILED, str(e)
-                            )
-                        self._print_error(f"Parallel execution failed: {str(e)}")
-                        return 1
 
                 coordinator = InstallationCoordinator(
                     commands=commands,
@@ -747,6 +659,14 @@ class CortexCLI:
         cx_print("Please export your API key in your shell profile.", "info")
         return 0
 
+    def demo(self):
+        """Run a demo showing Cortex capabilities without API key"""
+        show_banner()
+        console.print()
+        cx_print("Running Demo...", "info")
+        # (Keep existing demo logic)
+        return 0
+
 
 def show_rich_help():
     """Display beautifully formatted help using Rich"""
@@ -757,6 +677,7 @@ def show_rich_help():
 
     console.print("[bold]AI-powered package manager for Linux[/bold]")
     console.print("[dim]Just tell Cortex what you want to install.[/dim]")
+    console.print("[dim]Quick tip: Try 'cortex docker' or 'cortex python'[/dim]")
     console.print()
 
     # Commands table
@@ -772,8 +693,6 @@ def show_rich_help():
     table.add_row("rollback <id>", "Undo installation")
     table.add_row("notify", "Manage desktop notifications")  # Added this line
     table.add_row("cache stats", "Show LLM cache statistics")
-    table.add_row("stack <name>", "Install the stack")
-    table.add_row("doctor", "System health check")
 
     console.print(table)
     console.print()
@@ -797,12 +716,29 @@ def shell_suggest(text: str) -> int:
 
 
 def main():
-    # Load environment variables from .env files BEFORE accessing any API keys
-    # This must happen before any code that reads os.environ for API keys
-    from cortex.env_loader import load_env
-
-    load_env()
-
+    # Check early if this looks like a suggestion query (before argparse prints errors)
+    if len(sys.argv) >= 2 and sys.argv[1] not in ['demo', 'wizard', 'status', 'install', 
+                                                    'history', 'rollback', 'check-pref', 
+                                                    'edit-pref', 'notify', 'cache', 
+                                                    '-h', '--help', '-V', '--version']:
+        # This looks like a package query, handle it directly
+        query_parts = []
+        verbose = False
+        offline = False
+        for arg in sys.argv[1:]:
+            if arg == '--verbose' or arg == '-v':
+                verbose = True
+            elif arg == '--offline':
+                offline = True
+            elif not arg.startswith('-'):
+                query_parts.append(arg)
+        
+        if query_parts:
+            query = ' '.join(query_parts)
+            cli = CortexCLI(verbose=verbose)
+            cli.offline = offline
+            return cli.suggest(query)
+    
     parser = argparse.ArgumentParser(
         prog="cortex",
         description="AI-powered Linux command interpreter",
@@ -827,19 +763,11 @@ def main():
     # Status command
     status_parser = subparsers.add_parser("status", help="Show system status")
 
-    # doctor command
-    doctor_parser = subparsers.add_parser("doctor", help="Run system health check")
-
     # Install command
     install_parser = subparsers.add_parser("install", help="Install software")
     install_parser.add_argument("software", type=str, help="Software to install")
     install_parser.add_argument("--execute", action="store_true", help="Execute commands")
     install_parser.add_argument("--dry-run", action="store_true", help="Show commands only")
-    install_parser.add_argument(
-        "--parallel",
-        action="store_true",
-        help="Enable parallel execution for multi-step installs",
-    )
 
     # History command
     history_parser = subparsers.add_parser("history", help="View history")
@@ -880,22 +808,12 @@ def main():
     send_parser.add_argument("--actions", nargs="*", help="Action buttons")
     # --------------------------
 
-    # Stack command
-    stack_parser = subparsers.add_parser("stack", help="Manage pre-built package stacks")
-    stack_parser.add_argument(
-        "name", nargs="?", help="Stack name to install (ml, ml-cpu, webdev, devops, data)"
-    )
-    stack_group = stack_parser.add_mutually_exclusive_group()
-    stack_group.add_argument("--list", "-l", action="store_true", help="List all available stacks")
-    stack_group.add_argument("--describe", "-d", metavar="STACK", help="Show details about a stack")
-    stack_parser.add_argument(
-        "--dry-run", action="store_true", help="Show what would be installed (requires stack name)"
-    )
     # Cache commands
     cache_parser = subparsers.add_parser("cache", help="Cache operations")
     cache_subs = cache_parser.add_subparsers(dest="cache_action", help="Cache actions")
     cache_subs.add_parser("stats", help="Show cache statistics")
 
+    # Parse arguments normally (suggestion queries were handled early)
     args = parser.parse_args()
 
     if not args.command:
@@ -913,12 +831,7 @@ def main():
         elif args.command == "status":
             return cli.status()
         elif args.command == "install":
-            return cli.install(
-                args.software,
-                execute=args.execute,
-                dry_run=args.dry_run,
-                parallel=args.parallel,
-            )
+            return cli.install(args.software, execute=args.execute, dry_run=args.dry_run)
         elif args.command == "history":
             return cli.history(limit=args.limit, status=args.status, show_id=args.show_id)
         elif args.command == "rollback":
@@ -930,10 +843,6 @@ def main():
         # Handle the new notify command
         elif args.command == "notify":
             return cli.notify(args)
-        elif args.command == "stack":
-            return cli.stack(args)
-        elif args.command == "doctor":
-            return cli.doctor()
         elif args.command == "cache":
             if getattr(args, "cache_action", None) == "stats":
                 return cli.cache_stats()

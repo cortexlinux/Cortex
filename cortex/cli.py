@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from cortex.branding import VERSION, console, cx_header, cx_print, show_banner
 from cortex.coordinator import InstallationCoordinator, StepStatus
+from cortex.env_manager import EnvManager
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 from cortex.llm.interpreter import CommandInterpreter
 from cortex.notification_manager import NotificationManager
@@ -612,6 +613,209 @@ class CortexCLI:
             self._print_error(f"Failed to edit preferences: {str(e)}")
             return 1
 
+    def env(self, args: argparse.Namespace) -> int:
+        """Handle environment variable management commands."""
+        try:
+            manager = EnvManager()
+
+            # Set variable
+            if args.env_action == "set":
+                if not args.app or not args.key or not args.value:
+                    self._print_error("Usage: cortex env set <app> <key> <value> [--encrypt]")
+                    return 1
+
+                try:
+                    manager.set(
+                        args.app,
+                        args.key,
+                        args.value,
+                        encrypt=args.encrypt,
+                        description=args.description or "",
+                        tags=args.tags or [],
+                    )
+                    if args.encrypt:
+                        cx_print(f"🔐 {args.key}: Variable encrypted and stored", "success")
+                    else:
+                        cx_print(f"✓ {args.key}: Environment variable set", "success")
+                    return 0
+                except ValueError as e:
+                    self._print_error(str(e))
+                    return 1
+
+            # Get variable
+            elif args.env_action == "get":
+                if not args.app or not args.key:
+                    self._print_error("Usage: cortex env get <app> <key>")
+                    return 1
+
+                value = manager.get(args.app, args.key, decrypt=not args.encrypted_value)
+                if value is None:
+                    self._print_error(f"Variable '{args.key}' not found in '{args.app}'")
+                    return 1
+
+                console.print(f"[green]{args.key}[/green]: {value}")
+                return 0
+
+            # List variables
+            elif args.env_action == "list":
+                if not args.app:
+                    # List all apps
+                    apps = manager.list_apps()
+                    if not apps:
+                        cx_print("No applications with environment variables found", "info")
+                        return 0
+
+                    cx_print("\n📦 Applications with environment variables:\n", "info")
+                    for app in sorted(apps):
+                        env_vars = manager.list(app)
+                        console.print(f"  [green]{app}[/green] ({len(env_vars)} variables)")
+                    console.print()
+                    cx_print("Use: cortex env list <app> to see variables", "info")
+                    return 0
+
+                # List variables for specific app
+                env_vars = manager.list(args.app)
+                if not env_vars:
+                    cx_print(f"No environment variables for '{args.app}'", "info")
+                    return 0
+
+                cx_print(f"\n🔧 Environment variables for [bold]{args.app}[/bold]:\n", "info")
+                for key, var in sorted(env_vars.items()):
+                    if var.encrypted:
+                        value = "[encrypted]"
+                        console.print(f"  [yellow]{key}[/yellow]: [dim]{value}[/dim] 🔐")
+                    else:
+                        console.print(f"  [green]{key}[/green]: {var.value}")
+                    if var.description:
+                        console.print(f"    [dim]{var.description}[/dim]")
+                console.print()
+                return 0
+
+            # Delete variable
+            elif args.env_action == "delete":
+                if not args.app or not args.key:
+                    self._print_error("Usage: cortex env delete <app> <key>")
+                    return 1
+
+                if manager.delete(args.app, args.key):
+                    cx_print(f"✓ Variable '{args.key}' deleted from '{args.app}'", "success")
+                    return 0
+                else:
+                    self._print_error(f"Variable '{args.key}' not found in '{args.app}'")
+                    return 1
+
+            # Export variables
+            elif args.env_action == "export":
+                if not args.app:
+                    self._print_error("Usage: cortex env export <app> [--format env|json|yaml]")
+                    return 1
+
+                env_vars = manager.list(args.app)
+                if not env_vars:
+                    self._print_error(f"No environment variables for '{args.app}'")
+                    return 1
+
+                output = manager.export(args.app, format=args.format)
+                print(output)
+                return 0
+
+            # Import variables
+            elif args.env_action == "import":
+                if not args.app or not args.file:
+                    self._print_error("Usage: cortex env import <app> <file> [--format env|json]")
+                    return 1
+
+                try:
+                    with open(args.file) as f:
+                        env_data = f.read()
+                    manager.import_env(args.app, env_data, format=args.format, merge=args.merge)
+                    cx_print(f"✓ Environment variables imported to '{args.app}'", "success")
+                    return 0
+                except FileNotFoundError:
+                    self._print_error(f"File not found: {args.file}")
+                    return 1
+                except Exception as e:
+                    self._print_error(f"Import failed: {str(e)}")
+                    return 1
+
+            # Apply template
+            elif args.env_action == "template":
+                if args.template_action == "list":
+                    templates = manager.list_templates()
+                    if not templates:
+                        cx_print("No templates available", "info")
+                        return 0
+
+                    cx_print("\n📋 Available templates:\n", "info")
+                    for template in templates:
+                        console.print(f"  [green]{template.name}[/green]")
+                        console.print(f"    {template.description}")
+                        console.print(f"    [dim]Variables: {', '.join(template.variables.keys())}[/dim]")
+                        if template.required_vars:
+                            console.print(f"    [dim]Required: {', '.join(template.required_vars)}[/dim]")
+                        console.print()
+                    return 0
+
+                elif args.template_action == "apply":
+                    if not args.app or not args.template_name:
+                        self._print_error("Usage: cortex env template apply <app> <template_name>")
+                        return 1
+
+                    try:
+                        # Parse variable overrides from --var KEY=VALUE
+                        variables = {}
+                        if args.var:
+                            for var_assignment in args.var:
+                                if "=" not in var_assignment:
+                                    self._print_error(f"Invalid variable format: {var_assignment}")
+                                    return 1
+                                key, value = var_assignment.split("=", 1)
+                                variables[key.strip()] = value.strip()
+
+                        manager.apply_template(args.app, args.template_name, variables)
+                        cx_print(f"✓ Template '{args.template_name}' applied to '{args.app}'", "success")
+                        return 0
+                    except ValueError as e:
+                        self._print_error(str(e))
+                        return 1
+
+                else:
+                    self._print_error("Unknown template action. Use: list, apply")
+                    return 1
+
+            # Clear all variables for an app
+            elif args.env_action == "clear":
+                if not args.app:
+                    self._print_error("Usage: cortex env clear <app>")
+                    return 1
+
+                # Confirm before clearing
+                env_vars = manager.list(args.app)
+                if not env_vars:
+                    cx_print(f"No environment variables for '{args.app}'", "info")
+                    return 0
+
+                console.print(f"\n⚠️  About to delete {len(env_vars)} variables from '{args.app}'")
+                confirm = input("Continue? [y/N]: ")
+                if confirm.lower() != "y":
+                    cx_print("Cancelled", "info")
+                    return 0
+
+                if manager.delete_app(args.app):
+                    cx_print(f"✓ All variables cleared for '{args.app}'", "success")
+                    return 0
+                else:
+                    self._print_error(f"Failed to clear variables for '{args.app}'")
+                    return 1
+
+            else:
+                self._print_error("Unknown env command. Use: set, get, list, delete, export, import, template, clear")
+                return 1
+
+        except Exception as e:
+            self._print_error(f"Environment management failed: {str(e)}")
+            return 1
+
     def status(self):
         """Show system status including security features"""
         import shutil
@@ -686,7 +890,8 @@ def show_rich_help():
     table.add_row("install <pkg>", "Install software")
     table.add_row("history", "View history")
     table.add_row("rollback <id>", "Undo installation")
-    table.add_row("notify", "Manage desktop notifications")  # Added this line
+    table.add_row("env", "Manage environment variables")
+    table.add_row("notify", "Manage desktop notifications")
     table.add_row("cache stats", "Show LLM cache statistics")
     table.add_row("stack <name>", "Install the stack")
     table.add_row("doctor", "System health check")
@@ -801,6 +1006,57 @@ def main():
     cache_subs = cache_parser.add_subparsers(dest="cache_action", help="Cache actions")
     cache_subs.add_parser("stats", help="Show cache statistics")
 
+    # Environment variable commands
+    env_parser = subparsers.add_parser("env", help="Manage environment variables")
+    env_subs = env_parser.add_subparsers(dest="env_action", help="Environment actions")
+
+    # env set
+    set_parser = env_subs.add_parser("set", help="Set environment variable")
+    set_parser.add_argument("app", help="Application name")
+    set_parser.add_argument("key", help="Variable name")
+    set_parser.add_argument("value", help="Variable value")
+    set_parser.add_argument("--encrypt", action="store_true", help="Encrypt the value")
+    set_parser.add_argument("--description", help="Variable description")
+    set_parser.add_argument("--tags", nargs="*", help="Tags for organization")
+
+    # env get
+    get_parser = env_subs.add_parser("get", help="Get environment variable")
+    get_parser.add_argument("app", help="Application name")
+    get_parser.add_argument("key", help="Variable name")
+    get_parser.add_argument("--encrypted-value", action="store_true", help="Show encrypted value")
+
+    # env list
+    list_parser = env_subs.add_parser("list", help="List environment variables")
+    list_parser.add_argument("app", nargs="?", help="Application name (optional)")
+
+    # env delete
+    delete_parser = env_subs.add_parser("delete", help="Delete environment variable")
+    delete_parser.add_argument("app", help="Application name")
+    delete_parser.add_argument("key", help="Variable name")
+
+    # env export
+    export_parser = env_subs.add_parser("export", help="Export environment variables")
+    export_parser.add_argument("app", help="Application name")
+    export_parser.add_argument("--format", choices=["env", "json", "yaml"], default="env", help="Export format")
+
+    # env import
+    import_parser = env_subs.add_parser("import", help="Import environment variables")
+    import_parser.add_argument("app", help="Application name")
+    import_parser.add_argument("file", help="File to import from")
+    import_parser.add_argument("--format", choices=["env", "json"], default="env", help="Import format")
+    import_parser.add_argument("--merge", action="store_true", help="Merge with existing variables")
+
+    # env template
+    template_parser = env_subs.add_parser("template", help="Manage environment templates")
+    template_parser.add_argument("template_action", choices=["list", "apply"], help="Template action")
+    template_parser.add_argument("app", nargs="?", help="Application name (for apply)")
+    template_parser.add_argument("template_name", nargs="?", help="Template name (for apply)")
+    template_parser.add_argument("--var", nargs="*", help="Variable overrides (KEY=VALUE)")
+
+    # env clear
+    clear_parser = env_subs.add_parser("clear", help="Clear all environment variables for an app")
+    clear_parser.add_argument("app", help="Application name")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -839,6 +1095,8 @@ def main():
                 return cli.cache_stats()
             parser.print_help()
             return 1
+        elif args.command == "env":
+            return cli.env(args)
         else:
             parser.print_help()
             return 1

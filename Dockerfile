@@ -19,6 +19,10 @@ RUN apt-get update && \
     sudo \
     && rm -rf /var/lib/apt/lists/*
 
+RUN useradd -m -u 1000 cortex && \
+    echo "cortex ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/cortex && \
+    chmod 0440 /etc/sudoers.d/cortex
+
 # Copy requirements first for better layer caching
 COPY requirements.txt /app/requirements.txt
 
@@ -35,6 +39,10 @@ RUN pip install --no-cache-dir -e .
 # Set up environment
 ENV PYTHONUNBUFFERED=1
 ENV CORTEX_DOCKER=1
+
+# Switch to non-root user
+USER cortex
+WORKDIR /app
 
 # Configure entrypoint to handle command passthrough
 # Usage: docker run cortexlinux/cortex install nginx --dry-run

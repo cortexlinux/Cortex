@@ -9,10 +9,9 @@ from typing import Optional
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from .database import PackageDatabase
-from .hardware_detection import detect_hardware, detect_quick
+from .hardware_detection import detect_quick
 from .matcher import FuzzyMatcher
 
 console = Console()
@@ -296,17 +295,17 @@ class SuggestionTUI:
             return None
 
         # Display clean suggestions instantly - no extra text
+        num_results = min(5, len(self.results))
         for i, item in enumerate(self.results[:5]):
             prefix = "→" if i == 0 else " "
             name = item["id"].ljust(16)  # Pad for alignment
             desc = item["description"]
-            console.print(f"{prefix} {name} {desc}")
-        console.print("[dim]  [↑↓ to select, Enter to install, Tab for details][/dim]")
+            console.print(f"{prefix} {i + 1}. {name} {desc}")
         console.print()
         console.print("  0. Cancel")
 
         try:
-            choice = console.input("\n[bold]Enter choice (1-5, 0 to cancel):[/bold] ")
+            choice = console.input(f"\n[bold]Enter choice (1-{num_results}, 0 to cancel):[/bold] ")
             idx = int(choice) - 1
             if 0 <= idx < len(self.results):
                 self.selected_item = self.results[idx]
@@ -325,7 +324,7 @@ def run_suggestions(
 
     Args:
         query: Initial search query
-        db_path: Optional path to packages.json
+        db_path: Optional path to suggestions.json
         interactive: Run in interactive mode
 
     Returns:
@@ -335,7 +334,7 @@ def run_suggestions(
         db = PackageDatabase(db_path)
     except FileNotFoundError as e:
         console.print(f"[red]Error:[/red] {e}")
-        console.print("[dim]Make sure packages.json exists in data/ directory[/dim]")
+        console.print("[dim]Make sure suggestions.json exists in data/ directory[/dim]")
         return None
 
     tui = SuggestionTUI(db)

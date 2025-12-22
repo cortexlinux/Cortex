@@ -55,8 +55,13 @@ class SuggestionDatabase:
 
     def _load(self) -> None:
         """Load the database from JSON file."""
-        with open(self.db_path) as f:
-            self._data = json.load(f)
+        try:
+            with open(self.db_path, encoding="utf-8") as f:
+                self._data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Failed to parse database file '{self.db_path}': {e.msg} at line {e.lineno}"
+            ) from e
 
         self._intents = self._data.get("intents", [])
         self._languages = self._data.get("languages", [])
@@ -169,14 +174,23 @@ class SuggestionDatabase:
         # e.g., "machine learning", "deep learning", "data engineering"
         for intent in self._intents:
             for kw in intent.get("keywords", []):
-                # Only check multi-word keywords
-                if " " in kw and kw.lower() in query:
-                    return intent["id"]
+                # Only check multi-word keywords with word boundary matching
+                if " " in kw:
+                    # Split query into words and check if keyword words appear in sequence
+                    kw_words = kw.lower().split()
+                    query_words = query.split()
+                    for i in range(len(query_words) - len(kw_words) + 1):
+                        if query_words[i : i + len(kw_words)] == kw_words:
+                            return intent["id"]
 
         # Second pass: check multi-word aliases
         for alias, intent_ids in self._aliases.items():
-            if " " in alias and alias.lower() in query:
-                return intent_ids[0]
+            if " " in alias:
+                alias_words = alias.lower().split()
+                query_words = query.split()
+                for i in range(len(query_words) - len(alias_words) + 1):
+                    if query_words[i : i + len(alias_words)] == alias_words:
+                        return intent_ids[0]
 
         # Third pass: check single-token intent keywords (not ambiguous with languages)
         for token in tokens:

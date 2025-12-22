@@ -11,6 +11,7 @@ from cortex.coordinator import InstallationCoordinator, StepStatus
 from cortex.demo import run_demo
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 from cortex.llm.interpreter import CommandInterpreter
+from cortex.network_config import NetworkConfig
 from cortex.notification_manager import NotificationManager
 from cortex.stack_manager import StackManager
 from cortex.user_preferences import (
@@ -802,6 +803,15 @@ def main():
     from cortex.env_loader import load_env
 
     load_env()
+
+    # Auto-configure network settings (proxy detection, VPN compatibility, offline mode)
+    # Runs silently unless there's an issue or configuration is needed
+    try:
+        network = NetworkConfig()
+        network.auto_configure()
+    except Exception as e:
+        # Network config is optional - don't block execution if it fails
+        console.print(f"[yellow]⚠️  Network auto-config failed: {e}[/yellow]")
 
     parser = argparse.ArgumentParser(
         prog="cortex",

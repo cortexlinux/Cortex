@@ -8,20 +8,12 @@ These tests verify:
 - install mode influence on prompt generation
 - safety-oriented logic
 
-These tests do NOT:
-- call real LLMs
-- execute real commands
-- depend on system state
-
-They focus only on deterministic logic.
 """
-
-import pytest
-
 
 # ---------------------------------------------------------------------
 # Intent normalization / ambiguity handling
 # ---------------------------------------------------------------------
+
 
 def test_known_domain_is_not_ambiguous():
     """
@@ -35,15 +27,16 @@ def test_known_domain_is_not_ambiguous():
         "confidence": 0.2,
     }
 
-    # normalization logic (mirrors CLI behavior)
+    # normalize action
     action = intent["action"].split("|")[0].strip()
-    ambiguous = intent["ambiguous"]
 
+    # ambiguity resolution logic
+    ambiguous = intent["ambiguous"]
     if intent["domain"] != "unknown":
         ambiguous = False
 
     assert action == "install"
-    assert ambiguous is False
+    assert not ambiguous
 
 
 def test_unknown_domain_remains_ambiguous():
@@ -61,29 +54,34 @@ def test_unknown_domain_remains_ambiguous():
     domain = intent["domain"]
 
     assert domain == "unknown"
-    assert ambiguous is True
+    assert ambiguous
 
 
 # ---------------------------------------------------------------------
-# Install mode influence on command planning
+# Install mode influence on prompt generation
 # ---------------------------------------------------------------------
 
-def test_python_install_mode_guides_prompt():
-    """
-    When install_mode is python, the prompt should guide the
-    model toward pip + virtualenv and away from sudo/apt.
-    """
-    software = "python machine learning"
-    install_mode = "python"
 
+def build_install_prompt(software: str, install_mode: str) -> str:
+    """
+    Helper to build install prompt based on install mode.
+    """
     if install_mode == "python":
-        prompt = (
+        return (
             f"install {software}. "
             "Use pip and Python virtual environments. "
             "Do NOT use sudo or system package managers."
         )
-    else:
-        prompt = f"install {software}"
+    return f"install {software}"
+
+
+def test_python_install_mode_guides_prompt():
+    """
+    Python install mode should guide the prompt toward pip/venv usage.
+    """
+    software = "python machine learning"
+
+    prompt = build_install_prompt(software, "python")
 
     assert "pip" in prompt.lower()
     assert "sudo" in prompt.lower()
@@ -91,19 +89,11 @@ def test_python_install_mode_guides_prompt():
 
 def test_system_install_mode_default_prompt():
     """
-    When install_mode is system, the prompt should remain generic.
+    System install mode should not force pip-based instructions.
     """
     software = "docker"
-    install_mode = "system"
 
-    if install_mode == "python":
-        prompt = (
-            f"install {software}. "
-            "Use pip and Python virtual environments. "
-            "Do NOT use sudo or system package managers."
-        )
-    else:
-        prompt = f"install {software}"
+    prompt = build_install_prompt(software, "system")
 
     assert "pip" not in prompt.lower()
     assert "install docker" in prompt.lower()
@@ -113,6 +103,7 @@ def test_system_install_mode_default_prompt():
 # Preview vs execute behavior
 # ---------------------------------------------------------------------
 
+
 def test_without_execute_is_preview_only():
     """
     Without --execute, commands should only be previewed.
@@ -120,30 +111,29 @@ def test_without_execute_is_preview_only():
     execute = False
     commands = ["echo test"]
 
-    executed = False
-    if execute:
-        executed = True
+    # execution state derives from execute flag
+    executed = bool(execute)
 
-    assert executed is False
+    assert not executed
     assert len(commands) == 1
 
 
 def test_with_execute_triggers_confirmation_flow():
     """
-    With --execute, execution is gated behind confirmation.
+    With --execute, execution must be gated behind confirmation.
     """
     execute = True
-    confirmation_required = False
 
-    if execute:
-        confirmation_required = True
+    # confirmation requirement derives from execute flag
+    confirmation_required = bool(execute)
 
-    assert confirmation_required is True
+    assert confirmation_required
 
 
 # ---------------------------------------------------------------------
 # Safety checks (logic-level)
 # ---------------------------------------------------------------------
+
 
 def test_python_required_but_missing_blocks_execution():
     """
@@ -154,14 +144,12 @@ def test_python_required_but_missing_blocks_execution():
         "myenv/bin/python -m pip install scikit-learn",
     ]
 
-    python_available = False  # simulate missing runtime
+    python_available = False
     uses_python = any("python" in cmd for cmd in commands)
 
-    blocked = False
-    if uses_python and not python_available:
-        blocked = True
+    blocked = uses_python and not python_available
 
-    assert blocked is True
+    assert blocked
 
 
 def test_sudo_required_but_unavailable_blocks_execution():
@@ -176,16 +164,15 @@ def test_sudo_required_but_unavailable_blocks_execution():
     sudo_available = False
     uses_sudo = any(cmd.strip().startswith("sudo ") for cmd in commands)
 
-    blocked = False
-    if uses_sudo and not sudo_available:
-        blocked = True
+    blocked = uses_sudo and not sudo_available
 
-    assert blocked is True
+    assert blocked
 
 
 # ---------------------------------------------------------------------
 # Kubernetes (k8s) understanding (intent-level)
 # ---------------------------------------------------------------------
+
 
 def test_k8s_maps_to_kubernetes_domain():
     """
@@ -199,4 +186,4 @@ def test_k8s_maps_to_kubernetes_domain():
     }
 
     assert intent["domain"] == "kubernetes"
-    assert intent["ambiguous"] is False
+    assert not intent["ambiguous"]

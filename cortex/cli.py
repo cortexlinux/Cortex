@@ -30,22 +30,10 @@ logging.getLogger("cortex.installation_history").setLevel(logging.ERROR)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
-def read_stdin():
-    """
-    Read piped stdin safely (if present).
-    """
-    if not sys.stdin.isatty():
-        data = sys.stdin.read()
-        data = data.strip()
-        return data if data else None
-    return None
-
-
 class CortexCLI:
     def __init__(self, verbose: bool = False):
         self.spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self.spinner_idx = 0
-        self.stdin_data = read_stdin()
         self.prefs_manager = None  # Lazy initialization
         self.verbose = verbose
         self.offline = False
@@ -331,6 +319,10 @@ class CortexCLI:
         if not is_valid:
             self._print_error(error)
             return 1
+        api_key = self._get_api_key()
+        if not api_key:
+            self._print_error("No API key configured")
+            return 1
 
         # Special-case the ml-cpu stack:
         # The LLM sometimes generates outdated torch==1.8.1+cpu installs
@@ -345,10 +337,6 @@ class CortexCLI:
                 "pip3 install jupyter numpy pandas"
             )
 
-        api_key = self._get_api_key()
-        if not api_key:
-            return 1
-
         provider = self._get_provider()
         self._debug(f"Using provider: {provider}")
         self._debug(f"API key: {api_key[:10]}...{api_key[-4:]}")
@@ -361,11 +349,14 @@ class CortexCLI:
         try:
             self._print_status("🧠", "Understanding request...")
 
+            api_key = self._get_api_key()
+            if not api_key:
+                self._print_error("No API key configured")
+                return 1
+
             interpreter = CommandInterpreter(
                 api_key=api_key, provider=provider, offline=self.offline
             )
-            # -------- Intent understanding (NEW) --------
-            intent = interpreter.extract_intent(software)
             intent = interpreter.extract_intent(software)
             # ---------- Extract install mode from intent ----------
             install_mode = intent.get("install_mode", "system")
@@ -373,9 +364,19 @@ class CortexCLI:
             # ---------- NORMALIZE INTENT (ADD THIS) ----------
             action = intent.get("action", "unknown")
             domain = intent.get("domain", "unknown")
-            confidence = float(intent.get("confidence", 0.0))
-            ambiguous = bool(intent.get("ambiguous", False))
 
+            if not isinstance(action, str):
+                action = "unknown"
+            if not isinstance(domain, str):
+                domain = "unknown"
+
+            raw_confidence = intent.get("confidence", 0.0)
+            try:
+                confidence = float(raw_confidence)
+            except (TypeError, ValueError):
+                confidence = 0.0
+
+            ambiguous = bool(intent.get("ambiguous", False))
             # Normalize unstable model output
             if isinstance(action, str) and "|" in action:
                 action = action.split("|")[0].strip()
@@ -392,16 +393,16 @@ class CortexCLI:
             print(f"• Confidence  : {confidence}")
 
             # Handle ambiguous intent
-            if ambiguous and domain == "unknown" and not execute:
+            if ambiguous and domain == "unknown":
                 print("\n❓ Your request is ambiguous.")
                 print("Please clarify what you want to install.")
                 return 0
 
             # Handle low confidence
-            if intent.get("confidence", 0) < 0.4:
+            if confidence < 0.4 and execute:
                 print("\n🤔 I'm not confident I understood your request.")
                 print("Please rephrase with more details.")
-                return 0
+                return 1
 
             print()  # spacing
             # -------------------------------------------

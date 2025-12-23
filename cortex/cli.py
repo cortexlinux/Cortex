@@ -57,7 +57,10 @@ class CortexCLI:
         # Ollama/offline mode does not require an API key.
         if provider == "ollama":
             self._debug("Using Ollama (no API key required)")
-            return "ollama-local"
+            return "ollama-local"  # Placeholder for Ollama
+        if provider == "fake":
+            self._debug("Using Fake provider for testing")
+            return "fake-key"  # Placeholder for Fake provider
 
         if provider == "openai":
             openai_key = os.environ.get("OPENAI_API_KEY")
@@ -87,7 +90,7 @@ class CortexCLI:
     def _get_provider(self) -> str:
         # Check environment variable for explicit provider choice
         explicit_provider = os.environ.get("CORTEX_PROVIDER", "").lower()
-        if explicit_provider in ["ollama", "openai", "claude"]:
+        if explicit_provider in ["ollama", "openai", "claude", "fake"]:
             return explicit_provider
 
         # Auto-detect based on available API keys

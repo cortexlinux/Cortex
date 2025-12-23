@@ -775,7 +775,7 @@ class CortexCLI:
                 
             cx_print("\n📸 Available Snapshots:\n", "info")
             print(f"{'ID':<24} {'Date':<20} {'Packages':<12} {'Description'}")
-            print("=" * 84)
+            print("=" * 99)
             
             for snapshot in snapshots:
                 date = snapshot.timestamp[:19].replace("T", " ")

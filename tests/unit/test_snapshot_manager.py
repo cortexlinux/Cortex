@@ -27,6 +27,80 @@ class TestSnapshotManager(unittest.TestCase):
         """Clean up test fixtures."""
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    def _create_mock_snapshot_metadata(self, snapshot_id="test_snapshot",
+                                       apt_packages=None, pip_packages=None,
+                                       npm_packages=None, description="Test"):
+        """Helper method to create mock snapshot metadata.
+        
+        Args:
+            snapshot_id: The snapshot ID
+            apt_packages: List of APT package dicts (default: empty list)
+            pip_packages: List of PIP package dicts (default: empty list)
+            npm_packages: List of NPM package dicts (default: empty list)
+            description: Snapshot description
+            
+        Returns:
+            SnapshotMetadata object
+        """
+        return SnapshotMetadata(
+            id=snapshot_id,
+            timestamp="2025-01-01T12:00:00",
+            description=description,
+            packages={
+                "apt": apt_packages or [],
+                "pip": pip_packages or [],
+                "npm": npm_packages or []
+            },
+            system_info={},
+            file_count=len((apt_packages or []) + (pip_packages or []) + (npm_packages or [])),
+            size_bytes=0
+        )
+
+    def _create_mock_snapshot_on_disk(self, snapshot_id, metadata_dict=None):
+        """Helper method to create a mock snapshot directory and metadata file.
+        
+        Args:
+            snapshot_id: The snapshot ID
+            metadata_dict: Optional metadata dict (will create default if not provided)
+            
+        Returns:
+            Path to the created snapshot directory
+        """
+        snapshot_path = self.snapshots_dir / snapshot_id
+        snapshot_path.mkdir(parents=True)
+
+        if metadata_dict is None:
+            metadata_dict = {
+                "id": snapshot_id,
+                "timestamp": "2025-01-01T12:00:00",
+                "description": "Test snapshot",
+                "packages": {"apt": [], "pip": [], "npm": []},
+                "system_info": {"os": "ubuntu-24.04"},
+                "file_count": 0,
+                "size_bytes": 0
+            }
+
+        with open(snapshot_path / "metadata.json", "w", encoding="utf-8") as f:
+            json.dump(metadata_dict, f)
+        
+        return snapshot_path
+
+    def _setup_mock_packages(self, mock_apt, mock_pip, mock_npm,
+                             apt_packages=None, pip_packages=None, npm_packages=None):
+        """Helper method to setup mock package detection return values.
+        
+        Args:
+            mock_apt: Mock for _detect_apt_packages
+            mock_pip: Mock for _detect_pip_packages
+            mock_npm: Mock for _detect_npm_packages
+            apt_packages: List of APT packages (default: empty)
+            pip_packages: List of PIP packages (default: empty)
+            npm_packages: List of NPM packages (default: empty)
+        """
+        mock_apt.return_value = apt_packages or []
+        mock_pip.return_value = pip_packages or []
+        mock_npm.return_value = npm_packages or []
+
     @patch("subprocess.run")
     def test_detect_apt_packages(self, mock_run):
         """Test APT package detection."""
@@ -108,23 +182,8 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "create_snapshot")
     def test_list_snapshots_with_data(self, mock_create):
         """Test listing snapshots with existing data."""
-        # Create mock snapshot manually
         snapshot_id = "20250101_120000"
-        snapshot_path = self.snapshots_dir / snapshot_id
-        snapshot_path.mkdir(parents=True)
-
-        metadata = {
-            "id": snapshot_id,
-            "timestamp": "2025-01-01T12:00:00",
-            "description": "Test snapshot",
-            "packages": {"apt": [], "pip": [], "npm": []},
-            "system_info": {"os": "ubuntu-24.04"},
-            "file_count": 0,
-            "size_bytes": 0
-        }
-
-        with open(snapshot_path / "metadata.json", "w") as f:
-            json.dump(metadata, f)
+        self._create_mock_snapshot_on_disk(snapshot_id)
 
         snapshots = self.manager.list_snapshots()
 
@@ -141,9 +200,6 @@ class TestSnapshotManager(unittest.TestCase):
     def test_get_snapshot_success(self, mock_create):
         """Test getting existing snapshot."""
         snapshot_id = "20250101_120000"
-        snapshot_path = self.snapshots_dir / snapshot_id
-        snapshot_path.mkdir(parents=True)
-
         metadata = {
             "id": snapshot_id,
             "timestamp": "2025-01-01T12:00:00",
@@ -153,9 +209,7 @@ class TestSnapshotManager(unittest.TestCase):
             "file_count": 1,
             "size_bytes": 0
         }
-
-        with open(snapshot_path / "metadata.json", "w") as f:
-            json.dump(metadata, f)
+        self._create_mock_snapshot_on_disk(snapshot_id, metadata)
 
         snapshot = self.manager.get_snapshot(snapshot_id)
 
@@ -173,8 +227,7 @@ class TestSnapshotManager(unittest.TestCase):
     def test_delete_snapshot_success(self, mock_create):
         """Test successful snapshot deletion."""
         snapshot_id = "20250101_120000"
-        snapshot_path = self.snapshots_dir / snapshot_id
-        snapshot_path.mkdir(parents=True)
+        snapshot_path = self._create_mock_snapshot_on_disk(snapshot_id)
 
         success, message = self.manager.delete_snapshot(snapshot_id)
 
@@ -188,16 +241,11 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "create_snapshot")
     def test_retention_policy(self, mock_create, mock_npm, mock_pip, mock_apt):
         """Test that retention policy deletes old snapshots."""
-        mock_apt.return_value = []
-        mock_pip.return_value = []
-        mock_npm.return_value = []
+        self._setup_mock_packages(mock_apt, mock_pip, mock_npm)
 
         # Create 12 snapshots manually (exceeds limit of 10)
         for i in range(12):
             snapshot_id = f"2025010{(i % 9) + 1}_12000{i}"
-            snapshot_path = self.snapshots_dir / snapshot_id
-            snapshot_path.mkdir(parents=True)
-
             metadata = {
                 "id": snapshot_id,
                 "timestamp": f"2025-01-0{(i % 9) + 1}T12:00:0{i}",
@@ -207,9 +255,7 @@ class TestSnapshotManager(unittest.TestCase):
                 "file_count": 0,
                 "size_bytes": 0
             }
-
-            with open(snapshot_path / "metadata.json", "w") as f:
-                json.dump(metadata, f)
+            self._create_mock_snapshot_on_disk(snapshot_id, metadata)
 
         # Trigger retention policy
         self.manager._apply_retention_policy()
@@ -225,27 +271,16 @@ class TestSnapshotManager(unittest.TestCase):
     def test_restore_snapshot_dry_run(self, mock_get, mock_npm, mock_pip, mock_apt):
         """Test snapshot restore in dry-run mode."""
         # Mock current packages
-        mock_apt.return_value = [{"name": "vim", "version": "8.2"}]
-        mock_pip.return_value = []
-        mock_npm.return_value = []
+        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
+                                 apt_packages=[{"name": "vim", "version": "8.2"}])
 
         # Mock snapshot data
-        mock_snapshot = SnapshotMetadata(
-            id="test_snapshot",
-            timestamp="2025-01-01T12:00:00",
-            description="Test",
-            packages={
-                "apt": [{"name": "nginx", "version": "1.18.0"}],
-                "pip": [],
-                "npm": []
-            },
-            system_info={},
-            file_count=1,
-            size_bytes=0
+        mock_snapshot = self._create_mock_snapshot_metadata(
+            apt_packages=[{"name": "nginx", "version": "1.18.0"}]
         )
         mock_get.return_value = mock_snapshot
 
-        success, message, commands = self.manager.restore_snapshot("test_snapshot", dry_run=True)
+        success, _, commands = self.manager.restore_snapshot("test_snapshot", dry_run=True)
 
         self.assertTrue(success)
         self.assertGreater(len(commands), 0)
@@ -255,7 +290,7 @@ class TestSnapshotManager(unittest.TestCase):
 
     def test_restore_snapshot_not_found(self):
         """Test restoring non-existent snapshot."""
-        success, message, commands = self.manager.restore_snapshot("nonexistent")
+        success, message, _ = self.manager.restore_snapshot("nonexistent")
         self.assertFalse(success)
         self.assertIn("not found", message.lower())
 
@@ -283,23 +318,13 @@ class TestSnapshotManager(unittest.TestCase):
     def test_restore_snapshot_live_execution(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
         """Test snapshot restore with dry_run=False (actual execution)."""
         # Mock current packages - vim is installed
-        mock_apt.return_value = [{"name": "vim", "version": "8.2"}]
-        mock_pip.return_value = [{"name": "cowsay", "version": "6.1"}]
-        mock_npm.return_value = []
+        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
+                                 apt_packages=[{"name": "vim", "version": "8.2"}],
+                                 pip_packages=[{"name": "cowsay", "version": "6.1"}])
 
         # Mock snapshot data - nginx should be installed, vim removed, cowsay removed
-        mock_snapshot = SnapshotMetadata(
-            id="test_snapshot",
-            timestamp="2025-01-01T12:00:00",
-            description="Test",
-            packages={
-                "apt": [{"name": "nginx", "version": "1.18.0"}],
-                "pip": [],
-                "npm": []
-            },
-            system_info={},
-            file_count=1,
-            size_bytes=0
+        mock_snapshot = self._create_mock_snapshot_metadata(
+            apt_packages=[{"name": "nginx", "version": "1.18.0"}]
         )
         mock_get.return_value = mock_snapshot
 
@@ -354,23 +379,12 @@ class TestSnapshotManager(unittest.TestCase):
         import subprocess
 
         # Mock current packages
-        mock_apt.return_value = [{"name": "vim", "version": "8.2"}]
-        mock_pip.return_value = []
-        mock_npm.return_value = []
+        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
+                                 apt_packages=[{"name": "vim", "version": "8.2"}])
 
         # Mock snapshot data
-        mock_snapshot = SnapshotMetadata(
-            id="test_snapshot",
-            timestamp="2025-01-01T12:00:00",
-            description="Test",
-            packages={
-                "apt": [{"name": "nginx", "version": "1.18.0"}],
-                "pip": [],
-                "npm": []
-            },
-            system_info={},
-            file_count=1,
-            size_bytes=0
+        mock_snapshot = self._create_mock_snapshot_metadata(
+            apt_packages=[{"name": "nginx", "version": "1.18.0"}]
         )
         mock_get.return_value = mock_snapshot
 
@@ -380,7 +394,7 @@ class TestSnapshotManager(unittest.TestCase):
             subprocess.CalledProcessError(1, "apt-get", stderr="Package not found")
         ]
 
-        success, message, commands = self.manager.restore_snapshot("test_snapshot", dry_run=False)
+        success, message, _ = self.manager.restore_snapshot("test_snapshot", dry_run=False)
 
         # Should handle the error gracefully
         self.assertFalse(success)
@@ -396,20 +410,11 @@ class TestSnapshotManager(unittest.TestCase):
         import subprocess
 
         # Mock current packages
-        mock_apt.return_value = []
-        mock_pip.return_value = [{"name": "badpkg", "version": "1.0"}]
-        mock_npm.return_value = []
+        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
+                                 pip_packages=[{"name": "badpkg", "version": "1.0"}])
 
         # Mock snapshot data
-        mock_snapshot = SnapshotMetadata(
-            id="test_snapshot",
-            timestamp="2025-01-01T12:00:00",
-            description="Test",
-            packages={"apt": [], "pip": [], "npm": []},
-            system_info={},
-            file_count=0,
-            size_bytes=0
-        )
+        mock_snapshot = self._create_mock_snapshot_metadata()
         mock_get.return_value = mock_snapshot
 
         # First call succeeds (sudo check), second raises error without stderr
@@ -420,7 +425,7 @@ class TestSnapshotManager(unittest.TestCase):
             error
         ]
 
-        success, message, commands = self.manager.restore_snapshot("test_snapshot", dry_run=False)
+        success, message, _ = self.manager.restore_snapshot("test_snapshot", dry_run=False)
 
         # Should handle error gracefully even without stderr
         self.assertFalse(success)
@@ -434,27 +439,15 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "get_snapshot")
     def test_restore_snapshot_sudo_check_failure(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
         """Test restore_snapshot when sudo check fails."""
-        # Mock packages
-        mock_apt.return_value = []
-        mock_pip.return_value = []
-        mock_npm.return_value = []
-
-        # Mock snapshot
-        mock_snapshot = SnapshotMetadata(
-            id="test_snapshot",
-            timestamp="2025-01-01T12:00:00",
-            description="Test",
-            packages={"apt": [], "pip": [], "npm": []},
-            system_info={},
-            file_count=0,
-            size_bytes=0
-        )
+        # Mock packages and snapshot
+        self._setup_mock_packages(mock_apt, mock_pip, mock_npm)
+        mock_snapshot = self._create_mock_snapshot_metadata()
         mock_get.return_value = mock_snapshot
 
         # Sudo check fails
         mock_run.return_value = MagicMock(returncode=1)
 
-        success, message, commands = self.manager.restore_snapshot("test_snapshot", dry_run=False)
+        success, message, _ = self.manager.restore_snapshot("test_snapshot", dry_run=False)
 
         self.assertFalse(success)
         self.assertIn("sudo", message.lower())
@@ -500,28 +493,16 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "get_snapshot")
     def test_restore_snapshot_sudo_check_exception(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
         """Test restore_snapshot when sudo check raises exception."""
-        # Mock packages
-        mock_apt.return_value = []
-        mock_pip.return_value = []
-        mock_npm.return_value = []
-
-        # Mock snapshot
-        mock_snapshot = SnapshotMetadata(
-            id="test_snapshot",
-            timestamp="2025-01-01T12:00:00",
-            description="Test",
-            packages={"apt": [], "pip": [], "npm": []},
-            system_info={},
-            file_count=0,
-            size_bytes=0
-        )
+        # Mock packages and snapshot
+        self._setup_mock_packages(mock_apt, mock_pip, mock_npm)
+        mock_snapshot = self._create_mock_snapshot_metadata()
         mock_get.return_value = mock_snapshot
 
         # Sudo check raises exception
         mock_run.side_effect = Exception("sudo check failed")
 
         # Should handle exception and continue (logs warning)
-        success, message, commands = self.manager.restore_snapshot("test_snapshot", dry_run=False)
+        success, message, _ = self.manager.restore_snapshot("test_snapshot", dry_run=False)
 
         # Might succeed or fail depending on implementation, but shouldn't crash
         self.assertIsInstance(success, bool)
@@ -552,23 +533,12 @@ class TestSnapshotManager(unittest.TestCase):
         import subprocess
 
         # Mock current packages
-        mock_apt.return_value = [{"name": "vim", "version": "8.2"}]
-        mock_pip.return_value = []
-        mock_npm.return_value = []
+        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
+                                 apt_packages=[{"name": "vim", "version": "8.2"}])
 
         # Mock snapshot data
-        mock_snapshot = SnapshotMetadata(
-            id="test_snapshot",
-            timestamp="2025-01-01T12:00:00",
-            description="Test",
-            packages={
-                "apt": [{"name": "nginx", "version": "1.18.0"}],
-                "pip": [],
-                "npm": []
-            },
-            system_info={},
-            file_count=1,
-            size_bytes=0
+        mock_snapshot = self._create_mock_snapshot_metadata(
+            apt_packages=[{"name": "nginx", "version": "1.18.0"}]
         )
         mock_get.return_value = mock_snapshot
 
@@ -578,7 +548,7 @@ class TestSnapshotManager(unittest.TestCase):
             subprocess.TimeoutExpired("apt-get", 300)
         ]
 
-        success, message, commands = self.manager.restore_snapshot("test_snapshot", dry_run=False)
+        success, message, _ = self.manager.restore_snapshot("test_snapshot", dry_run=False)
 
         # Should handle timeout gracefully
         self.assertFalse(success)

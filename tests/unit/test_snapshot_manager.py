@@ -27,18 +27,23 @@ class TestSnapshotManager(unittest.TestCase):
         """Clean up test fixtures."""
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def _create_mock_snapshot_metadata(self, snapshot_id="test_snapshot",
-                                       apt_packages=None, pip_packages=None,
-                                       npm_packages=None, description="Test"):
+    def _create_mock_snapshot_metadata(
+        self,
+        snapshot_id="test_snapshot",
+        apt_packages=None,
+        pip_packages=None,
+        npm_packages=None,
+        description="Test",
+    ):
         """Helper method to create mock snapshot metadata.
-        
+
         Args:
             snapshot_id: The snapshot ID
             apt_packages: List of APT package dicts (default: empty list)
             pip_packages: List of PIP package dicts (default: empty list)
             npm_packages: List of NPM package dicts (default: empty list)
             description: Snapshot description
-            
+
         Returns:
             SnapshotMetadata object
         """
@@ -49,20 +54,20 @@ class TestSnapshotManager(unittest.TestCase):
             packages={
                 "apt": apt_packages or [],
                 "pip": pip_packages or [],
-                "npm": npm_packages or []
+                "npm": npm_packages or [],
             },
             system_info={},
             file_count=len((apt_packages or []) + (pip_packages or []) + (npm_packages or [])),
-            size_bytes=0
+            size_bytes=0,
         )
 
     def _create_mock_snapshot_on_disk(self, snapshot_id, metadata_dict=None):
         """Helper method to create a mock snapshot directory and metadata file.
-        
+
         Args:
             snapshot_id: The snapshot ID
             metadata_dict: Optional metadata dict (will create default if not provided)
-            
+
         Returns:
             Path to the created snapshot directory
         """
@@ -77,18 +82,19 @@ class TestSnapshotManager(unittest.TestCase):
                 "packages": {"apt": [], "pip": [], "npm": []},
                 "system_info": {"os": "ubuntu-24.04"},
                 "file_count": 0,
-                "size_bytes": 0
+                "size_bytes": 0,
             }
 
         with open(snapshot_path / "metadata.json", "w", encoding="utf-8") as f:
             json.dump(metadata_dict, f)
-        
+
         return snapshot_path
 
-    def _setup_mock_packages(self, mock_apt, mock_pip, mock_npm,
-                             apt_packages=None, pip_packages=None, npm_packages=None):
+    def _setup_mock_packages(
+        self, mock_apt, mock_pip, mock_npm, apt_packages=None, pip_packages=None, npm_packages=None
+    ):
         """Helper method to setup mock package detection return values.
-        
+
         Args:
             mock_apt: Mock for _detect_apt_packages
             mock_pip: Mock for _detect_pip_packages
@@ -104,10 +110,7 @@ class TestSnapshotManager(unittest.TestCase):
     @patch("subprocess.run")
     def test_detect_apt_packages(self, mock_run):
         """Test APT package detection."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="vim\t2:8.2.0\nnginx\t1.18.0\n"
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="vim\t2:8.2.0\nnginx\t1.18.0\n")
 
         packages = self.manager._detect_apt_packages()
 
@@ -121,10 +124,9 @@ class TestSnapshotManager(unittest.TestCase):
         """Test PIP package detection."""
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=json.dumps([
-                {"name": "requests", "version": "2.28.0"},
-                {"name": "pytest", "version": "7.2.0"}
-            ])
+            stdout=json.dumps(
+                [{"name": "requests", "version": "2.28.0"}, {"name": "pytest", "version": "7.2.0"}]
+            ),
         )
 
         packages = self.manager._detect_pip_packages()
@@ -138,12 +140,14 @@ class TestSnapshotManager(unittest.TestCase):
         """Test NPM package detection."""
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=json.dumps({
-                "dependencies": {
-                    "express": {"version": "4.18.0"},
-                    "lodash": {"version": "4.17.21"}
+            stdout=json.dumps(
+                {
+                    "dependencies": {
+                        "express": {"version": "4.18.0"},
+                        "lodash": {"version": "4.17.21"},
+                    }
                 }
-            })
+            ),
         )
 
         packages = self.manager._detect_npm_packages()
@@ -207,7 +211,7 @@ class TestSnapshotManager(unittest.TestCase):
             "packages": {"apt": [{"name": "vim", "version": "8.2"}], "pip": [], "npm": []},
             "system_info": {"os": "ubuntu-24.04"},
             "file_count": 1,
-            "size_bytes": 0
+            "size_bytes": 0,
         }
         self._create_mock_snapshot_on_disk(snapshot_id, metadata)
 
@@ -253,7 +257,7 @@ class TestSnapshotManager(unittest.TestCase):
                 "packages": {"apt": [], "pip": [], "npm": []},
                 "system_info": {},
                 "file_count": 0,
-                "size_bytes": 0
+                "size_bytes": 0,
             }
             self._create_mock_snapshot_on_disk(snapshot_id, metadata)
 
@@ -271,8 +275,9 @@ class TestSnapshotManager(unittest.TestCase):
     def test_restore_snapshot_dry_run(self, mock_get, mock_npm, mock_pip, mock_apt):
         """Test snapshot restore in dry-run mode."""
         # Mock current packages
-        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
-                                 apt_packages=[{"name": "vim", "version": "8.2"}])
+        self._setup_mock_packages(
+            mock_apt, mock_pip, mock_npm, apt_packages=[{"name": "vim", "version": "8.2"}]
+        )
 
         # Mock snapshot data
         mock_snapshot = self._create_mock_snapshot_metadata(
@@ -315,12 +320,18 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "_detect_pip_packages")
     @patch.object(SnapshotManager, "_detect_npm_packages")
     @patch.object(SnapshotManager, "get_snapshot")
-    def test_restore_snapshot_live_execution(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
+    def test_restore_snapshot_live_execution(
+        self, mock_get, mock_npm, mock_pip, mock_apt, mock_run
+    ):
         """Test snapshot restore with dry_run=False (actual execution)."""
         # Mock current packages - vim is installed
-        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
-                                 apt_packages=[{"name": "vim", "version": "8.2"}],
-                                 pip_packages=[{"name": "cowsay", "version": "6.1"}])
+        self._setup_mock_packages(
+            mock_apt,
+            mock_pip,
+            mock_npm,
+            apt_packages=[{"name": "vim", "version": "8.2"}],
+            pip_packages=[{"name": "cowsay", "version": "6.1"}],
+        )
 
         # Mock snapshot data - nginx should be installed, vim removed, cowsay removed
         mock_snapshot = self._create_mock_snapshot_metadata(
@@ -374,13 +385,16 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "_detect_pip_packages")
     @patch.object(SnapshotManager, "_detect_npm_packages")
     @patch.object(SnapshotManager, "get_snapshot")
-    def test_restore_snapshot_called_process_error(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
+    def test_restore_snapshot_called_process_error(
+        self, mock_get, mock_npm, mock_pip, mock_apt, mock_run
+    ):
         """Test restore_snapshot handles CalledProcessError correctly."""
         import subprocess
 
         # Mock current packages
-        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
-                                 apt_packages=[{"name": "vim", "version": "8.2"}])
+        self._setup_mock_packages(
+            mock_apt, mock_pip, mock_npm, apt_packages=[{"name": "vim", "version": "8.2"}]
+        )
 
         # Mock snapshot data
         mock_snapshot = self._create_mock_snapshot_metadata(
@@ -391,7 +405,7 @@ class TestSnapshotManager(unittest.TestCase):
         # First call succeeds (sudo check), second call raises CalledProcessError
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="", stderr=""),  # sudo check succeeds
-            subprocess.CalledProcessError(1, "apt-get", stderr="Package not found")
+            subprocess.CalledProcessError(1, "apt-get", stderr="Package not found"),
         ]
 
         success, message, _ = self.manager.restore_snapshot("test_snapshot", dry_run=False)
@@ -405,13 +419,16 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "_detect_pip_packages")
     @patch.object(SnapshotManager, "_detect_npm_packages")
     @patch.object(SnapshotManager, "get_snapshot")
-    def test_restore_snapshot_called_process_error_no_stderr(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
+    def test_restore_snapshot_called_process_error_no_stderr(
+        self, mock_get, mock_npm, mock_pip, mock_apt, mock_run
+    ):
         """Test restore_snapshot handles CalledProcessError without stderr."""
         import subprocess
 
         # Mock current packages
-        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
-                                 pip_packages=[{"name": "badpkg", "version": "1.0"}])
+        self._setup_mock_packages(
+            mock_apt, mock_pip, mock_npm, pip_packages=[{"name": "badpkg", "version": "1.0"}]
+        )
 
         # Mock snapshot data
         mock_snapshot = self._create_mock_snapshot_metadata()
@@ -420,10 +437,7 @@ class TestSnapshotManager(unittest.TestCase):
         # First call succeeds (sudo check), second raises error without stderr
         error = subprocess.CalledProcessError(1, "pip")
         error.stderr = None  # No stderr attribute
-        mock_run.side_effect = [
-            MagicMock(returncode=0),  # sudo check
-            error
-        ]
+        mock_run.side_effect = [MagicMock(returncode=0), error]  # sudo check
 
         success, message, _ = self.manager.restore_snapshot("test_snapshot", dry_run=False)
 
@@ -437,7 +451,9 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "_detect_pip_packages")
     @patch.object(SnapshotManager, "_detect_npm_packages")
     @patch.object(SnapshotManager, "get_snapshot")
-    def test_restore_snapshot_sudo_check_failure(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
+    def test_restore_snapshot_sudo_check_failure(
+        self, mock_get, mock_npm, mock_pip, mock_apt, mock_run
+    ):
         """Test restore_snapshot when sudo check fails."""
         # Mock packages and snapshot
         self._setup_mock_packages(mock_apt, mock_pip, mock_npm)
@@ -456,6 +472,7 @@ class TestSnapshotManager(unittest.TestCase):
     def test_detect_apt_packages_timeout(self, mock_run):
         """Test APT package detection handles timeout."""
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired("dpkg-query", 30)
 
         packages = self.manager._detect_apt_packages()
@@ -476,10 +493,7 @@ class TestSnapshotManager(unittest.TestCase):
     @patch("subprocess.run")
     def test_detect_npm_packages_json_decode_error(self, mock_run):
         """Test NPM package detection handles invalid JSON."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="invalid json {{"
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="invalid json {{")
 
         packages = self.manager._detect_npm_packages()
 
@@ -491,7 +505,9 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "_detect_pip_packages")
     @patch.object(SnapshotManager, "_detect_npm_packages")
     @patch.object(SnapshotManager, "get_snapshot")
-    def test_restore_snapshot_sudo_check_exception(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
+    def test_restore_snapshot_sudo_check_exception(
+        self, mock_get, mock_npm, mock_pip, mock_apt, mock_run
+    ):
         """Test restore_snapshot when sudo check raises exception."""
         # Mock packages and snapshot
         self._setup_mock_packages(mock_apt, mock_pip, mock_npm)
@@ -528,13 +544,16 @@ class TestSnapshotManager(unittest.TestCase):
     @patch.object(SnapshotManager, "_detect_pip_packages")
     @patch.object(SnapshotManager, "_detect_npm_packages")
     @patch.object(SnapshotManager, "get_snapshot")
-    def test_restore_snapshot_timeout_expired(self, mock_get, mock_npm, mock_pip, mock_apt, mock_run):
+    def test_restore_snapshot_timeout_expired(
+        self, mock_get, mock_npm, mock_pip, mock_apt, mock_run
+    ):
         """Test restore_snapshot handles TimeoutExpired correctly."""
         import subprocess
 
         # Mock current packages
-        self._setup_mock_packages(mock_apt, mock_pip, mock_npm,
-                                 apt_packages=[{"name": "vim", "version": "8.2"}])
+        self._setup_mock_packages(
+            mock_apt, mock_pip, mock_npm, apt_packages=[{"name": "vim", "version": "8.2"}]
+        )
 
         # Mock snapshot data
         mock_snapshot = self._create_mock_snapshot_metadata(
@@ -545,7 +564,7 @@ class TestSnapshotManager(unittest.TestCase):
         # First call succeeds (sudo check), second call times out
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="", stderr=""),  # sudo check succeeds
-            subprocess.TimeoutExpired("apt-get", 300)
+            subprocess.TimeoutExpired("apt-get", 300),
         ]
 
         success, message, _ = self.manager.restore_snapshot("test_snapshot", dry_run=False)

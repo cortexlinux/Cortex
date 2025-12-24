@@ -14,10 +14,11 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class SnapshotManager:
     TIMEOUT = 30  # seconds for package detection
     RESTORE_TIMEOUT = 300  # seconds for package install/remove operations
 
-    def __init__(self, snapshots_dir: Optional[Path] = None):
+    def __init__(self, snapshots_dir: Path | None = None):
         """
         Initialize SnapshotManager.
 
@@ -82,10 +83,7 @@ class SnapshotManager:
         return self._get_snapshot_path(snapshot_id) / "metadata.json"
 
     def _run_package_detection(
-        self,
-        cmd: list[str],
-        parser_func: Callable[[str], list[dict[str, str]]],
-        manager_name: str
+        self, cmd: list[str], parser_func: Callable[[str], list[dict[str, str]]], manager_name: str
     ) -> list[dict[str, str]]:
         """Generic package detection with command execution and parsing.
 
@@ -142,25 +140,19 @@ class SnapshotManager:
     def _detect_apt_packages(self) -> list[dict[str, str]]:
         """Detect installed APT packages"""
         return self._run_package_detection(
-            ["dpkg-query", "-W", "-f=${Package}\t${Version}\n"],
-            self._parse_apt_output,
-            "APT"
+            ["dpkg-query", "-W", "-f=${Package}\t${Version}\n"], self._parse_apt_output, "APT"
         )
 
     def _detect_pip_packages(self) -> list[dict[str, str]]:
         """Detect installed PIP packages"""
         return self._run_package_detection(
-            [sys.executable, "-m", "pip", "list", "--format=json"],
-            self._parse_pip_output,
-            "PIP"
+            [sys.executable, "-m", "pip", "list", "--format=json"], self._parse_pip_output, "PIP"
         )
 
     def _detect_npm_packages(self) -> list[dict[str, str]]:
         """Detect installed NPM packages (global)"""
         return self._run_package_detection(
-            ["npm", "list", "-g", "--json", "--depth=0"],
-            self._parse_npm_output,
-            "NPM"
+            ["npm", "list", "-g", "--json", "--depth=0"], self._parse_npm_output, "NPM"
         )
 
     def _get_system_info(self) -> dict[str, str]:
@@ -168,7 +160,7 @@ class SnapshotManager:
         info = {}
         try:
             # OS information
-            with open("/etc/os-release", "r") as f:
+            with open("/etc/os-release") as f:
                 for line in f:
                     if "=" in line:
                         key, value = line.strip().split("=", 1)
@@ -200,7 +192,7 @@ class SnapshotManager:
             logger.warning(f"System info detection failed: {e}")
         return info
 
-    def create_snapshot(self, description: str = "") -> tuple[bool, Optional[str], str]:
+    def create_snapshot(self, description: str = "") -> tuple[bool, str | None, str]:
         """
         Create a new system snapshot.
 
@@ -272,14 +264,14 @@ class SnapshotManager:
                 if snapshot_dir.is_dir():
                     metadata_path = snapshot_dir / "metadata.json"
                     if metadata_path.exists():
-                        with open(metadata_path, "r") as f:
+                        with open(metadata_path) as f:
                             data = json.load(f)
                             snapshots.append(SnapshotMetadata(**data))
         except Exception as e:
             logger.error(f"Failed to list snapshots: {e}")
         return snapshots
 
-    def get_snapshot(self, snapshot_id: str) -> Optional[SnapshotMetadata]:
+    def get_snapshot(self, snapshot_id: str) -> SnapshotMetadata | None:
         """
         Get metadata for a specific snapshot.
 
@@ -292,7 +284,7 @@ class SnapshotManager:
         try:
             metadata_path = self._get_metadata_path(snapshot_id)
             if metadata_path.exists():
-                with open(metadata_path, "r") as f:
+                with open(metadata_path) as f:
                     data = json.load(f)
                     return SnapshotMetadata(**data)
         except Exception as e:
@@ -335,11 +327,7 @@ class SnapshotManager:
         """
         if not dry_run:
             subprocess.run(
-                cmd_list,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=self.RESTORE_TIMEOUT
+                cmd_list, check=True, capture_output=True, text=True, timeout=self.RESTORE_TIMEOUT
             )
 
     def _restore_package_manager(
@@ -348,7 +336,7 @@ class SnapshotManager:
         snapshot_packages: dict[str, str],
         current_packages: dict[str, str],
         dry_run: bool,
-        commands: list[str]
+        commands: list[str],
     ) -> None:
         """Restore packages for a specific package manager.
 
@@ -366,17 +354,17 @@ class SnapshotManager:
         remove_cmds = {
             "apt": ["sudo", "apt-get", "remove", "-y"],
             "pip": ["pip", "uninstall", "-y"],
-            "npm": ["npm", "uninstall", "-g"]
+            "npm": ["npm", "uninstall", "-g"],
         }
         install_cmds = {
             "apt": ["sudo", "apt-get", "install", "-y"],
             "pip": ["pip", "install"],
-            "npm": ["npm", "install", "-g"]
+            "npm": ["npm", "install", "-g"],
         }
         version_formats = {
             "apt": lambda name, ver: f"{name}={ver}" if ver else name,
             "pip": lambda name, ver: f"{name}=={ver}" if ver else name,
-            "npm": lambda name, ver: f"{name}@{ver}" if ver else name
+            "npm": lambda name, ver: f"{name}@{ver}" if ver else name,
         }
 
         if to_remove:
@@ -412,17 +400,10 @@ class SnapshotManager:
         if not dry_run:
             try:
                 result = subprocess.run(
-                    ["sudo", "-n", "true"],
-                    capture_output=True,
-                    timeout=5,
-                    check=False
+                    ["sudo", "-n", "true"], capture_output=True, timeout=5, check=False
                 )
                 if result.returncode != 0:
-                    return (
-                        False,
-                        "Restore requires sudo privileges. Please run: sudo -v",
-                        []
-                    )
+                    return (False, "Restore requires sudo privileges. Please run: sudo -v", [])
             except Exception as e:
                 logger.warning(f"Could not verify sudo permissions: {e}")
 
@@ -444,18 +425,22 @@ class SnapshotManager:
             self._restore_package_manager("npm", snapshot_npm, current_npm, dry_run, commands)
 
             if dry_run:
-                return (True, f"Dry-run complete. {len(commands)} commands would be executed.", commands)
+                return (
+                    True,
+                    f"Dry-run complete. {len(commands)} commands would be executed.",
+                    commands,
+                )
             else:
                 return (True, f"Successfully restored snapshot {snapshot_id}", commands)
 
         except subprocess.TimeoutExpired as e:
             logger.error(f"Command timed out during restore: {e}")
-            cmd_str = ' '.join(e.cmd) if isinstance(e.cmd, list) else str(e.cmd)
+            cmd_str = " ".join(e.cmd) if isinstance(e.cmd, list) else str(e.cmd)
             error_msg = f"Restore failed. Command timed out after {e.timeout}s: {cmd_str}"
             return (False, error_msg, commands)
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed during restore: {e}")
-            stderr_msg = e.stderr if hasattr(e, 'stderr') and e.stderr else str(e)
+            stderr_msg = e.stderr if hasattr(e, "stderr") and e.stderr else str(e)
             error_msg = f"Restore failed. Command: {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}. Error: {stderr_msg}"
             return (False, error_msg, commands)
         except Exception as e:

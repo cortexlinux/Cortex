@@ -750,14 +750,16 @@ class CortexCLI:
     def snapshot(self, args: argparse.Namespace) -> int:
         """Handle snapshot commands (create/list/restore/show/delete)."""
         from cortex.snapshot_manager import SnapshotManager
-        
+
         manager = SnapshotManager()
-        
+
         if not args.snapshot_action:
-            self._print_error("Please specify a snapshot action: create, list, show, restore, or delete")
+            self._print_error(
+                "Please specify a snapshot action: create, list, show, restore, or delete"
+            )
             self._print_error("Run 'cortex snapshot --help' for usage information")
             return 1
-        
+
         if args.snapshot_action == "create":
             success, snapshot_id, message = manager.create_snapshot(args.description or "")
             if success:
@@ -766,48 +768,47 @@ class CortexCLI:
             else:
                 self._print_error(message)
                 return 1
-                
+
         elif args.snapshot_action == "list":
             snapshots = manager.list_snapshots()
             if not snapshots:
                 cx_print("No snapshots found.", "info")
                 return 0
-                
+
             cx_print("\n📸 Available Snapshots:\n", "info")
             print(f"{'ID':<24} {'Date':<20} {'Packages':<12} {'Description'}")
             print("=" * 99)
-            
+
             for snapshot in snapshots:
                 date = snapshot.timestamp[:19].replace("T", " ")
                 pkg_count = sum(len(pkgs) for pkgs in snapshot.packages.values())
                 desc = snapshot.description[:40] if snapshot.description else "(no description)"
                 print(f"{snapshot.id:<24} {date:<20} {pkg_count:<12} {desc}")
             return 0
-            
+
         elif args.snapshot_action == "show":
             snapshot = manager.get_snapshot(args.snapshot_id)
             if not snapshot:
                 self._print_error(f"Snapshot not found: {args.snapshot_id}")
                 return 1
-                
+
             cx_print(f"\nSnapshot Details: {snapshot.id}", "info")
             print("=" * 80)
             print(f"Timestamp: {snapshot.timestamp}")
             print(f"Description: {snapshot.description or '(no description)'}")
-            print(f"\nSystem Info:")
+            print("\nSystem Info:")
             for key, value in snapshot.system_info.items():
                 print(f"  {key}: {value}")
-            print(f"\nPackages:")
+            print("\nPackages:")
             for source, packages in snapshot.packages.items():
                 print(f"  {source.upper()}: {len(packages)} packages")
             return 0
-            
+
         elif args.snapshot_action == "restore":
             success, message, commands = manager.restore_snapshot(
-                args.snapshot_id, 
-                dry_run=args.dry_run
+                args.snapshot_id, dry_run=args.dry_run
             )
-            
+
             if args.dry_run:
                 cx_print(f"\n🔍 Dry-run: {message}", "info")
                 if commands:
@@ -825,7 +826,7 @@ class CortexCLI:
                             print(f"  {cmd}")
                     return 1
             return 0
-            
+
         elif args.snapshot_action == "delete":
             success, message = manager.delete_snapshot(args.snapshot_id)
             if success:
@@ -834,7 +835,7 @@ class CortexCLI:
             else:
                 self._print_error(message)
                 return 1
-                
+
         return 1
 
 
@@ -986,23 +987,23 @@ def main():
     # Snapshot commands
     snapshot_parser = subparsers.add_parser("snapshot", help="Manage system snapshots")
     snapshot_subs = snapshot_parser.add_subparsers(dest="snapshot_action", help="Snapshot actions")
-    
+
     # Create snapshot
     create_snap = snapshot_subs.add_parser("create", help="Create a new snapshot")
     create_snap.add_argument("description", nargs="?", default="", help="Snapshot description")
-    
+
     # List snapshots
     snapshot_subs.add_parser("list", help="List all snapshots")
-    
+
     # Show snapshot details
     show_snap = snapshot_subs.add_parser("show", help="Show snapshot details")
     show_snap.add_argument("snapshot_id", help="Snapshot ID")
-    
+
     # Restore snapshot
     restore_snap = snapshot_subs.add_parser("restore", help="Restore a snapshot")
     restore_snap.add_argument("snapshot_id", help="Snapshot ID")
     restore_snap.add_argument("--dry-run", action="store_true", help="Show actions only")
-    
+
     # Delete snapshot
     delete_snap = snapshot_subs.add_parser("delete", help="Delete a snapshot")
     delete_snap.add_argument("snapshot_id", help="Snapshot ID")

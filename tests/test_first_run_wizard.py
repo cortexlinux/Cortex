@@ -518,7 +518,7 @@ class TestIntegration:
     def test_complete_wizard_flow(self, mock_interpreter_class, mock_run, wizard):
         """Test complete wizard flow in non-interactive mode."""
         mock_run.return_value = MagicMock(returncode=0, stdout="")
-        
+
         mock_interpreter = Mock()
         mock_interpreter.parse.return_value = ["echo 'test command'"]
         mock_interpreter_class.return_value = mock_interpreter

@@ -101,6 +101,40 @@ class StepResult:
 
 
 class FirstRunWizard:
+    def _setup_claude_api(self) -> StepResult:
+        print("\nTo get a Claude API key:")
+        print("  1. Go to https://console.anthropic.com")
+        print("  2. Sign up or log in")
+        print("  3. Create an API key\n")
+        api_key = self._prompt("Enter your Claude API key: ")
+        if not api_key or not api_key.startswith("sk-"):
+            print("\n⚠ Invalid API key format")
+            return StepResult(success=True, data={"api_provider": "none"})
+        self._save_env_var("ANTHROPIC_API_KEY", api_key)
+        self.config["api_provider"] = "anthropic"
+        self.config["api_key_configured"] = True
+        print("\n✓ Claude API key saved!")
+        return StepResult(success=True, data={"api_provider": "anthropic"})
+
+    def _setup_openai_api(self) -> StepResult:
+        print("\nTo get an OpenAI API key:")
+        print("  1. Go to https://platform.openai.com")
+        print("  2. Sign up or log in")
+        print("  3. Create an API key\n")
+        api_key = self._prompt("Enter your OpenAI API key: ")
+        if not api_key or not api_key.startswith("sk-"):
+            print("\n⚠ Invalid API key format")
+            return StepResult(success=True, data={"api_provider": "none"})
+        self._save_env_var("OPENAI_API_KEY", api_key)
+        self.config["api_provider"] = "openai"
+        self.config["api_key_configured"] = True
+        print("\n✓ OpenAI API key saved!")
+        return StepResult(success=True, data={"api_provider": "openai"})
+
+    def _setup_ollama(self) -> StepResult:
+        print("\nOllama selected. No API key required.")
+        self.config["api_provider"] = "ollama"
+        return StepResult(success=True, data={"api_provider": "ollama"})
     """
     Interactive first-run wizard for Cortex Linux.
 
@@ -168,64 +202,14 @@ class FirstRunWizard:
 
     def run(self) -> bool:
         """
-        Run the complete wizard.
-
-        Returns:
-            True if wizard completed successfully
+        Run the API key configuration wizard only.
+        Always prompt for API key setup, regardless of previous state.
         """
-        if not self.needs_setup():
-            return True
-
-        # Load any existing state
-        self.load_state()
-
-        # Define step handlers
-        steps = [
-            (WizardStep.WELCOME, self._step_welcome),
-            (WizardStep.API_SETUP, self._step_api_setup),
-            (WizardStep.HARDWARE_DETECTION, self._step_hardware_detection),
-            (WizardStep.PREFERENCES, self._step_preferences),
-            (WizardStep.SHELL_INTEGRATION, self._step_shell_integration),
-            (WizardStep.TEST_COMMAND, self._step_test_command),
-            (WizardStep.COMPLETE, self._step_complete),
-        ]
-
-        # Find starting point
-        start_idx = 0
-        for i, (step, _) in enumerate(steps):
-            if step == self.state.current_step:
-                start_idx = i
-                break
-
-        # Run steps
-        for step, handler in steps[start_idx:]:
-            self.state.current_step = step
-            self.save_state()
-
-            result = handler()
-
-            if result.success:
-                self.state.mark_completed(step)
-                self.state.collected_data.update(result.data)
-
-                if result.skip_to:
-                    # Skip to a specific step
-                    for s, _ in steps:
-                        if s == result.skip_to:
-                            break
-                        if s not in self.state.completed_steps:
-                            self.state.mark_skipped(s)
-            else:
-                if result.next_step:
-                    # Allow retry or skip
-                    continue
-                else:
-                    # Fatal error
-                    self._print_error(f"Setup failed: {result.message}")
-                    return False
-
-        self.mark_setup_complete()
-        return True
+        self._clear_screen()
+        self._print_banner()
+        result = self._step_api_setup()
+        print("\n[✔] API key configuration complete!\n")
+        return result.success
 
     def _step_welcome(self) -> StepResult:
         """Welcome step with introduction."""
@@ -316,172 +300,6 @@ Cortex uses AI to understand your commands. You can use:
         else:
             print("\n⚠ Running without AI - you'll only have basic apt functionality")
             return StepResult(success=True, data={"api_provider": "none"})
-
-    def _setup_claude_api(self) -> StepResult:
-        """Set up Claude API."""
-        print("\nTo get a Claude API key:")
-        print("  1. Go to https://console.anthropic.com")
-        print("  2. Sign up or log in")
-        print("  3. Create an API key\n")
-
-        api_key = self._prompt("Enter your Claude API key: ")
-
-        if not api_key or not api_key.startswith("sk-"):
-            print("\n⚠ Invalid API key format")
-            return StepResult(success=True, data={"api_provider": "none"})
-
-        # Save to shell profile
-        self._save_env_var("ANTHROPIC_API_KEY", api_key)
-
-        self.config["api_provider"] = "anthropic"
-        self.config["api_key_configured"] = True
-
-        print("\n✓ Claude API key saved!")
-        return StepResult(success=True, data={"api_provider": "anthropic"})
-
-    def _setup_openai_api(self) -> StepResult:
-        """Set up OpenAI API."""
-        print("\nTo get an OpenAI API key:")
-        print("  1. Go to https://platform.openai.com")
-        print("  2. Sign up or log in")
-        print("  3. Create an API key\n")
-
-        api_key = self._prompt("Enter your OpenAI API key: ")
-
-        if not api_key or not api_key.startswith("sk-"):
-            print("\n⚠ Invalid API key format")
-            return StepResult(success=True, data={"api_provider": "none"})
-
-        self._save_env_var("OPENAI_API_KEY", api_key)
-
-        self.config["api_provider"] = "openai"
-        self.config["api_key_configured"] = True
-
-        print("\n✓ OpenAI API key saved!")
-        return StepResult(success=True, data={"api_provider": "openai"})
-
-    def _setup_ollama(self) -> StepResult:
-        """Set up Ollama for local LLM."""
-        print("\nChecking for Ollama...")
-
-        # Check if Ollama is installed
-        ollama_path = shutil.which("ollama")
-
-        if not ollama_path:
-            print("\nOllama is not installed. Install it with:")
-            print("  curl -fsSL https://ollama.ai/install.sh | sh")
-
-            install = self._prompt("\nInstall Ollama now? [y/N]: ", default="n")
-
-            if install.lower() == "y":
-                try:
-                    subprocess.run(
-                        "curl -fsSL https://ollama.ai/install.sh | sh", shell=True, check=True
-                    )
-                    print("\n✓ Ollama installed!")
-                except subprocess.CalledProcessError:
-                    print("\n✗ Failed to install Ollama")
-                    return StepResult(success=True, data={"api_provider": "none"})
-
-        # Pull a small model
-        print("\nPulling llama3.2 model (this may take a few minutes)...")
-        try:
-            subprocess.run(["ollama", "pull", "llama3.2"], check=True)
-            print("\n✓ Model ready!")
-        except subprocess.CalledProcessError:
-            print("\n⚠ Could not pull model - you can do this later with: ollama pull llama3.2")
-
-        self.config["api_provider"] = "ollama"
-        self.config["ollama_model"] = "llama3.2"
-
-        return StepResult(success=True, data={"api_provider": "ollama"})
-
-    def _step_hardware_detection(self) -> StepResult:
-        """Detect and configure hardware."""
-        self._clear_screen()
-        self._print_header("Step 2: Hardware Detection")
-
-        print("\nDetecting your hardware...\n")
-
-        hardware_info = self._detect_hardware()
-
-        # Display results
-        print(f"  CPU: {hardware_info.get('cpu', 'Unknown')}")
-        print(f"  RAM: {hardware_info.get('ram_gb', 'Unknown')} GB")
-        print(f"  GPU: {hardware_info.get('gpu', 'None detected')}")
-        print(f"  Disk: {hardware_info.get('disk_gb', 'Unknown')} GB available")
-
-        # GPU-specific setup
-        if hardware_info.get("gpu_vendor") == "nvidia":
-            print("\n🎮 NVIDIA GPU detected!")
-
-            if self.interactive:
-                setup_cuda = self._prompt("Set up CUDA support? [Y/n]: ", default="y")
-                if setup_cuda.lower() != "n":
-                    hardware_info["setup_cuda"] = True
-                    print("  → CUDA will be configured when needed")
-
-        self.config["hardware"] = hardware_info
-
-        if self.interactive:
-            self._prompt("\nPress Enter to continue: ")
-
-        return StepResult(success=True, data={"hardware": hardware_info})
-
-    def _detect_hardware(self) -> dict[str, Any]:
-        """Detect system hardware."""
-        info = {}
-
-        # CPU
-        try:
-            with open("/proc/cpuinfo") as f:
-                for line in f:
-                    if "model name" in line:
-                        info["cpu"] = line.split(":")[1].strip()
-                        break
-        except:
-            info["cpu"] = "Unknown"
-
-        # RAM
-        try:
-            with open("/proc/meminfo") as f:
-                for line in f:
-                    if "MemTotal" in line:
-                        kb = int(line.split()[1])
-                        info["ram_gb"] = round(kb / 1024 / 1024, 1)
-                        break
-        except:
-            info["ram_gb"] = 0
-
-        # GPU
-        try:
-            result = subprocess.run(["lspci"], capture_output=True, text=True)
-            for line in result.stdout.split("\n"):
-                if "VGA" in line or "3D" in line:
-                    if "NVIDIA" in line.upper():
-                        info["gpu"] = line.split(":")[-1].strip()
-                        info["gpu_vendor"] = "nvidia"
-                    elif "AMD" in line.upper():
-                        info["gpu"] = line.split(":")[-1].strip()
-                        info["gpu_vendor"] = "amd"
-                    elif "Intel" in line.upper():
-                        info["gpu"] = line.split(":")[-1].strip()
-                        info["gpu_vendor"] = "intel"
-                    break
-        except:
-            info["gpu"] = "None detected"
-
-        # Disk
-        try:
-            result = subprocess.run(["df", "-BG", "/"], capture_output=True, text=True)
-            lines = result.stdout.strip().split("\n")
-            if len(lines) > 1:
-                parts = lines[1].split()
-                info["disk_gb"] = int(parts[3].rstrip("G"))
-        except:
-            info["disk_gb"] = 0
-
-        return info
 
     def _step_preferences(self) -> StepResult:
         """Configure user preferences."""

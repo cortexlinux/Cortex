@@ -63,12 +63,12 @@ class CortexCLI:
         key = self._get_api_key_for_provider(provider)
         if key:
             return key
-        # Fallback logic
-        wizard = FirstRunWizard(interactive=False)
-        if not wizard.needs_setup():
-            # Setup complete, but no valid key - use Ollama as fallback
-            self._debug("Setup complete but no valid API key; falling back to Ollama")
+        # If provider is ollama or no key is set, always fallback to ollama-local
+        if provider == "ollama" or not (
+            os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+        ):
             return "ollama-local"
+        # Otherwise, prompt user for setup
         self._print_error("No valid API key found.")
         cx_print("Run [bold]cortex wizard[/bold] to configure your API key.", "info")
         cx_print("Or use [bold]CORTEX_PROVIDER=ollama[/bold] for offline mode.", "info")
@@ -86,8 +86,8 @@ class CortexCLI:
         elif os.environ.get("OPENAI_API_KEY"):
             return "openai"
 
-        # No API keys available - default to OpenAI (will fail without key)
-        return "openai"
+        # No API keys available - default to Ollama for offline mode
+        return "ollama"
 
     def _print_status(self, emoji: str, message: str):
         """Legacy status print - maps to cx_print for Rich output"""

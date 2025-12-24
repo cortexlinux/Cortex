@@ -302,6 +302,10 @@ class FirstRunWizard:
         self._clear_screen()
         self._print_banner()
 
+        # Load current config to get existing provider
+        current_config = get_config()
+        current_provider = current_config.get("api_provider")
+
         # Detect available providers
         available_providers = detect_available_providers()
 
@@ -324,20 +328,47 @@ class FirstRunWizard:
         else:
             # Show menu with available marked
             print("\nSelect your preferred LLM provider:")
-            options = [
-                ("1. Anthropic (Claude)", "anthropic"),
-                ("2. OpenAI", "openai"),
-                ("3. Ollama (local)", "ollama"),
-            ]
+            if current_provider:
+                provider_names = {
+                    "anthropic": "Anthropic (Claude)",
+                    "openai": "OpenAI",
+                    "ollama": "Ollama (local)",
+                }
+                print(f"Current provider: {provider_names.get(current_provider, current_provider)}")
+            if current_provider:
+                options = [
+                    ("1. Keep current provider (skip setup)", "skip"),
+                    ("2. Anthropic (Claude)", "anthropic"),
+                    ("3. OpenAI", "openai"),
+                    ("4. Ollama (local)", "ollama"),
+                ]
+            else:
+                options = [
+                    ("1. Anthropic (Claude)", "anthropic"),
+                    ("2. OpenAI", "openai"),
+                    ("3. Ollama (local)", "ollama"),
+                ]
             for opt, prov in options:
                 status = " ✓" if prov in available_providers else ""
+                if prov == current_provider:
+                    status += " (current)"
                 print(f"{opt}{status}")
-            choice = self._prompt(
-                "Choose a provider [1-3]: ",
-                default="1" if "anthropic" in available_providers else "2",
+            default_choice = "1"
+            choice_prompt = (
+                "Choose a provider [1-3]: " if not current_provider else "Choose a provider [1-4]: "
             )
-            provider_map = {"1": "anthropic", "2": "openai", "3": "ollama"}
+            choice = self._prompt(
+                choice_prompt,
+                default=default_choice,
+            )
+            if current_provider:
+                provider_map = {"1": "skip", "2": "anthropic", "3": "openai", "4": "ollama"}
+            else:
+                provider_map = {"1": "anthropic", "2": "openai", "3": "ollama"}
             provider = provider_map.get(choice)
+            if provider == "skip":
+                print("Setup skipped. Your current configuration is unchanged.")
+                return True
             if not provider or provider not in available_providers:
                 print("Invalid choice or provider not available.")
                 return False
@@ -563,7 +594,10 @@ Cortex uses AI to understand your commands. You can use:
             return asdict(info)
         except Exception as e:
             logger.warning(f"Hardware detection failed: {e}")
-            return {"cpu": {"vendor": "unknown", "model": "unknown"}, "gpu": {"vendor": "unknown", "model": "unknown"}}
+            return {
+                "cpu": {"vendor": "unknown", "model": "unknown"},
+                "gpu": {"vendor": "unknown", "model": "unknown"},
+            }
 
     def _step_hardware_detection(self) -> StepResult:
         """Detect and configure hardware settings."""

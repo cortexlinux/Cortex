@@ -30,9 +30,8 @@ class TestCortexCLIExtended(unittest.TestCase):
         api_key = self.cli._get_api_key()
         self.assertEqual(api_key, "sk-ant-test-claude-key")
 
-    @patch.object(CortexCLI, "_get_provider", return_value="openai")
-    @patch.dict(os.environ, {}, clear=True)
-    def test_get_api_key_not_found(self, _mock_get_provider) -> None:
+    @patch.dict(os.environ, {"CORTEX_PROVIDER": "ollama"}, clear=True)
+    def test_get_api_key_not_found(self) -> None:
         api_key = self.cli._get_api_key()
         self.assertEqual(api_key, "ollama-local")
 

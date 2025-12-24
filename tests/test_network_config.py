@@ -604,7 +604,7 @@ class TestHelperFunctions:
         test_pass = "pass"
         test_proxy = "http://proxy:8080"
         expected_url = f"http://{test_user}:{test_pass}@proxy:8080"
-        
+
         result = add_proxy_auth(test_proxy, test_user, test_pass)
         assert result == expected_url
 
@@ -614,7 +614,7 @@ class TestHelperFunctions:
         test_pass = "pass"
         test_proxy = "proxy:8080"
         expected_url = f"http://{test_user}:{test_pass}@proxy:8080"
-        
+
         result = add_proxy_auth(test_proxy, test_user, test_pass)
         assert result == expected_url
 

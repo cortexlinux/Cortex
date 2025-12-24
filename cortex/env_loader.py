@@ -40,6 +40,7 @@ def get_env_file_locations() -> list[Path]:
     # 3. Cortex package directory .env
     try:
         import cortex
+
         cortex_dir = Path(cortex.__file__).parent / ".env"
         locations.append(cortex_dir)
     except ImportError:

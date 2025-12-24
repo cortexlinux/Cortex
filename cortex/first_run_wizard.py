@@ -2,6 +2,7 @@ try:
     from pathlib import Path
 
     from dotenv import load_dotenv
+
     # Load from parent directory .env as well
     load_dotenv(dotenv_path=Path.cwd().parent / ".env", override=True)
     load_dotenv(dotenv_path=Path.cwd() / ".env", override=True)
@@ -42,20 +43,25 @@ DRY_RUN_EXAMPLES = [
     "text editor with plugins",
     "networking utilities",
     "game development engine",
-    "scientific computing tools"
+    "scientific computing tools",
 ]
 
 
 def detect_available_providers() -> list[str]:
     """Detect available providers based on API keys and installations."""
     providers = []
-    if os.environ.get("ANTHROPIC_API_KEY") and os.environ.get("ANTHROPIC_API_KEY").strip().startswith("sk-ant-"):
+    if os.environ.get("ANTHROPIC_API_KEY") and os.environ.get(
+        "ANTHROPIC_API_KEY"
+    ).strip().startswith("sk-ant-"):
         providers.append("anthropic")
-    if os.environ.get("OPENAI_API_KEY") and os.environ.get("OPENAI_API_KEY").strip().startswith("sk-"):
+    if os.environ.get("OPENAI_API_KEY") and os.environ.get("OPENAI_API_KEY").strip().startswith(
+        "sk-"
+    ):
         providers.append("openai")
     if shutil.which("ollama"):
         providers.append("ollama")
     return providers
+
 
 logger = logging.getLogger(__name__)
 
@@ -151,14 +157,18 @@ class FirstRunWizard:
             for pkg in suggestions:
                 print(f"\nInstalling {pkg}...")
                 try:
-                    result = subprocess.run([
-                        sys.executable, "-m", "cortex.cli", "install", pkg
-                    ], capture_output=True, text=True, env=env)
+                    result = subprocess.run(
+                        [sys.executable, "-m", "cortex.cli", "install", pkg],
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
                     print(result.stdout)
                     if result.stderr:
                         print(result.stderr)
                 except Exception as e:
                     print(f"Error installing {pkg}: {e}")
+
     def _setup_claude_api(self) -> StepResult:
         print("\nTo get a Claude API key:")
         print("  1. Go to https://console.anthropic.com")
@@ -173,12 +183,16 @@ class FirstRunWizard:
         self.config["api_key_configured"] = True
         print("\n✓ Claude API key saved!")
         if self.interactive:
-            do_test = self._prompt("Would you like to test your Claude API key now? [Y/n]: ", default="y")
+            do_test = self._prompt(
+                "Would you like to test your Claude API key now? [Y/n]: ", default="y"
+            )
             if do_test.strip().lower() in ("", "y", "yes"):
                 print("\nTesting Claude API key...")
                 if test_anthropic_api_key(api_key):
                     print("\n✅ Claude API key is valid and working!")
-                    resp = self._prompt("Would you like some package suggestions to try? [Y/n]: ", default="y")
+                    resp = self._prompt(
+                        "Would you like some package suggestions to try? [Y/n]: ", default="y"
+                    )
                     if resp.strip().lower() in ("", "y", "yes"):
                         self._install_suggested_packages()
                 else:
@@ -199,12 +213,16 @@ class FirstRunWizard:
         self.config["api_key_configured"] = True
         print("\n✓ OpenAI API key saved!")
         if self.interactive:
-            do_test = self._prompt("Would you like to test your OpenAI API key now? [Y/n]: ", default="y")
+            do_test = self._prompt(
+                "Would you like to test your OpenAI API key now? [Y/n]: ", default="y"
+            )
             if do_test.strip().lower() in ("", "y", "yes"):
                 print("\nTesting OpenAI API key...")
                 if test_openai_api_key(api_key):
                     print("\n✅ OpenAI API key is valid and working!")
-                    resp = self._prompt("Would you like some package suggestions to try? [Y/n]: ", default="y")
+                    resp = self._prompt(
+                        "Would you like some package suggestions to try? [Y/n]: ", default="y"
+                    )
                     if resp.strip().lower() in ("", "y", "yes"):
                         self._install_suggested_packages()
                 else:
@@ -301,7 +319,11 @@ class FirstRunWizard:
 
         if len(available_providers) == 1:
             provider = available_providers[0]
-            provider_names = {"anthropic": "Anthropic (Claude)", "openai": "OpenAI", "ollama": "Ollama (local)"}
+            provider_names = {
+                "anthropic": "Anthropic (Claude)",
+                "openai": "OpenAI",
+                "ollama": "Ollama (local)",
+            }
             print(f"\nAuto-selected provider: {provider_names.get(provider, provider)}")
         else:
             # Show menu with available marked
@@ -309,12 +331,15 @@ class FirstRunWizard:
             options = [
                 ("1. Anthropic (Claude)", "anthropic"),
                 ("2. OpenAI", "openai"),
-                ("3. Ollama (local)", "ollama")
+                ("3. Ollama (local)", "ollama"),
             ]
             for opt, prov in options:
                 status = " ✓" if prov in available_providers else ""
                 print(f"{opt}{status}")
-            choice = self._prompt("Choose a provider [1-3]: ", default="1" if "anthropic" in available_providers else "2")
+            choice = self._prompt(
+                "Choose a provider [1-3]: ",
+                default="1" if "anthropic" in available_providers else "2",
+            )
             provider_map = {"1": "anthropic", "2": "openai", "3": "ollama"}
             provider = provider_map.get(choice)
             if not provider or provider not in available_providers:
@@ -333,16 +358,24 @@ class FirstRunWizard:
                     self._save_env_var("ANTHROPIC_API_KEY", key)
                     os.environ["ANTHROPIC_API_KEY"] = key
             random_example = random.choice(DRY_RUN_EXAMPLES)
-            do_test = self._prompt(f"Would you like to perform a real dry run (install \"{random_example}\") to test your Claude setup? [Y/n]: ", default="y")
+            do_test = self._prompt(
+                f'Would you like to perform a real dry run (install "{random_example}") to test your Claude setup? [Y/n]: ',
+                default="y",
+            )
             if do_test.strip().lower() in ("", "y", "yes"):
-                print(f"\nRunning: cortex install \"{random_example}\" (dry run)...")
+                print(f'\nRunning: cortex install "{random_example}" (dry run)...')
                 try:
                     # Import cli here to avoid circular import
                     from cortex.cli import CortexCLI
+
                     cli = CortexCLI()
-                    result = cli.install(random_example, execute=False, dry_run=True, forced_provider="claude")
+                    result = cli.install(
+                        random_example, execute=False, dry_run=True, forced_provider="claude"
+                    )
                     if result != 0:
-                        print("\n❌ Dry run failed for Anthropic provider. Please check your API key and network.")
+                        print(
+                            "\n❌ Dry run failed for Anthropic provider. Please check your API key and network."
+                        )
                         return False
                 except Exception as e:
                     print(f"Error during dry run: {e}")
@@ -358,16 +391,24 @@ class FirstRunWizard:
                     self._save_env_var("OPENAI_API_KEY", key)
                     os.environ["OPENAI_API_KEY"] = key
             random_example = random.choice(DRY_RUN_EXAMPLES)
-            do_test = self._prompt(f"Would you like to perform a real dry run (install \"{random_example}\") to test your OpenAI setup? [Y/n]: ", default="y")
+            do_test = self._prompt(
+                f'Would you like to perform a real dry run (install "{random_example}") to test your OpenAI setup? [Y/n]: ',
+                default="y",
+            )
             if do_test.strip().lower() in ("", "y", "yes"):
-                print(f"\nRunning: cortex install \"{random_example}\" (dry run)...")
+                print(f'\nRunning: cortex install "{random_example}" (dry run)...')
                 try:
                     # Import cli here to avoid circular import
                     from cortex.cli import CortexCLI
+
                     cli = CortexCLI()
-                    result = cli.install(random_example, execute=False, dry_run=True, forced_provider="openai")
+                    result = cli.install(
+                        random_example, execute=False, dry_run=True, forced_provider="openai"
+                    )
                     if result != 0:
-                        print("\n❌ Dry run failed for OpenAI provider. Please check your API key and network.")
+                        print(
+                            "\n❌ Dry run failed for OpenAI provider. Please check your API key and network."
+                        )
                         return False
                 except Exception as e:
                     print(f"Error during dry run: {e}")
@@ -459,17 +500,25 @@ Cortex uses AI to understand your commands. You can use:
                 print("\n✓ Using existing Claude API key!")
                 # Prompt for dry run even if key exists
                 if self.interactive:
-                    do_test = self._prompt("Would you like to test your Claude API key now? [Y/n]: ", default="y")
+                    do_test = self._prompt(
+                        "Would you like to test your Claude API key now? [Y/n]: ", default="y"
+                    )
                     if do_test.strip().lower() in ("", "y", "yes"):
                         print("\nTesting Claude API key...")
                         from cortex.utils.api_key_test import test_anthropic_api_key
+
                         if test_anthropic_api_key(existing_claude):
                             print("\n✅ Claude API key is valid and working!")
-                            resp = self._prompt("Would you like some package suggestions to try? [Y/n]: ", default="y")
+                            resp = self._prompt(
+                                "Would you like some package suggestions to try? [Y/n]: ",
+                                default="y",
+                            )
                             if resp.strip().lower() in ("", "y", "yes"):
                                 self._install_suggested_packages()
                         else:
-                            print("\n❌ Claude API key test failed. Please check your key or network.")
+                            print(
+                                "\n❌ Claude API key test failed. Please check your key or network."
+                            )
                 self.config["api_provider"] = "anthropic"
                 self.config["api_key_configured"] = True
                 return StepResult(success=True, data={"api_provider": "anthropic"})
@@ -479,17 +528,25 @@ Cortex uses AI to understand your commands. You can use:
                 print("\n✓ Using existing OpenAI API key!")
                 # Prompt for dry run even if key exists
                 if self.interactive:
-                    do_test = self._prompt("Would you like to test your OpenAI API key now? [Y/n]: ", default="y")
+                    do_test = self._prompt(
+                        "Would you like to test your OpenAI API key now? [Y/n]: ", default="y"
+                    )
                     if do_test.strip().lower() in ("", "y", "yes"):
                         print("\nTesting OpenAI API key...")
                         from cortex.utils.api_key_test import test_openai_api_key
+
                         if test_openai_api_key(existing_openai):
                             print("\n✅ OpenAI API key is valid and working!")
-                            resp = self._prompt("Would you like some package suggestions to try? [Y/n]: ", default="y")
+                            resp = self._prompt(
+                                "Would you like some package suggestions to try? [Y/n]: ",
+                                default="y",
+                            )
                             if resp.strip().lower() in ("", "y", "yes"):
                                 self._install_suggested_packages()
                         else:
-                            print("\n❌ OpenAI API key test failed. Please check your key or network.")
+                            print(
+                                "\n❌ OpenAI API key test failed. Please check your key or network."
+                            )
                 self.config["api_provider"] = "openai"
                 self.config["api_key_configured"] = True
                 return StepResult(success=True, data={"api_provider": "openai"})

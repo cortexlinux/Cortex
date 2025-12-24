@@ -402,7 +402,9 @@ class CortexCLI:
                 continue
 
         if not commands:
-            self._print_error("No commands generated with any available provider. Please try again with a different request.")
+            self._print_error(
+                "No commands generated with any available provider. Please try again with a different request."
+            )
             return 1
 
         try:

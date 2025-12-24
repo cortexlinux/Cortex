@@ -135,6 +135,7 @@ class FirstRunWizard:
         print("\nOllama selected. No API key required.")
         self.config["api_provider"] = "ollama"
         return StepResult(success=True, data={"api_provider": "ollama"})
+
     """
     Interactive first-run wizard for Cortex Linux.
 

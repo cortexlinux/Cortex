@@ -115,7 +115,7 @@ class TestEndToEndWorkflows(unittest.TestCase):
         effective_env.update(env)
         result = run_in_docker(
             DEFAULT_IMAGE,
-            f"{PIP_BOOTSTRAP_DEV} && pytest tests/ -v --ignore=tests/integration",
+            f"{PIP_BOOTSTRAP_DEV} && pytest tests/ -v --ignore=tests/integration --ignore=tests/test_ollama_integration.py",
             env=effective_env,
             mounts=[MOUNT],
             workdir="/workspace",

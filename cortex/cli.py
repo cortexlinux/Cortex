@@ -812,11 +812,11 @@ def main():
         # Only detect network for commands that actually need it
         # Parse args first to see what command we're running
         temp_parser = argparse.ArgumentParser(add_help=False)
-        temp_parser.add_argument('command', nargs='?')
+        temp_parser.add_argument("command", nargs="?")
         temp_args, _ = temp_parser.parse_known_args()
 
         # Commands that need network detection
-        NETWORK_COMMANDS = ['install', 'update', 'upgrade', 'search', 'doctor', 'stack']
+        NETWORK_COMMANDS = ["install", "update", "upgrade", "search", "doctor", "stack"]
 
         if temp_args.command in NETWORK_COMMANDS:
             # Now detect network (only when needed)

@@ -65,9 +65,13 @@ class NetworkConfig:
         elif auto_detect:
             self.detect()
 
-    def detect(self) -> None:
+    def detect(self, check_quality: bool = False) -> None:
         """
         Run all detection methods.
+
+        Args:
+            check_quality: If True, also check connection quality (adds 1-5s delay).
+                        Set to False to skip quality check for faster detection.
 
         Can be called manually for lazy loading or after initialization.
         """
@@ -81,7 +85,9 @@ class NetworkConfig:
 
         self.is_vpn = self.detect_vpn()
         self.is_online = self.check_connectivity()
-        if self.is_online:
+        
+        # Only check quality if explicitly requested (saves 1-5 seconds)
+        if self.is_online and check_quality:
             self.connection_quality = self.detect_network_quality()
 
         self._detected = True

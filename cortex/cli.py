@@ -805,10 +805,24 @@ def main():
     load_env()
 
     # Auto-configure network settings (proxy detection, VPN compatibility, offline mode)
-    # Runs silently unless there's an issue or configuration is needed
+    # Use lazy loading - only detect when needed to improve CLI startup time
     try:
-        network = NetworkConfig()
-        network.auto_configure()
+        network = NetworkConfig(auto_detect=False)  # Don't detect yet (fast!)
+        
+        # Only detect network for commands that actually need it
+        # Parse args first to see what command we're running
+        temp_parser = argparse.ArgumentParser(add_help=False)
+        temp_parser.add_argument('command', nargs='?')
+        temp_args, _ = temp_parser.parse_known_args()
+        
+        # Commands that need network detection
+        NETWORK_COMMANDS = ['install', 'update', 'upgrade', 'search', 'doctor', 'stack']
+        
+        if temp_args.command in NETWORK_COMMANDS:
+            # Now detect network (only when needed)
+            network.detect(check_quality=True)  # Include quality check for these commands
+            network.auto_configure()
+        
     except Exception as e:
         # Network config is optional - don't block execution if it fails
         console.print(f"[yellow]⚠️  Network auto-config failed: {e}[/yellow]")

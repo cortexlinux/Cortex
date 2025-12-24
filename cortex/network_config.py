@@ -85,7 +85,7 @@ class NetworkConfig:
 
         self.is_vpn = self.detect_vpn()
         self.is_online = self.check_connectivity()
-        
+
         # Only check quality if explicitly requested (saves 1-5 seconds)
         if self.is_online and check_quality:
             self.connection_quality = self.detect_network_quality()

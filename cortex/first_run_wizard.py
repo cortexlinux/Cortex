@@ -174,10 +174,12 @@ class FirstRunWizard:
         if not api_key or not api_key.startswith("sk-"):
             print("\n⚠ Invalid API key format")
             return StepResult(success=True, data={"api_provider": "none"})
-        self._save_env_var("ANTHROPIC_API_KEY", api_key)
+        # Set for current session
+        os.environ["ANTHROPIC_API_KEY"] = api_key
         self.config["api_provider"] = "anthropic"
         self.config["api_key_configured"] = True
-        print("\n✓ Claude API key saved!")
+        print("\n✓ Claude API key set for this session!")
+        print("Note: Set ANTHROPIC_API_KEY in your environment for persistence.")
         if self.interactive:
             do_test = self._prompt(
                 "Would you like to test your Claude API key now? [Y/n]: ", default="y"
@@ -204,10 +206,12 @@ class FirstRunWizard:
         if not api_key or not api_key.startswith("sk-"):
             print("\n⚠ Invalid API key format")
             return StepResult(success=True, data={"api_provider": "none"})
-        self._save_env_var("OPENAI_API_KEY", api_key)
+        # Set for current session
+        os.environ["OPENAI_API_KEY"] = api_key
         self.config["api_provider"] = "openai"
         self.config["api_key_configured"] = True
-        print("\n✓ OpenAI API key saved!")
+        print("\n✓ OpenAI API key set for this session!")
+        print("Note: Set OPENAI_API_KEY in your environment for persistence.")
         if self.interactive:
             do_test = self._prompt(
                 "Would you like to test your OpenAI API key now? [Y/n]: ", default="y"
@@ -299,8 +303,19 @@ class FirstRunWizard:
         """
         Refactored onboarding: detect available providers, auto-select if one, show menu if multiple, validate lazily, save provider.
         """
+        # Ensure .env exists by copying from .env.example if needed
+        project_root = Path(__file__).parent.parent.parent
+        env_path = project_root / ".env"
+        env_example_path = project_root / ".env.example"
+        if not env_path.exists() and env_example_path.exists():
+            shutil.copy(env_example_path, env_path)
+            print(
+                "[Cortex Wizard] No .env found. Created .env from .env.example. Please update it with your API keys if needed."
+            )
+
         # Load environment variables from .env files
         from cortex.env_loader import load_env
+
         load_env()
 
         # Load current config to get existing provider
@@ -316,7 +331,7 @@ class FirstRunWizard:
         # Detect available providers (only count valid ones)
         available_providers = []
         providers = detect_available_providers()
-        
+
         # Validate providers - only count ones with working API keys
         for provider in providers:
             if provider == "ollama":
@@ -341,26 +356,30 @@ class FirstRunWizard:
                 self.save_config()
                 self.mark_setup_complete()
                 return True
-            
+
             # Interactive mode: auto-enable demo mode for easy testing
             self._clear_screen()
             self._print_banner()
-            
-            print("""
+
+            print(
+                """
 Welcome to Cortex! 🚀
 
 No API keys detected. For full functionality, you'll need API keys from:
-  • OpenAI: https://platform.openai.com/api-keys  
+  • OpenAI: https://platform.openai.com/api-keys
   • Anthropic: https://console.anthropic.com/
   • Ollama: https://ollama.ai (free local AI)
 
 For now, let's set up demo mode so you can explore Cortex.
-""")
-            
+"""
+            )
+
             response = self._prompt("Continue with demo mode? [Y/n]: ", default="y")
             if response.strip().lower() in ("", "y", "yes"):
                 print("\n✓ Demo mode enabled!")
-                print("You can test basic commands. Run 'cortex wizard' again after adding API keys.")
+                print(
+                    "You can test basic commands. Run 'cortex wizard' again after adding API keys."
+                )
                 self.config["api_provider"] = "openai"
                 self.config["api_key_configured"] = False
                 self.config["demo_mode"] = True
@@ -401,24 +420,24 @@ For now, let's set up demo mode so you can explore Cortex.
 
         # Always show provider selection menu
         print("\nSelect your preferred LLM provider:")
-        
+
         # Show current provider if one exists
         if current_provider:
             provider_names = {
                 "anthropic": "Anthropic (Claude)",
-                "openai": "OpenAI", 
+                "openai": "OpenAI",
                 "ollama": "Ollama (local)",
             }
             print(f"Current provider: {provider_names.get(current_provider, current_provider)}")
-        
+
         # Build menu options - always include skip if there's a current provider
         options = []
         option_num = 1
-        
+
         if current_provider:
             options.append((f"{option_num}. Keep current provider (skip setup)", "skip"))
             option_num += 1
-            
+
         if "anthropic" in available_providers:
             options.append((f"{option_num}. Anthropic (Claude)", "anthropic"))
             option_num += 1
@@ -428,33 +447,33 @@ For now, let's set up demo mode so you can explore Cortex.
         if "ollama" in available_providers:
             options.append((f"{option_num}. Ollama (local)", "ollama"))
             option_num += 1
-        
+
         if not options:
             print("No AI providers available. Please set up API keys or install Ollama.")
             return False
-            
+
         # Display options
         for opt, prov in options:
             status = " ✓" if prov in available_providers else ""
             if prov == current_provider and prov != "skip":
                 status += " (current)"
             print(f"{opt}{status}")
-        
+
         # Get user choice
         choice_map = {}
         for i, (_, prov) in enumerate(options):
             choice_map[str(i + 1)] = prov
-            
+
         valid_choices = list(choice_map.keys())
         choice_prompt = f"Choose a provider [{','.join(valid_choices)}]: "
-        
+
         choice = self._prompt(choice_prompt, default="1")
         provider = choice_map.get(choice)
-        
+
         if not provider:
             print("Invalid choice.")
             return False
-            
+
         if provider == "skip":
             print("Setup skipped. Your current configuration is unchanged.")
             self.mark_setup_complete()
@@ -469,7 +488,6 @@ For now, let's set up demo mode so you can explore Cortex.
                 print("\nNo valid Anthropic API key found.")
                 key = self._prompt("Enter your Claude (Anthropic) API key: ")
                 if key and key.startswith("sk-ant-"):
-                    self._save_env_var("ANTHROPIC_API_KEY", key)
                     os.environ["ANTHROPIC_API_KEY"] = key
             random_example = random.choice(DRY_RUN_EXAMPLES)
             do_test = self._prompt(
@@ -507,7 +525,6 @@ For now, let's set up demo mode so you can explore Cortex.
                 print("\nNo valid OpenAI API key found.")
                 key = self._prompt("Enter your OpenAI API key: ")
                 if key and key.startswith("sk-") and test_openai_api_key(key):
-                    self._save_env_var("OPENAI_API_KEY", key)
                     os.environ["OPENAI_API_KEY"] = key
                 else:
                     print("Invalid API key. Please try again.")

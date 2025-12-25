@@ -10,7 +10,6 @@ from cortex.llm.interpreter import APIProvider, CommandInterpreter
 
 
 class TestCommandInterpreter(unittest.TestCase):
-
     def setUp(self):
         self.api_key = "test-api-key"
 
@@ -93,6 +92,7 @@ class TestCommandInterpreter(unittest.TestCase):
 
         interpreter = CommandInterpreter(api_key=self.api_key, provider="openai")
         interpreter.client = mock_client
+        interpreter.cache = None
 
         result = interpreter._call_openai("install docker")
         self.assertEqual(result, ["apt update"])
@@ -182,11 +182,14 @@ class TestCommandInterpreter(unittest.TestCase):
         interpreter.client = mock_client
 
         system_info = {"os": "ubuntu", "version": "22.04"}
-        result = interpreter.parse_with_context("install docker", system_info=system_info)
+        with patch.object(interpreter, "parse", wraps=interpreter.parse) as mock_parse:
+            result = interpreter.parse_with_context("install docker", system_info=system_info)
 
-        self.assertEqual(result, ["apt update"])
-        call_args = mock_client.chat.completions.create.call_args
-        self.assertIn("ubuntu", call_args[1]["messages"][1]["content"])
+            self.assertEqual(result, ["apt update"])
+            mock_parse.assert_called_once()
+
+            enriched_input = mock_parse.call_args[0][0]
+            self.assertIn("ubuntu", enriched_input)
 
     def test_system_prompt_format(self):
         interpreter = CommandInterpreter.__new__(CommandInterpreter)

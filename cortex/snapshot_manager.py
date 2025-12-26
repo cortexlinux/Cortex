@@ -333,21 +333,30 @@ class SnapshotManager:
 
         except FileLockTimeout:
             logger.error("Timeout waiting for file lock - another process is writing snapshot")
-            # Cleanup on failure
+            # Cleanup on failure (best effort; log but do not raise)
             try:
                 if snapshot_path and snapshot_path.exists():
                     shutil.rmtree(snapshot_path)
-            except Exception:
-                pass
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Failed to clean up snapshot directory %s after FileLockTimeout: %s",
+                    snapshot_path,
+                    cleanup_error,
+                )
             return (False, None, "Timeout during snapshot finalization, please retry")
         except Exception as e:
             logger.error(f"Failed to create snapshot: {e}")
-            # Cleanup on failure
+            # Cleanup on failure (best effort; log but do not raise)
             try:
                 if snapshot_path and snapshot_path.exists():
                     shutil.rmtree(snapshot_path)
-            except Exception:
-                pass
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Failed to clean up snapshot directory %s after error %s: %s",
+                    snapshot_path,
+                    e,
+                    cleanup_error,
+                )
             return (False, None, f"Failed to create snapshot: {e}")
 
     def _list_snapshots_unsafe(self) -> list[SnapshotMetadata]:

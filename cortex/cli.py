@@ -2067,7 +2067,6 @@ Examples:
             if args.stack:
                 return cli.install("", execute=args.execute, dry_run=args.dry_run, stack=args.stack)
             else:
-                # software is guaranteed to be set due to mutually_exclusive_group(required=True)
                 return cli.install(
                     args.software,
                     execute=args.execute,

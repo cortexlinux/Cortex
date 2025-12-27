@@ -75,7 +75,7 @@ class TestCortexCLI(unittest.TestCase):
         mock_interpreter = Mock()
         mock_interpreter.parse.return_value = ["apt update", "apt install docker"]
         mock_interpreter_class.return_value = mock_interpreter
-        
+
         result = self.cli.install("docker")
         # Should succeed with Ollama as fallback provider
         self.assertEqual(result, 0)

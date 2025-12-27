@@ -242,21 +242,21 @@ class TestAskHandlerProviders(unittest.TestCase):
         """Test default model for Ollama."""
         # Test with environment variable
         import os
-        
+
         # Save and clear any existing OLLAMA_MODEL
         original_model = os.environ.get("OLLAMA_MODEL")
-        
+
         # Test with custom env variable
         os.environ["OLLAMA_MODEL"] = "test-model"
         handler = AskHandler(api_key="test", provider="ollama")
         self.assertEqual(handler.model, "test-model")
-        
+
         # Clean up
         if original_model:
             os.environ["OLLAMA_MODEL"] = original_model
         else:
             os.environ.pop("OLLAMA_MODEL", None)
-        
+
         # Test that it reads from config or defaults
         # (depends on ~/.cortex/config.json, so just verify it's not None)
         handler2 = AskHandler(api_key="test", provider="ollama")

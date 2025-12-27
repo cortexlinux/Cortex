@@ -306,7 +306,6 @@ class CortexCLI:
             handler = AskHandler(
                 api_key=api_key,
                 provider=provider,
-                offline=self.offline,
             )
             answer = handler.ask(question)
             console.print(answer)
@@ -367,63 +366,7 @@ class CortexCLI:
         try:
             self._print_status("🧠", "Understanding request...")
 
-            api_key = self._get_api_key()
-            if not api_key:
-                self._print_error("No API key configured")
-                return 1
-
-            interpreter = CommandInterpreter(
-                api_key=api_key, provider=provider, offline=self.offline
-            )
-            intent = interpreter.extract_intent(software)
-            # ---------- Extract install mode from intent ----------
-            install_mode = intent.get("install_mode", "system")
-
-            # ---------- NORMALIZE INTENT (ADD THIS) ----------
-            action = intent.get("action", "unknown")
-            domain = intent.get("domain", "unknown")
-
-            if not isinstance(action, str):
-                action = "unknown"
-            if not isinstance(domain, str):
-                domain = "unknown"
-
-            raw_confidence = intent.get("confidence", 0.0)
-            try:
-                confidence = float(raw_confidence)
-            except (TypeError, ValueError):
-                confidence = 0.0
-
-            ambiguous = bool(intent.get("ambiguous", False))
-            # Normalize unstable model output
-            if isinstance(action, str) and "|" in action:
-                action = action.split("|")[0].strip()
-
-            # Policy: known domain ⇒ not ambiguous
-            if domain != "unknown":
-                ambiguous = False
-            # ----------------------------------------------
-
-            print("\n🤖 I understood your request as:")
-            print(f"• Action      : {action}")
-            print(f"• Domain      : {domain}")
-            print(f"• Description : {intent.get('description')}")
-            print(f"• Confidence  : {confidence}")
-
-            # Handle ambiguous intent
-            if ambiguous and domain == "unknown":
-                print("\n❓ Your request is ambiguous.")
-                print("Please clarify what you want to install.")
-                return 0
-
-            # Handle low confidence
-            if confidence < 0.4 and execute:
-                print("\n🤔 I'm not confident I understood your request.")
-                print("Please rephrase with more details.")
-                return 1
-
-            print()  # spacing
-            # -------------------------------------------
+            interpreter = CommandInterpreter(api_key=api_key, provider=provider)
 
             self._print_status("📦", "Planning installation...")
 

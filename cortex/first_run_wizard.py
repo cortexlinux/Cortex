@@ -387,7 +387,7 @@ Cortex uses AI to understand your commands. You can use:
         }
 
         choice = input("\nEnter choice [1]: ").strip() or "1"
-        
+
         if choice == "5":
             model_name = input("Enter model name: ").strip() or "llama3.2"
         else:
@@ -399,7 +399,9 @@ Cortex uses AI to understand your commands. You can use:
             subprocess.run(["ollama", "pull", model_name], check=True)
             print("\n✓ Model ready!")
         except subprocess.CalledProcessError:
-            print(f"\n⚠ Could not pull model - you can do this later with: ollama pull {model_name}")
+            print(
+                f"\n⚠ Could not pull model - you can do this later with: ollama pull {model_name}"
+            )
 
         self.config["api_provider"] = "ollama"
         self.config["ollama_model"] = model_name

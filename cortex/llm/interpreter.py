@@ -26,33 +26,18 @@ class CommandInterpreter:
         self,
         api_key: str,
         provider: str = "openai",
+        role: str = "default",
         model: str | None = None,
-        offline: bool = False,
-        cache: Optional["SemanticCache"] = None,
+        cache: Any | None = None,
     ):
-        """Initialize the command interpreter.
+        from cortex.roles.loader import load_role
 
-        Args:
-            api_key: API key for the LLM provider
-            provider: Provider name ("openai", "claude", or "ollama")
-            model: Optional model name override
-            offline: If True, only use cached responses
-            cache: Optional SemanticCache instance for response caching
-        """
         self.api_key = api_key
         self.provider = APIProvider(provider.lower())
-        self.offline = offline
-
-        if cache is None:
-            try:
-                from cortex.semantic_cache import SemanticCache
-
-                self.cache: SemanticCache | None = SemanticCache()
-            except (ImportError, OSError):
-                # Cache initialization can fail due to missing dependencies or permissions
-                self.cache = None
-        else:
-            self.cache = cache
+        self.cache = cache
+        self.role_name = role
+        self.role = load_role(role)
+        self.system_prompt = self.role.get("system_prompt", "")
 
         if model:
             self.model = model
@@ -67,7 +52,34 @@ class CommandInterpreter:
             elif self.provider == APIProvider.FAKE:
                 self.model = "fake"  # Fake provider doesn't use a real model
 
-        self._initialize_client()
+        if self.provider != APIProvider.FAKE:
+            self._initialize_client()
+        else:
+            self.client = None
+
+    def _get_ollama_model(self) -> str:
+        """Get Ollama model from config file or environment."""
+        # Try environment variable first
+        env_model = os.environ.get("OLLAMA_MODEL")
+        if env_model:
+            return env_model
+
+        # Try config file
+        try:
+            from pathlib import Path
+
+            config_file = Path.home() / ".cortex" / "config.json"
+            if config_file.exists():
+                with open(config_file) as f:
+                    config = json.load(f)
+                    model = config.get("ollama_model")
+                    if model:
+                        return model
+        except Exception:
+            pass  # Ignore errors reading config
+
+        # Default to llama3.2
+        return "llama3.2"
 
     def _get_ollama_model(self) -> str:
         """Get Ollama model from config file or environment."""
@@ -95,19 +107,15 @@ class CommandInterpreter:
 
     def _initialize_client(self):
         if self.provider == APIProvider.OPENAI:
-            try:
-                from openai import OpenAI
+            from openai import OpenAI
 
-                self.client = OpenAI(api_key=self.api_key)
-            except ImportError:
-                raise ImportError("OpenAI package not installed. Run: pip install openai")
+            self.client = OpenAI(api_key=self.api_key)
+
         elif self.provider == APIProvider.CLAUDE:
-            try:
-                from anthropic import Anthropic
+            from anthropic import Anthropic
 
-                self.client = Anthropic(api_key=self.api_key)
-            except ImportError:
-                raise ImportError("Anthropic package not installed. Run: pip install anthropic")
+            self.client = Anthropic(api_key=self.api_key)
+
         elif self.provider == APIProvider.OLLAMA:
             # Ollama uses OpenAI-compatible API
             try:
@@ -120,8 +128,26 @@ class CommandInterpreter:
             except ImportError:
                 raise ImportError("OpenAI package not installed. Run: pip install openai")
         elif self.provider == APIProvider.FAKE:
-            # Fake provider uses predefined commands from environment
-            self.client = None  # No client needed for fake provider
+            self.client = None
+
+    def _get_system_prompt(self, simplified: bool = False) -> str:
+        """Get system prompt for command interpretation.
+
+        Args:
+            simplified: If True, return a shorter prompt optimized for local models
+        """
+        if simplified:
+            return """You must respond with ONLY a JSON object. No explanations, no markdown, no code blocks.
+
+Format: {"commands": ["command1", "command2"]}
+
+Example input: install nginx
+Example output: {"commands": ["sudo apt update", "sudo apt install -y nginx"]}
+
+Rules:
+- Use apt for Ubuntu packages
+- Add sudo for system commands
+- Return ONLY the JSON object"""
 
     def _get_system_prompt(self, simplified: bool = False) -> str:
         """Get system prompt for command interpretation.
@@ -320,38 +346,8 @@ Respond with ONLY this JSON format (no explanations):
         return validated
 
     def parse(self, user_input: str, validate: bool = True) -> list[str]:
-        """Parse natural language input into shell commands.
-
-        Args:
-            user_input: Natural language description of desired action
-            validate: If True, validate commands for dangerous patterns
-
-        Returns:
-            List of shell commands to execute
-
-        Raises:
-            ValueError: If input is empty
-            RuntimeError: If offline mode is enabled and no cached response exists
-        """
         if not user_input or not user_input.strip():
             raise ValueError("User input cannot be empty")
-
-        cache_system_prompt = (
-            self._get_system_prompt() + f"\n\n[cortex-cache-validate={bool(validate)}]"
-        )
-
-        if self.cache is not None:
-            cached = self.cache.get_commands(
-                prompt=user_input,
-                provider=self.provider.value,
-                model=self.model,
-                system_prompt=cache_system_prompt,
-            )
-            if cached is not None:
-                return cached
-
-        if self.offline:
-            raise RuntimeError("Offline mode: no cached response available for this request")
 
         if self.provider == APIProvider.OPENAI:
             commands = self._call_openai(user_input)
@@ -367,23 +363,13 @@ Respond with ONLY this JSON format (no explanations):
         if validate:
             commands = self._validate_commands(commands)
 
-        if self.cache is not None and commands:
-            try:
-                self.cache.put_commands(
-                    prompt=user_input,
-                    provider=self.provider.value,
-                    model=self.model,
-                    system_prompt=cache_system_prompt,
-                    commands=commands,
-                )
-            except (OSError, sqlite3.Error):
-                # Silently fail cache writes - not critical for operation
-                pass
-
         return commands
 
     def parse_with_context(
-        self, user_input: str, system_info: dict[str, Any] | None = None, validate: bool = True
+        self,
+        user_input: str,
+        system_info: dict[str, Any] | None = None,
+        validate: bool = True,
     ) -> list[str]:
         context = ""
         if system_info:

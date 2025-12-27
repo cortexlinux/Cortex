@@ -108,49 +108,44 @@ class CommandInterpreter:
             # Fake provider uses predefined commands from environment
             self.client = None  # No client needed for fake provider
 
-<<<<<<< HEAD
-    def _get_system_prompt(self) -> str:
-        base_prompt = """You are a Linux system command expert. Convert natural language requests into safe, validated bash commands.
-=======
     def _get_system_prompt(self, simplified: bool = False) -> str:
         """Get system prompt for command interpretation.
 
         Args:
             simplified: If True, return a shorter prompt optimized for local models
         """
+
         if simplified:
-            return """You must respond with ONLY a JSON object. No explanations, no markdown, no code blocks.
+            base_prompt = """You must respond with ONLY a JSON object. No explanations, no markdown, no code blocks.
 
-Format: {"commands": ["command1", "command2"]}
+    Format:
+    {"commands": ["command1", "command2"]}
 
-Example input: install nginx
-Example output: {"commands": ["sudo apt update", "sudo apt install -y nginx"]}
+    Rules:
+    - Use apt for Ubuntu packages
+    - Add sudo for system commands
+    - Return ONLY the JSON object
+    """
+        else:
+            base_prompt = """You are a Linux system command expert. Convert natural language requests into safe, validated bash commands.
 
-Rules:
-- Use apt for Ubuntu packages
-- Add sudo for system commands
-- Return ONLY the JSON object"""
+    Rules:
+    1. Return ONLY a JSON object
+    2. Each command must be safe and executable
+    3. Commands should be atomic and sequential
+    4. Avoid destructive operations without explicit user confirmation
+    5. Use apt for Debian/Ubuntu systems
+    6. Include sudo when required
 
-        return """You are a Linux system command expert. Convert natural language requests into safe, validated bash commands.
->>>>>>> 344b109 (Add Ollama integration with setup script, LLM router support, and comprehensive documentation)
+    Format:
+    {"commands": ["command1", "command2", ...]}
+    """
 
-Rules:
-1. Return ONLY a JSON array of commands
-2. Each command must be a safe, executable bash command
-3. Commands should be atomic and sequential
-4. Avoid destructive operations without explicit user confirmation
-5. Use package managers appropriate for Debian/Ubuntu systems (apt)
-6. Include necessary privilege escalation (sudo) when required
-7. Validate command syntax before returning
-
-Format:
-{"commands": ["command1", "command2", ...]}
-
-Example request: "install docker with nvidia support"
-Example response: {"commands": ["sudo apt update", "sudo apt install -y docker.io", "sudo apt install -y nvidia-docker2", "sudo systemctl restart docker"]}"""
-
-        if getattr(self, "system_prompt", ""):
+        # ✅ THIS IS THE IMPORTANT FIX
+        # Role prompt is prepended, not ignored
+        if self.system_prompt:
             return f"{self.system_prompt}\n\n{base_prompt}"
+
         return base_prompt
 
     def _call_openai(self, user_input: str) -> list[str]:

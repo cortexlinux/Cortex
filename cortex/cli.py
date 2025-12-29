@@ -687,49 +687,66 @@ class CortexCLI:
 
     def _display_removal_impact(self, analyses: list) -> None:
         """Display impact analysis for package removal"""
-        from rich.table import Table
-
         print("\n⚠️  Impact Analysis:")
         print("=" * 70)
 
         for analysis in analyses:
-            pkg = analysis.package_name
-            
-            if not analysis.installed:
-                print(f"\n📦 {pkg}: [Not installed]")
-                continue
+            self._print_package_impact(analysis)
 
-            print(f"\n📦 {pkg} ({analysis.installed_version})")
-            print(f"   Severity: {analysis.severity.upper()}")
-            
-            # Directly dependent packages
-            if analysis.directly_depends:
-                print(f"\n   Directly depends on {pkg}:")
-                for dep in analysis.directly_depends[:5]:
-                    critical = " ⚠️ CRITICAL" if dep.critical else ""
-                    print(f"      • {dep.name}{critical}")
-                if len(analysis.directly_depends) > 5:
-                    print(f"      ... and {len(analysis.directly_depends) - 5} more")
+        self._print_impact_summary(analyses)
+        self._print_impact_recommendations(analyses)
 
-            # Services affected
-            if analysis.affected_services:
-                print("\n   Services affected:")
-                for svc in analysis.affected_services:
-                    critical = " ⚠️ CRITICAL" if svc.critical else ""
-                    print(f"      • {svc.service_name} ({svc.status}){critical}")
+    def _print_package_impact(self, analysis) -> None:
+        """Print impact details for a single package"""
+        pkg = analysis.package_name
+        
+        if not analysis.installed:
+            print(f"\n📦 {pkg}: [Not installed]")
+            return
 
-            # Orphaned packages
-            if analysis.orphaned_packages:
-                print(f"\n   Would orphan: {', '.join(analysis.orphaned_packages[:3])}")
+        print(f"\n📦 {pkg} ({analysis.installed_version})")
+        print(f"   Severity: {analysis.severity.upper()}")
+        self._print_dependencies(analysis, pkg)
+        self._print_services(analysis)
+        self._print_orphaned(analysis)
 
-        # Summary
+    def _print_dependencies(self, analysis, pkg: str) -> None:
+        """Print directly dependent packages"""
+        if not analysis.directly_depends:
+            return
+
+        print(f"\n   Directly depends on {pkg}:")
+        for dep in analysis.directly_depends[:5]:
+            critical = " ⚠️ CRITICAL" if dep.critical else ""
+            print(f"      • {dep.name}{critical}")
+        if len(analysis.directly_depends) > 5:
+            print(f"      ... and {len(analysis.directly_depends) - 5} more")
+
+    def _print_services(self, analysis) -> None:
+        """Print affected services"""
+        if not analysis.affected_services:
+            return
+
+        print("\n   Services affected:")
+        for svc in analysis.affected_services:
+            critical = " ⚠️ CRITICAL" if svc.critical else ""
+            print(f"      • {svc.service_name} ({svc.status}){critical}")
+
+    def _print_orphaned(self, analysis) -> None:
+        """Print orphaned packages"""
+        if analysis.orphaned_packages:
+            print(f"\n   Would orphan: {', '.join(analysis.orphaned_packages[:3])}")
+
+    def _print_impact_summary(self, analyses: list) -> None:
+        """Print removal impact summary"""
         total_affected = sum(len(a.directly_depends) for a in analyses)
         total_services = sum(len(a.affected_services) for a in analyses)
         
         print(f"\n{'=' * 70}")
         print(f"Would affect: {total_affected} packages, {total_services} services")
 
-        # Recommendations
+    def _print_impact_recommendations(self, analyses: list) -> None:
+        """Print removal recommendations"""
         print("\n💡 Recommendations:")
         for analysis in analyses:
             for rec in analysis.recommendations[:2]:

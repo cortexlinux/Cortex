@@ -160,9 +160,7 @@ class LearningTracker:
 
     def __init__(self):
         """Initialize the learning tracker."""
-        self._compiled_patterns = [
-            re.compile(p, re.IGNORECASE) for p in self.EDUCATIONAL_PATTERNS
-        ]
+        self._compiled_patterns = [re.compile(p, re.IGNORECASE) for p in self.EDUCATIONAL_PATTERNS]
 
     def is_educational_query(self, question: str) -> bool:
         """Determine if a question is educational in nature."""
@@ -249,7 +247,7 @@ class LearningTracker:
             return {"topics": {}, "total_queries": 0}
 
         try:
-            with open(self.PROGRESS_FILE, "r") as f:
+            with open(self.PROGRESS_FILE) as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             return {"topics": {}, "total_queries": 0}

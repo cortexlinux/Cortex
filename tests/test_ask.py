@@ -313,9 +313,7 @@ class TestLearningTracker(unittest.TestCase):
     def test_is_educational_query_best_practices(self):
         """Test detection of 'best practices' queries."""
         self.assertTrue(self.tracker.is_educational_query("best practices for security"))
-        self.assertTrue(
-            self.tracker.is_educational_query("what are best practice for nginx")
-        )
+        self.assertTrue(self.tracker.is_educational_query("what are best practice for nginx"))
 
     def test_is_educational_query_tutorial(self):
         """Test detection of 'tutorial' queries."""

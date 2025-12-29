@@ -685,15 +685,7 @@ class CortexCLI:
                 print(f"  Error: {result.error_message}", file=sys.stderr)
             return 1
 
-            return 0
-
-        except Exception as e:
-            self._print_error(f"Error during removal: {str(e)}")
-            return 1
-
-    def _display_removal_impact(
-        self, analyses: list, cascading: bool, orphans_only: bool
-    ) -> None:
+    def _display_removal_impact(self, analyses: list) -> None:
         """Display impact analysis for package removal"""
         from rich.table import Table
 

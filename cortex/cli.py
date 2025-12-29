@@ -656,8 +656,6 @@ class CortexCLI:
                         print(f"  Error: {result.error_message}", file=sys.stderr)
                     return 1
 
-            return 0
-
         except Exception as e:
             self._print_error(f"Error during removal: {str(e)}")
             return 1

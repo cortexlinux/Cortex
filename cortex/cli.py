@@ -569,7 +569,6 @@ class CortexCLI:
         execute: bool = False,
         dry_run: bool = False,
         cascading: bool = False,
-        orphans_only: bool = False,
     ) -> int:
         """
         Remove/uninstall packages with impact analysis.
@@ -579,7 +578,6 @@ class CortexCLI:
             execute: Execute removal commands
             dry_run: Show what would be removed without executing
             cascading: Remove dependent packages automatically
-            orphans_only: Only remove orphaned packages
         """
         try:
             # Parse and validate packages

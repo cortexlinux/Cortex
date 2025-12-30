@@ -710,18 +710,9 @@ class DockerSandbox:
                     packages_installed=[package],
                 )
             else:
-                # Provide a helpful hint when package cannot be located
-                hint = ""
-                combined_output = (result.stderr or "") + "\n" + (result.stdout or "")
-                if "Unable to locate package" in combined_output:
-                    hint = (
-                        "\nHint: run 'sudo apt-get update' on the host and retry, "
-                        "or check your APT sources/repositories."
-                    )
-
                 return SandboxExecutionResult(
                     success=False,
-                    message=f"Failed to install '{package}' on main system{hint}",
+                    message=f"Failed to install '{package}' on main system",
                     exit_code=result.returncode,
                     stderr=result.stderr,
                 )
@@ -748,17 +739,8 @@ class DockerSandbox:
 
         container_name = self._get_container_name(name)
 
-        # If metadata is missing, only allow cleanup when forced; otherwise report not found
-        info = self._load_metadata(name)
-        if not info and not force:
-            return SandboxExecutionResult(
-                success=False,
-                message=f"Sandbox '{name}' not found",
-                exit_code=1,
-            )
-
         try:
-            # Stop container if running (ignore errors)
+            # Stop container if running
             self._run_docker(["stop", container_name], timeout=30, check=False)
 
             # Remove container
@@ -767,9 +749,9 @@ class DockerSandbox:
                 rm_args.append("-f")
             rm_args.append(container_name)
 
-            self._run_docker(rm_args, timeout=30, check=False)
+            result = self._run_docker(rm_args, timeout=30, check=False)
 
-            # Delete metadata (if exists)
+            # Delete metadata
             self._delete_metadata(name)
 
             return SandboxExecutionResult(

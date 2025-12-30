@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "last_updated": "2024-12-29",
+  "individuals": [
+    {
+      "name": "Mike Morgan",
+      "github_username": "mikejmorgan-ai",
+      "emails": [
+        "mike@aiventureholdings.com",
+        "mike@cortexlinux.com",
+        "allbots@llents.io",
+        "allbots@allbots.io"
+      ],
+      "signed_date": "2024-12-29",
+      "cla_version": "1.0"
+    },
+    {
+      "name": "Sujay Dongre",
+      "github_username": "sujay-d07",
+      "emails": [
+        "sujaydongre07@gmail.com"        
+      ],
+      "signed_date": "2024-12-29",
+      "cla_version": "1.0"
+    }
+  ],
+  "corporations": {
+    "AI Venture Holdings LLC": {
+      "contact_name": "Mike Morgan",
+      "contact_email": "legal@aiventureholdings.com",
+      "signed_date": "2024-12-29",
+      "cla_version": "1.0",
+      "domains": [
+        "aiventureholdings.com",
+        "cortexlinux.com"
+      ],
+      "github_usernames": [
+        "mikejmorgan-ai"
+      ],
+      "emails": []
+    }
+  }
+}

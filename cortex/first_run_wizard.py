@@ -146,22 +146,35 @@ def is_valid_api_key(key: str | None, key_type: str = "generic") -> bool:
 def get_valid_api_key(env_var: str, key_type: str = "generic") -> str | None:
     """
     Get a valid API key from .env file first, then environment variable.
-    Treats blank keys as missing.
+    Treats blank keys as missing. Honors shell-exported keys if .env is empty.
     """
     key_from_file = read_key_from_env_file(env_var)
 
     env_path = get_env_file_path()
     logger.debug(f"Checking {env_var} in {env_path}: '{key_from_file}'")
 
+    # First priority: valid key from .env file
     if key_from_file is not None and len(key_from_file) > 0:
         if is_valid_api_key(key_from_file, key_type):
             os.environ[env_var] = key_from_file
+            logger.debug(f"Using {env_var} from .env file")
             return key_from_file
-        return None
+        else:
+            logger.debug(f"Key in .env file for {env_var} is invalid (wrong format)")
+            # Don't return yet - check os.environ as fallback
 
-    if env_var in os.environ:
-        del os.environ[env_var]
+    # Second priority: valid key from shell environment (already exported)
+    key_from_env = os.environ.get(env_var)
+    if key_from_env is not None and len(key_from_env.strip()) > 0:
+        key_from_env = key_from_env.strip()
+        if is_valid_api_key(key_from_env, key_type):
+            logger.debug(f"Using {env_var} from shell environment")
+            return key_from_env
+        else:
+            logger.debug(f"Key in os.environ for {env_var} is invalid (wrong format)")
 
+    # No valid key found in either location
+    logger.debug(f"No valid key found for {env_var}")
     return None
 
 
@@ -391,15 +404,14 @@ class FirstRunWizard:
         try:
             from dotenv import load_dotenv
 
-            load_dotenv(dotenv_path=env_path, override=True)
+            # Load .env file but don't override existing shell-exported keys
+            # This preserves keys set via `export ANTHROPIC_API_KEY=xxx`
+            load_dotenv(dotenv_path=env_path, override=False)
         except ImportError:
             pass
 
-        for key_name in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]:
-            file_value = read_key_from_env_file(key_name)
-            if file_value is None or len(file_value.strip()) == 0:
-                if key_name in os.environ:
-                    del os.environ[key_name]
+        # Note: We no longer delete shell-exported keys when .env is empty.
+        # The get_valid_api_key function now properly checks both sources.
 
         available_providers = detect_available_providers()
         has_ollama = shutil.which("ollama") is not None

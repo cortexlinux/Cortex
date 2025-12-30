@@ -383,7 +383,6 @@ class CortexCLI:
                 self._print_status("🧠", "Understanding request...")
 
                 self._print_status("📦", "Planning installation...")
-            interpreter = CommandInterpreter(api_key=api_key, provider=provider)
 
                 for _ in range(10):
                     self._animate_spinner("Analyzing system requirements...")

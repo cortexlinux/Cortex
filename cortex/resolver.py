@@ -1,83 +1,159 @@
 """
 Semantic Version Conflict Resolver Module.
-Handles dependency version conflicts using upgrade/downgrade strategies.
+Handles dependency version conflicts using AI-driven intelligent analysis.
 """
 
-import semantic_version
+import json
+import logging
+from typing import List, Dict
+
+import semantic_version as sv
+from cortex.llm.interpreter import CommandInterpreter
+
+logger = logging.getLogger(__name__)
 
 
 class DependencyResolver:
     """
     AI-powered semantic version conflict resolver.
-    Analyzes dependency trees and suggests upgrade/downgrade paths.
+    Analyzes dependency version conflicts and suggests intelligent
+    upgrade/downgrade paths.
     """
 
-    def resolve(self, conflict_data: dict) -> list[dict]:
-        """
-        Resolve semantic version conflicts between packages.
+    def __init__(self):
+        self.interpreter = CommandInterpreter(
+            api_key="ollama",
+            provider="ollama",
+        )
 
-        Args:
-            conflict_data: dict containing 'package_a', 'package_b',
-            and 'dependency' keys
-
-        Returns:
-            list[dict]: List of resolution strategy dictionaries
+    async def resolve(self, conflict_data: dict) -> List[Dict]:
         """
-        # Validate Input
+        Resolve semantic version conflicts using deterministic analysis first,
+        followed by AI-powered reasoning as a fallback.
+        """
         required_keys = ["package_a", "package_b", "dependency"]
         for key in required_keys:
             if key not in conflict_data:
                 raise KeyError(f"Missing required key: {key}")
 
-        pkg_a = conflict_data["package_a"]
-        pkg_b = conflict_data["package_b"]
-        dep = conflict_data["dependency"]
+        strategies = self._deterministic_resolution(conflict_data)
+        if strategies:
+            return strategies
 
-        strategies = []
+        prompt = self._build_prompt(conflict_data)
 
-        # Strategy 1: Smart Upgrade
         try:
-            raw_a = pkg_a["requires"].lstrip("^~>=<")
-            raw_b = pkg_b["requires"].lstrip("^~>=<")
-
-            ver_a = semantic_version.Version.coerce(raw_a)
-            ver_b = semantic_version.Version.coerce(raw_b)
-
-            target_ver = str(ver_a)
-
-            # Calculate Risk
-            risk_level = "Low (no breaking changes detected)"
-            if ver_b.major < ver_a.major:
-                risk_level = "Medium (breaking changes detected)"
-
-        except (ValueError, KeyError) as e:
+            response_list = self.interpreter.parse(prompt)
+            response_text = " ".join(response_list)
+            return self._parse_ai_response(response_text, conflict_data)
+        except Exception as e:
+            logger.error(f"AI Resolution failed: {e}")
             return [
                 {
                     "id": 0,
                     "type": "Error",
-                    "action": f"Manual resolution required. Invalid input: {e}",
+                    "action": f"AI analysis unavailable. Manual resolution required: {e}",
                     "risk": "High",
                 }
             ]
 
-        strategies.append(
-            {
-                "id": 1,
-                "type": "Recommended",
-                "action": (f"Update {pkg_b['name']} to {target_ver} (compatible with {dep})"),
-                "risk": risk_level,
-            }
-        )
+    def _deterministic_resolution(self, data: dict) -> List[Dict]:
+        """
+        Perform semantic-version constraint analysis without relying on AI.
+        """
+        try:
+            dependency = data["dependency"]
+            a_req = sv.NpmSpec(data["package_a"]["requires"])
+            b_req = sv.NpmSpec(data["package_b"]["requires"])
 
-        strategies.append(
-            {
-                "id": 2,
-                "type": "Alternative",
-                "action": (
-                    f"Keep {pkg_b['name']}, downgrade {pkg_a['name']} to compatible version"
-                ),
-                "risk": f"Medium (potential feature loss in {pkg_a['name']})",
-            }
-        )
+            intersection = a_req & b_req
+            if intersection:
+                return [
+                    {
+                        "id": 1,
+                        "type": "Recommended",
+                        "action": f"Use {dependency} {intersection}",
+                        "risk": "Low",
+                        "explanation": "Version constraints are compatible",
+                    }
+                ]
 
-        return strategies
+            a_major = a_req.specs[0].version.major
+            b_major = b_req.specs[0].version.major
+
+            strategies = [
+                {
+                    "id": 1,
+                    "type": "Recommended",
+                    "action": (
+                        f"Upgrade {data['package_b']['name']} "
+                        f"to support {dependency} ^{a_major}.0.0"
+                    ),
+                    "risk": "Medium",
+                    "explanation": "Major version upgrade required",
+                },
+                {
+                    "id": 2,
+                    "type": "Alternative",
+                    "action": (
+                        f"Downgrade {data['package_a']['name']} "
+                        f"to support {dependency} ~{b_major}.x"
+                    ),
+                    "risk": "High",
+                    "explanation": "Downgrade may remove features or fixes",
+                },
+            ]
+
+            return strategies
+        except Exception as e:
+            logger.debug(f"Deterministic resolution skipped: {e}")
+            return []
+
+    def _build_prompt(self, data: dict) -> str:
+        """Constructs a detailed AI prompt."""
+        return f"""
+        Act as an expert DevOps Engineer. Analyze this dependency conflict:
+        Dependency: {data['dependency']}
+
+        Conflict Context:
+        1. {data['package_a']['name']} requires {data['package_a']['requires']}
+        2. {data['package_b']['name']} requires {data['package_b']['requires']}
+
+        Task:
+        - Detect breaking changes beyond major version numbers.
+        - Provide a recommended upgrade strategy.
+        - Provide an alternative downgrade strategy.
+
+        Return ONLY valid JSON containing resolution strategies.
+        """
+
+    def _parse_ai_response(self, response: str, data: dict) -> List[Dict]:
+        """Parse AI response into structured strategies."""
+        try:
+            start = response.find("[")
+            end = response.rfind("]") + 1
+            if start != -1 and end != 0:
+                json_str = response[start:end].replace("'", '"')
+                return json.loads(json_str)
+            raise ValueError("No JSON array found")
+        except Exception:
+            return [
+                {
+                    "id": 1,
+                    "type": "Recommended",
+                    "action": (
+                        f"Update {data['package_b']['name']} "
+                        f"to match {data['package_a']['requires']}"
+                    ),
+                    "risk": "Low (AI fallback applied)",
+                },
+                {
+                    "id": 2,
+                    "type": "Alternative",
+                    "action": (
+                        f"Keep {data['package_b']['name']}, "
+                        f"downgrade {data['package_a']['name']}"
+                    ),
+                    "risk": "Medium (Potential feature loss)",
+                },
+            ]

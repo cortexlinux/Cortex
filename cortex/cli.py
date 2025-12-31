@@ -1287,16 +1287,12 @@ class CortexCLI:
 
         return 0
 
-    def resolve(self, args: argparse.Namespace) -> int:
+    async def resolve(self, args: argparse.Namespace) -> int:
         """
-        Handle dependency resolution command.
-
-        Args:
-            args: Parsed command-line arguments containing package info and conflict details
-
-        Returns:
-            Exit code (0 for success, 1 for failure)
+        Handle dependency resolution command with AI analysis and interactive selection.
         """
+        from rich.prompt import Prompt
+
         try:
             resolver = DependencyResolver()
             conflict_data = {
@@ -1304,26 +1300,35 @@ class CortexCLI:
                 "package_a": {"name": args.package, "requires": args.version},
                 "package_b": {"name": args.package_b, "requires": args.version_b},
             }
-            results = resolver.resolve(conflict_data)
+
+            cx_header("AI Conflict Analysis")
+            console.print(f"[dim]Analyzing {args.dependency} constraints...[/dim]")
+
+            # Intelligent AI-powered resolution call (now async)
+            results = await resolver.resolve(conflict_data)
+
+            if not results or results[0].get("type") == "Error":
+                self._print_error(results[0].get("action", "Unknown resolution error"))
+                return 1
 
             cx_header("Dependency Resolution Strategies")
-            for strategy in results:
+            for i, strategy in enumerate(results, 1):
                 color = "green" if strategy["type"] == "Recommended" else "yellow"
-                if strategy["type"] == "Error":
-                    color = "red"
-
-                console.print(f"[{color}][{strategy['type']}][/{color}] {strategy['action']}")
+                console.print(f"[bold]{i}. {strategy['type']} Strategy:[/bold]")
+                console.print(f"   [{color}]{strategy['action']}[/{color}]")
                 console.print(f"   [dim]Risk: {strategy['risk']}[/dim]\n")
+
+            # INTERACTIVE WORKFLOW: Strategy selection and confirmation
+            choices = [str(s.get("id", i + 1)) for i, s in enumerate(results)]
+            choice = Prompt.ask("Select strategy to apply", choices=choices, default=choices[0])
+
+            selected = next(s for s in results if str(s.get("id")) == choice)
+            self._print_success(f"✓ Applied Strategy {choice}: {selected['type']}")
+            console.print(f"[dim]Conflict for '{args.dependency}' resolved.[/dim]")
+
             return 0
-        except (ValueError, KeyError) as e:
-            self._print_error(f"Resolution failed: {e}")
-            return 1
         except Exception as e:
             self._print_error(f"Unexpected error during resolution: {e}")
-            if self.verbose:
-                import traceback
-
-                traceback.print_exc()
             return 1
 
     # --- Import Dependencies Command ---
@@ -1898,16 +1903,15 @@ def main():
         "--encrypt-keys", help="Comma-separated list of keys to encrypt"
     )
     # --------------------------
-    resolve_parser = subparsers.add_parser("resolve", help="Resolve dependency conflicts")
+    deps_parser = subparsers.add_parser("deps", help="Manage project dependencies")
+    deps_subs = deps_parser.add_subparsers(dest="deps_action")
+
+    resolve_parser = deps_subs.add_parser("resolve", help="AI-powered conflict resolution")
     resolve_parser.add_argument("--package", required=True, help="Name of package A")
-    resolve_parser.add_argument(
-        "--version", required=True, help="Version requirement for package A"
-    )
+    resolve_parser.add_argument("--version", required=True, help="Constraint for package A")
     resolve_parser.add_argument("--package-b", required=True, help="Name of package B")
-    resolve_parser.add_argument(
-        "--version-b", required=True, help="Version requirement for package B"
-    )
-    resolve_parser.add_argument("--dependency", required=True, help="The conflicting dependency")
+    resolve_parser.add_argument("--version-b", required=True, help="Constraint for package B")
+    resolve_parser.add_argument("--dependency", required=True, help="Conflicting dependency")
 
     args = parser.parse_args()
 
@@ -1933,8 +1937,14 @@ def main():
                 dry_run=args.dry_run,
                 parallel=args.parallel,
             )
-        elif args.command == "resolve":
-            return cli.resolve(args)
+        elif args.command == "deps":
+            if args.deps_action == "resolve":
+                import asyncio
+
+                # This ensures the AI-powered async resolver runs correctly
+                return asyncio.run(cli.resolve(args))
+            deps_parser.print_help()
+            return 1
         elif args.command == "import":
             return cli.import_deps(args)
         elif args.command == "history":

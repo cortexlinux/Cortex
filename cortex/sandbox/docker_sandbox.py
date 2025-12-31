@@ -170,6 +170,7 @@ class DockerSandbox:
         self,
         data_dir: Path | None = None,
         image: str | None = None,
+        provider: str | None = None,
     ):
         """
         Initialize Docker sandbox manager.
@@ -181,6 +182,7 @@ class DockerSandbox:
         self.data_dir = data_dir or Path.home() / ".cortex" / "sandboxes"
         self.default_image = image or self.DEFAULT_IMAGE
         self._docker_path: str | None = None
+        self.provider = provider
 
         # Ensure data directory exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -342,10 +344,17 @@ class DockerSandbox:
             SandboxAlreadyExistsError: If sandbox with name already exists
             DockerNotFoundError: If Docker is not available
         """
+
+        if self.provider == "fake":
+            return SandboxExecutionResult(
+                success=True,
+                message=f"Fake provider: sandbox skipped for {name}",
+            )
         self.require_docker()
 
         # Check if sandbox already exists
         existing = self._load_metadata(name)
+
         if existing:
             raise SandboxAlreadyExistsError(f"Sandbox '{name}' already exists")
 
@@ -434,6 +443,12 @@ class DockerSandbox:
             SandboxExecutionResult with installation status
         """
         self.require_docker()
+        if self.provider == "fake":
+            return SandboxExecutionResult(
+                success=True,
+                message=f"Fake provider: install skipped for {package}",
+                packages_installed=[package],
+            )
 
         # Load sandbox metadata
         info = self._load_metadata(name)
@@ -501,6 +516,12 @@ class DockerSandbox:
             SandboxExecutionResult with test results
         """
         self.require_docker()
+        if self.provider == "fake":
+            return SandboxExecutionResult(
+                success=True,
+                message="Fake provider: test skipped",
+                test_results=[],
+            )
 
         info = self._load_metadata(name)
         if not info:
@@ -658,6 +679,13 @@ class DockerSandbox:
         Returns:
             SandboxExecutionResult with promotion status
         """
+        if self.provider == "fake":
+            return SandboxExecutionResult(
+                success=True,
+                message=f"Fake provider: skipped for {package}",
+                packages_installed=[package],
+            )
+
         # Verify sandbox exists and package was tested
         info = self._load_metadata(name)
         if not info:
@@ -744,6 +772,12 @@ class DockerSandbox:
         Returns:
             SandboxExecutionResult with cleanup status
         """
+
+        if self.provider == "fake":
+            return SandboxExecutionResult(
+                success=True,
+                message=f"Fake provider: cleanup skipped for sandbox{name}",
+            )
         self.require_docker()
 
         container_name = self._get_container_name(name)
@@ -832,6 +866,13 @@ class DockerSandbox:
         Returns:
             SandboxExecutionResult with command output
         """
+
+        if self.provider == "fake":
+            return SandboxExecutionResult(
+                success=True,
+                message="Fake provider: exec skipped",
+                stdout="",
+            )
         self.require_docker()
 
         info = self._load_metadata(name)

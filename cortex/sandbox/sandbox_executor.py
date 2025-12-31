@@ -174,6 +174,7 @@ class SandboxExecutor:
         max_cpu_cores: int = 2,
         max_memory_mb: int = 2048,
         max_disk_mb: int = 1024,
+        provider: str | None = None,
         timeout_seconds: int = 300,  # 5 minutes
         enable_rollback: bool = True,
     ):
@@ -193,6 +194,7 @@ class SandboxExecutor:
         self.max_cpu_cores = max_cpu_cores
         self.max_memory_mb = max_memory_mb
         self.max_disk_mb = max_disk_mb
+        self.provider = provider
         self.timeout_seconds = timeout_seconds
         self.enable_rollback = enable_rollback
 
@@ -512,6 +514,18 @@ class SandboxExecutor:
         Returns:
             ExecutionResult object
         """
+        # ---- Fake provider short-circuit (integration tests) ----
+        provider = getattr(self, "provider", None)
+
+        if provider == "fake":
+            return ExecutionResult(
+                success=True,
+                stdout="Fake provider: sandbox execution skipped",
+                stderr="",
+                exit_code=0,
+            )
+        # --------------------------------------------------------
+
         start_time = time.time()
         session_id = f"session_{int(start_time)}"
         self.current_session_id = session_id

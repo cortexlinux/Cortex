@@ -3,8 +3,6 @@ Semantic Version Conflict Resolver Module.
 Handles dependency version conflicts using upgrade/downgrade strategies.
 """
 
-from typing import Any
-
 import semantic_version
 
 
@@ -19,7 +17,8 @@ class DependencyResolver:
         Resolve semantic version conflicts between packages.
 
         Args:
-            conflict_data: dict containing 'package_a', 'package_b', and 'dependency' keys
+            conflict_data: dict containing 'package_a', 'package_b',
+            and 'dependency' keys
 
         Returns:
             list[dict]: List of resolution strategy dictionaries
@@ -65,7 +64,7 @@ class DependencyResolver:
             {
                 "id": 1,
                 "type": "Recommended",
-                "action": f"Update {pkg_b['name']} to {target_ver} (compatible with {dep})",
+                "action": (f"Update {pkg_b['name']} to {target_ver} (compatible with {dep})"),
                 "risk": risk_level,
             }
         )
@@ -74,7 +73,9 @@ class DependencyResolver:
             {
                 "id": 2,
                 "type": "Alternative",
-                "action": f"Keep {pkg_b['name']}, downgrade {pkg_a['name']} to compatible version",
+                "action": (
+                    f"Keep {pkg_b['name']}, downgrade {pkg_a['name']} to compatible version"
+                ),
                 "risk": f"Medium (potential feature loss in {pkg_a['name']})",
             }
         )

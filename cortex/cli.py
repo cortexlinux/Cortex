@@ -21,6 +21,7 @@ from cortex.installation_history import InstallationHistory, InstallationStatus,
 from cortex.llm.interpreter import CommandInterpreter
 from cortex.network_config import NetworkConfig
 from cortex.notification_manager import NotificationManager
+from cortex.resolver import DependencyResolver
 from cortex.stack_manager import StackManager
 from cortex.validators import validate_api_key, validate_install_request
 
@@ -1286,6 +1287,26 @@ class CortexCLI:
 
         return 0
 
+    def resolve(self, args: argparse.Namespace) -> int:
+        """Handle dependency resolution command."""
+        resolver = DependencyResolver()
+        conflict_data = {
+            "dependency": args.dependency,
+            "package_a": {"name": args.package, "requires": args.version},
+            "package_b": {"name": "target-package", "requires": "0.0.0"},
+        }
+        results = resolver.resolve(conflict_data)
+
+        cx_header("Dependency Resolution Strategies")
+        for strategy in results:
+            color = "green" if strategy["type"] == "Recommended" else "yellow"
+            if strategy["type"] == "Error":
+                color = "red"
+
+            console.print(f"[{color}][{strategy['type']}][/{color}] {strategy['action']}")
+            console.print(f"   [dim]Risk: {strategy['risk']}[/dim]\n")
+        return 0
+
     # --- Import Dependencies Command ---
     def import_deps(self, args: argparse.Namespace) -> int:
         """Import and install dependencies from package manager files.
@@ -1858,6 +1879,12 @@ def main():
         "--encrypt-keys", help="Comma-separated list of keys to encrypt"
     )
     # --------------------------
+    resolve_parser = subparsers.add_parser("resolve", help="Resolve dependency conflicts")
+    resolve_parser.add_argument("--package", required=True, help="Name of package A")
+    resolve_parser.add_argument(
+        "--version", required=True, help="Version requirement for package A"
+    )
+    resolve_parser.add_argument("--dependency", required=True, help="The conflicting dependency")
 
     args = parser.parse_args()
 
@@ -1883,6 +1910,8 @@ def main():
                 dry_run=args.dry_run,
                 parallel=args.parallel,
             )
+        elif args.command == "resolve":
+            return cli.resolve(args)
         elif args.command == "import":
             return cli.import_deps(args)
         elif args.command == "history":

@@ -1,6 +1,7 @@
 from typing import Dict, List
 
-def parse_changelog(entry: Dict) -> Dict:
+
+def parse_changelog(entry: dict) -> dict:
     security = []
     bugs = []
     features = []

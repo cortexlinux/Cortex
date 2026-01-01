@@ -1,5 +1,6 @@
 import json
 
+
 def export_changelog(data: dict, filename: str):
     if filename.endswith(".json"):
         with open(filename, "w") as f:

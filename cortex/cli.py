@@ -34,8 +34,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 class CortexCLI:
     def changelog(self, package: str) -> int:
         from cortex.changelog.fetchers import fetch_changelog
-        from cortex.changelog.parser import parse_changelog
         from cortex.changelog.formatter import format_changelog
+        from cortex.changelog.parser import parse_changelog
 
         entries = fetch_changelog(package)
 

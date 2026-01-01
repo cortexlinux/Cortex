@@ -1,6 +1,7 @@
-from typing import List, Dict
+from typing import Dict, List
 
-def fetch_changelog(package: str) -> List[Dict]:
+
+def fetch_changelog(package: str) -> list[dict]:
     if package.lower() == "docker":
         return [
             {

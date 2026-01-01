@@ -480,7 +480,7 @@ class AutonomousPatcher:
             )
 
         # Show plan
-        logger.info(f"📋 Patch Plan:")
+        logger.info("📋 Patch Plan:")
         logger.info(f"  Vulnerabilities to patch: {len(plan.vulnerabilities)}")
         logger.info(f"  Packages to update: {len(plan.packages_to_update)}")
         logger.info(f"  Estimated duration: {plan.estimated_duration_minutes:.1f} minutes")
@@ -558,13 +558,13 @@ if __name__ == "__main__":
         result = patcher.patch_vulnerabilities()
 
         if result.success:
-            print(f"\n✅ Patch complete!")
+            print("\n✅ Patch complete!")
             print(f"  Packages updated: {len(result.packages_updated)}")
             print(f"  Vulnerabilities patched: {result.vulnerabilities_patched}")
             if result.duration_seconds:
                 print(f"  Duration: {result.duration_seconds:.2f}s")
         else:
-            print(f"\n❌ Patch failed!")
+            print("\n❌ Patch failed!")
             for error in result.errors:
                 print(f"  - {error}")
             sys.exit(1)

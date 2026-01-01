@@ -485,7 +485,7 @@ if __name__ == "__main__":
             if scheduler.install_systemd_timer(args.id):
                 print(f"✅ Installed systemd timer for {args.id}")
             else:
-                print(f"❌ Failed to install systemd timer")
+                print("❌ Failed to install systemd timer")
                 sys.exit(1)
 
         elif args.command == "delete":

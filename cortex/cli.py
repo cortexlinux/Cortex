@@ -1055,7 +1055,7 @@ class CortexCLI:
         elif scan_all:
             result = scanner.scan_all_packages()
 
-            console.print(f"\n📊 Scan Results:")
+            console.print("\n📊 Scan Results:")
             console.print("=" * 80)
             console.print(f"Packages scanned: {result.total_packages_scanned}")
             console.print(f"Vulnerabilities found: {result.vulnerabilities_found}")
@@ -1066,7 +1066,7 @@ class CortexCLI:
             console.print(f"\nScan duration: {result.scan_duration_seconds:.2f}s")
 
             if result.vulnerabilities:
-                console.print(f"\n📋 Top Vulnerabilities:")
+                console.print("\n📋 Top Vulnerabilities:")
                 sorted_vulns = sorted(
                     result.vulnerabilities,
                     key=lambda v: (
@@ -1189,7 +1189,7 @@ class CortexCLI:
             if scheduler.install_systemd_timer(args.id):
                 cx_print(f"✅ Installed systemd timer for {args.id}", "success")
             else:
-                self._print_error(f"Failed to install systemd timer")
+                self._print_error(f"Failed to install systemd timer for {args.id}")
                 return 1
         else:
             self._print_error("Please specify a schedule action (create/list/run/install-timer)")

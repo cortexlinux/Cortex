@@ -1,5 +1,3 @@
-
-
 def parse_changelog(entry: dict) -> dict:
     security = []
     bugs = []

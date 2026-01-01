@@ -1,5 +1,3 @@
-
-
 def fetch_changelog(package: str) -> list[dict]:
     if package.lower() == "docker":
         return [

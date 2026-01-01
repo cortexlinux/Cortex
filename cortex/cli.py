@@ -1574,7 +1574,6 @@ def show_rich_help():
     table.add_row("doctor", "System health check")
     table.add_row("changelog <pkg>", "View package changelogs")
 
-
     console.print(table)
     console.print()
     console.print("[dim]Learn more: https://cortexlinux.com/docs[/dim]")
@@ -1661,14 +1660,8 @@ def main():
         action="store_true",
         help="Enable parallel execution for multi-step installs",
     )
-    changelog_parser = subparsers.add_parser(
-        "changelog",
-        help="View package changelogs"
-    )
-    changelog_parser.add_argument(
-        "package",
-        help="Package name (e.g. docker)"
-    )
+    changelog_parser = subparsers.add_parser("changelog", help="View package changelogs")
+    changelog_parser.add_argument("package", help="Package name (e.g. docker)")
 
     # Import command - import dependencies from package manager files
     import_parser = subparsers.add_parser(
@@ -1904,8 +1897,6 @@ def main():
             return cli.status()
         elif args.command == "changelog":
             return cli.changelog(args.package)
-
-
 
         elif args.command == "ask":
             return cli.ask(args.question)

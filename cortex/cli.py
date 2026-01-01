@@ -4,7 +4,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from cortex.ask import AskHandler
 from cortex.branding import VERSION, console, cx_header, cx_print, show_banner
@@ -548,12 +548,19 @@ class CortexCLI:
             for s in results:
                 s_type = s.get("type", "Unknown")
                 color = "green" if s_type == "Recommended" else "yellow"
+                # Updated to make the number very clear
                 console.print(f"\n[{color}]Strategy {s['id']} ({s_type}):[/{color}]")
-                console.print(f"  Action: {s['action']}")
-                console.print(f"  Risk: {s['risk']}")
+                console.print(f"  [bold]Action:[/bold] {s['action']}")
+                console.print(f"  [bold]Risk:[/bold]    {s['risk']}")
 
-            # Strategy Selection (CodeRabbit feedback: explicit bounds checking)
+            # Numbered Choice Logic (Keep this part, it is correct)
             choices = [str(s.get("id")) for s in results]
+            choice = Prompt.ask("\nSelect strategy to apply", choices=choices, default=choices[0])
+
+            # 1. Create numbered choices based on Strategy IDs (Satisfies UX request)
+            choices = [str(s.get("id")) for s in results]
+
+            # 2. Use Prompt.ask to let user pick a number (1, 2, etc.)
             choice = Prompt.ask("\nSelect strategy to apply", choices=choices, default=choices[0])
 
             selected = next((s for s in results if str(s.get("id")) == choice), None)

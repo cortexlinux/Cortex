@@ -79,7 +79,7 @@ cortex security patch --scan-and-patch --strategy critical_only
 cortex security patch --scan-and-patch --strategy critical_only --apply
 
 # Set up monthly automated patching (Linux standard practice)
-cortex security schedule create monthly-patch --frequency monthly --enable-patch
+cortex security schedule create monthly-patch --frequency monthly --enable-patching
 cortex security schedule install-timer monthly-patch
 ```
 
@@ -114,7 +114,7 @@ cortex security schedule install-timer monthly-patch
 
 ### Industry Statistics
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    THE PATCHING GAP                         │
 ├─────────────────────────────────────────────────────────────┤

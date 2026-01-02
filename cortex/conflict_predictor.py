@@ -3,14 +3,12 @@ AI-Powered Dependency Conflict Predictor
 
 This module predicts and resolves package dependency conflicts BEFORE installation
 using LLM analysis instead of hardcoded rules.
-
-Author: Cortex Linux Team
-License: Apache 2.0
 """
 
 import json
 import logging
 import re
+import shlex
 import subprocess
 from dataclasses import asdict, dataclass, field
 from enum import Enum
@@ -23,6 +21,21 @@ from cortex.llm_router import LLMRouter, TaskType
 CONFLICT_TASK_TYPE = TaskType.DEPENDENCY_RESOLUTION
 
 logger = logging.getLogger(__name__)
+
+# Security: Validate version constraint format
+CONSTRAINT_PATTERN = re.compile(r"^(<|>|<=|>=|==|!=|~=|~|===)?[\w.!*+\-]+$")
+
+
+def validate_version_constraint(constraint: str) -> bool:
+    """Validate pip version constraint format to prevent injection."""
+    if not constraint:
+        return True
+    return bool(CONSTRAINT_PATTERN.match(constraint.strip()))
+
+
+def escape_command_arg(arg: str) -> str:
+    """Safely escape argument for shell commands."""
+    return shlex.quote(arg)
 
 
 class ConflictType(Enum):
@@ -106,24 +119,35 @@ class ConflictPredictor:
     ) -> list[ConflictPrediction]:
         """
         Predict conflicts for a package installation using LLM analysis.
+        (Legacy method - use predict_conflicts_with_resolutions for better performance)
+        """
+        conflicts, _ = self.predict_conflicts_with_resolutions(package_name, version)
+        return conflicts
+
+    def predict_conflicts_with_resolutions(
+        self, package_name: str, version: str | None = None
+    ) -> tuple[list[ConflictPrediction], list[ResolutionStrategy]]:
+        """
+        Predict conflicts AND generate resolutions in a single LLM call.
+        Returns (conflicts, strategies) tuple.
         """
         logger.info(f"Predicting conflicts for {package_name} {version or 'latest'}")
 
         if not self.llm_router:
             logger.warning("No LLM router available, skipping conflict prediction")
-            return []
+            return [], []
 
         # Gather system state
         pip_packages = get_pip_packages()
         apt_packages = get_apt_packages_summary()
 
-        # Build the prompt
-        prompt = self._build_analysis_prompt(package_name, version, pip_packages, apt_packages)
+        # Build the combined prompt
+        prompt = self._build_combined_prompt(package_name, version, pip_packages, apt_packages)
 
         try:
-            # Call LLM for analysis
+            # Single LLM call for both conflicts AND resolutions
             messages = [
-                {"role": "system", "content": CONFLICT_ANALYSIS_SYSTEM_PROMPT},
+                {"role": "system", "content": COMBINED_ANALYSIS_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ]
 
@@ -131,39 +155,34 @@ class ConflictPredictor:
                 messages=messages,
                 task_type=CONFLICT_TASK_TYPE,
                 temperature=0.2,
-                max_tokens=2048,
+                max_tokens=3000,
             )
 
             if not response or not response.content:
                 logger.warning("Empty response from LLM")
-                return []
+                return [], []
 
-            # Parse the JSON response
-            conflicts = self._parse_llm_response(response.content, package_name)
-            logger.info(f"Found {len(conflicts)} potential conflicts")
-            return conflicts
+            # Parse the combined JSON response
+            conflicts, strategies = self._parse_combined_response(response.content, package_name)
+            logger.info(f"Found {len(conflicts)} conflicts, {len(strategies)} strategies")
+            return conflicts, strategies
 
         except Exception as e:
             logger.warning(f"AI conflict detection failed: {e}")
-            return []
+            return [], []
 
-    def _build_analysis_prompt(
+    def _build_combined_prompt(
         self,
         package_name: str,
         version: str | None,
         pip_packages: dict[str, str],
         apt_packages: list[str],
     ) -> str:
-        """Build the prompt for LLM conflict analysis."""
-
-        # Format pip packages (limit to relevant ones for context size)
+        """Build combined prompt for conflicts AND resolutions."""
         pip_list = "\n".join(
             [f"  - {name}=={ver}" for name, ver in list(pip_packages.items())[:50]]
         )
-
-        # Format apt packages summary
         apt_list = "\n".join([f"  - {pkg}" for pkg in apt_packages[:30]])
-
         version_str = f"=={version}" if version else " (latest)"
 
         return f"""Analyze potential dependency conflicts for installing: {package_name}{version_str}
@@ -174,32 +193,24 @@ CURRENTLY INSTALLED PIP PACKAGES:
 RELEVANT APT PACKAGES:
 {apt_list or "  (none)"}
 
-Based on your knowledge of Python/Linux package ecosystems, analyze:
-1. Will installing {package_name}{version_str} conflict with any installed packages?
-2. Are there version incompatibilities?
-3. What packages might be affected?
-
+Analyze for conflicts AND provide resolution strategies if conflicts exist.
 Respond with JSON only."""
 
-    def _parse_llm_response(self, response: str, package_name: str) -> list[ConflictPrediction]:
-        """Parse LLM response into ConflictPrediction objects."""
+    def _parse_combined_response(
+        self, response: str, package_name: str
+    ) -> tuple[list[ConflictPrediction], list[ResolutionStrategy]]:
+        """Parse combined LLM response into conflicts and strategies."""
         conflicts = []
+        strategies = []
 
         try:
-            # Try to extract JSON from response
-            json_match = re.search(r"\{[\s\S]*\}", response)
-            if not json_match:
-                logger.warning("No JSON found in LLM response")
-                return []
+            data = extract_json_from_response(response)
+            if not data:
+                logger.warning("No valid JSON found in LLM response")
+                return [], []
 
-            data = json.loads(json_match.group())
-
-            # Handle different response formats
+            # Parse conflicts
             conflict_list = data.get("conflicts", [])
-            if not conflict_list and data.get("has_conflicts"):
-                # Alternative format
-                conflict_list = [data]
-
             for c in conflict_list:
                 try:
                     conflict_type_str = c.get("type", "VERSION").upper()
@@ -226,10 +237,39 @@ Respond with JSON only."""
                     logger.debug(f"Failed to parse conflict entry: {e}")
                     continue
 
+            # Parse strategies (only if conflicts exist)
+            if conflicts:
+                strategy_list = data.get("strategies", data.get("resolutions", []))
+                for s in strategy_list:
+                    try:
+                        strategy_type_str = s.get("type", "VENV").upper()
+                        if strategy_type_str not in [st.name for st in StrategyType]:
+                            strategy_type_str = "VENV"
+
+                        strategies.append(
+                            ResolutionStrategy(
+                                strategy_type=StrategyType[strategy_type_str],
+                                description=s.get("description", ""),
+                                safety_score=float(s.get("safety_score", 0.5)),
+                                commands=s.get("commands", []),
+                                benefits=s.get("benefits", []),
+                                risks=s.get("risks", []),
+                                affects_packages=s.get("affects_packages", []),
+                            )
+                        )
+                    except (KeyError, ValueError):
+                        continue
+
+                strategies.sort(key=lambda s: s.safety_score, reverse=True)
+
+                # If LLM didn't provide strategies, use basic fallback
+                if not strategies:
+                    strategies = self._generate_basic_strategies(conflicts)
+
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse LLM response as JSON: {e}")
 
-        return conflicts
+        return conflicts, strategies
 
     def generate_resolutions(self, conflicts: list[ConflictPrediction]) -> list[ResolutionStrategy]:
         """Generate resolution strategies using LLM."""
@@ -285,11 +325,10 @@ Respond with JSON only."""
         strategies = []
 
         try:
-            json_match = re.search(r"\{[\s\S]*\}", response)
-            if not json_match:
+            data = extract_json_from_response(response)
+            if not data:
                 return []
 
-            data = json.loads(json_match.group())
             strategy_list = data.get("strategies", data.get("resolutions", []))
 
             for s in strategy_list:
@@ -336,9 +375,9 @@ Respond with JSON only."""
                     description=f"Install {pkg} in virtual environment (isolate)",
                     safety_score=0.85,
                     commands=[
-                        f"python3 -m venv {pkg}_env",
-                        f"source {pkg}_env/bin/activate",
-                        f"pip install {pkg}",
+                        f"python3 -m venv {escape_command_arg(pkg)}_env",
+                        f"source {escape_command_arg(pkg)}_env/bin/activate",
+                        f"pip install {escape_command_arg(pkg)}",
                     ],
                     benefits=["Complete isolation", "No system impact", "Reversible"],
                     risks=["Must activate venv to use package"],
@@ -352,7 +391,7 @@ Respond with JSON only."""
                     strategy_type=StrategyType.UPGRADE,
                     description=f"Install newer version of {pkg} (may be compatible)",
                     safety_score=0.75,
-                    commands=[f"pip install --upgrade {pkg}"],
+                    commands=[f"pip install --upgrade {escape_command_arg(pkg)}"],
                     benefits=["May resolve compatibility", "Gets latest features"],
                     risks=["May have different features than requested version"],
                     affects_packages=[pkg],
@@ -360,13 +399,17 @@ Respond with JSON only."""
             )
 
             # Strategy 3: Downgrade conflicting package
-            if conflict.required_constraint:
+            if conflict.required_constraint and validate_version_constraint(
+                conflict.required_constraint
+            ):
                 strategies.append(
                     ResolutionStrategy(
                         strategy_type=StrategyType.DOWNGRADE,
                         description=f"Downgrade {conflicting} to compatible version",
                         safety_score=0.50,
-                        commands=[f"pip install '{conflicting}{conflict.required_constraint}'"],
+                        commands=[
+                            f"pip install {escape_command_arg(conflicting)}{conflict.required_constraint}"
+                        ],
                         benefits=[f"Satisfies {pkg} requirements"],
                         risks=[f"May affect packages depending on {conflicting}"],
                         affects_packages=[conflicting],
@@ -380,8 +423,8 @@ Respond with JSON only."""
                     description=f"Remove {conflicting} (not recommended)",
                     safety_score=0.10,
                     commands=[
-                        f"pip uninstall -y {conflicting}",
-                        f"pip install {pkg}",
+                        f"pip uninstall -y {escape_command_arg(conflicting)}",
+                        f"pip install {escape_command_arg(pkg)}",
                     ],
                     benefits=["Resolves conflict directly"],
                     risks=["May break dependent packages", "Data loss possible"],
@@ -418,6 +461,62 @@ Respond with JSON only."""
 # ============================================================================
 # System Prompts for LLM
 # ============================================================================
+
+COMBINED_ANALYSIS_SYSTEM_PROMPT = """You are an expert Linux/Python dependency analyzer.
+Your job is to predict package conflicts BEFORE installation AND suggest resolutions.
+
+Analyze the user's installed packages and the package they want to install.
+Based on your knowledge of package ecosystems (PyPI, apt), identify potential conflicts.
+
+Respond with JSON in this exact format:
+{
+  "has_conflicts": true/false,
+  "conflicts": [
+    {
+      "conflicting_package": "numpy",
+      "current_version": "2.1.0",
+      "required_constraint": "< 2.0",
+      "type": "VERSION",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "explanation": "tensorflow 2.15 requires numpy < 2.0, but numpy 2.1.0 is installed",
+      "installed_by": "pandas",
+      "affected_packages": ["pandas", "scipy"]
+    }
+  ],
+  "strategies": [
+    {
+      "type": "VENV",
+      "description": "Create virtual environment with compatible versions (safest)",
+      "safety_score": 0.95,
+      "commands": ["python3 -m venv myenv", "source myenv/bin/activate", "pip install package"],
+      "benefits": ["Complete isolation", "No system impact"],
+      "risks": ["Must activate venv to use"],
+      "affects_packages": ["package"]
+    },
+    {
+      "type": "DOWNGRADE",
+      "description": "Downgrade conflicting package to compatible version",
+      "safety_score": 0.70,
+      "commands": ["pip install 'numpy<2.0'"],
+      "benefits": ["Simple fix"],
+      "risks": ["May affect other packages"],
+      "affects_packages": ["numpy"]
+    }
+  ]
+}
+
+If no conflicts, respond with:
+{"has_conflicts": false, "conflicts": [], "strategies": []}
+
+Strategy types: VENV, UPGRADE, DOWNGRADE, REMOVE_CONFLICT, ALTERNATIVE
+Safety scores: 0.0-1.0 (higher = safer)
+
+IMPORTANT:
+- Only report REAL conflicts you're confident about
+- Always include VENV as the safest option
+- Rank strategies by safety_score (highest first)
+- Provide 3-4 strategies if conflicts exist"""
 
 CONFLICT_ANALYSIS_SYSTEM_PROMPT = """You are an expert Linux/Python dependency analyzer.
 Your job is to predict package conflicts BEFORE installation.
@@ -476,6 +575,37 @@ Strategy types: UPGRADE, DOWNGRADE, VENV, REMOVE_CONFLICT, ALTERNATIVE
 Safety scores: 0.0-1.0 (higher = safer)
 
 Rank strategies by safety. Always include VENV as a safe option."""
+
+
+# ============================================================================
+# JSON Parsing Utilities
+# ============================================================================
+
+
+def extract_json_from_response(response: str) -> dict | None:
+    """Safely extract first valid JSON object from LLM response.
+
+    Uses JSONDecoder to properly handle nested structures instead of greedy regex.
+    This prevents issues with multiple JSON blocks or text after the JSON.
+    """
+    if not response:
+        return None
+
+    decoder = json.JSONDecoder()
+    idx = 0
+
+    while idx < len(response):
+        idx = response.find("{", idx)
+        if idx == -1:
+            return None
+
+        try:
+            obj, end_idx = decoder.raw_decode(response, idx)
+            return obj
+        except json.JSONDecodeError:
+            idx += 1
+
+    return None
 
 
 # ============================================================================
@@ -583,21 +713,30 @@ def prompt_resolution_choice(
 
 
 def get_pip_packages() -> dict[str, str]:
-    """Get installed pip packages."""
+    """Get installed pip packages with timeout protection."""
     try:
         result = subprocess.run(
-            ["pip3", "list", "--format=json"], capture_output=True, text=True, timeout=15
+            ["pip3", "list", "--format=json"],
+            capture_output=True,
+            text=True,
+            timeout=5,  # Reduced from 15 to prevent UI blocking
         )
         if result.returncode == 0:
             packages = json.loads(result.stdout)
             return {pkg["name"]: pkg["version"] for pkg in packages}
+    except subprocess.TimeoutExpired:
+        logger.debug("pip3 list timed out after 5 seconds")
+    except json.JSONDecodeError as e:
+        logger.debug(f"Failed to parse pip output as JSON: {e}")
+    except FileNotFoundError:
+        logger.debug("pip3 command not found")
     except Exception as e:
         logger.debug(f"Failed to get pip packages: {e}")
     return {}
 
 
 def get_apt_packages_summary() -> list[str]:
-    """Get summary of relevant apt packages."""
+    """Get summary of relevant apt packages with timeout protection."""
     relevant_prefixes = [
         "python",
         "lib",
@@ -613,16 +752,26 @@ def get_apt_packages_summary() -> list[str]:
 
     try:
         result = subprocess.run(
-            ["dpkg", "--get-selections"], capture_output=True, text=True, timeout=10
+            ["dpkg", "--get-selections"],
+            capture_output=True,
+            text=True,
+            timeout=5,  # Reduced from 10 to prevent UI blocking
         )
         if result.returncode == 0:
             packages = []
             for line in result.stdout.split("\n"):
                 if "\tinstall" in line:
-                    pkg = line.split()[0]
-                    if any(pkg.startswith(p) for p in relevant_prefixes):
-                        packages.append(pkg)
+                    try:
+                        pkg = line.split()[0]
+                        if any(pkg.startswith(p) for p in relevant_prefixes):
+                            packages.append(pkg)
+                    except (IndexError, ValueError):
+                        continue  # Skip malformed lines
             return packages[:30]
+    except subprocess.TimeoutExpired:
+        logger.debug("dpkg --get-selections timed out after 5 seconds")
+    except FileNotFoundError:
+        logger.debug("dpkg command not found")
     except Exception as e:
         logger.debug(f"Failed to get apt packages: {e}")
     return []

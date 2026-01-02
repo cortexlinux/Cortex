@@ -2,12 +2,12 @@
 Unit tests for AI-Powered Dependency Conflict Predictor
 
 Tests cover:
-- Rule-based conflict detection
-- Resolution strategy generation
-- Safety score calculation
-- System state parsing
-- Version constraint parsing and comparison
+- Data classes (ConflictPrediction, ResolutionStrategy)
+- LLM response parsing
+- JSON extraction utilities
 - Display formatting
+- Basic strategy generation
+- Security validations
 """
 
 import json
@@ -20,17 +20,12 @@ from cortex.conflict_predictor import (
     ConflictType,
     ResolutionStrategy,
     StrategyType,
-    check_version_constraint,
-    compare_versions,
-    find_compatible_version,
+    escape_command_arg,
+    extract_json_from_response,
     format_conflict_summary,
-    format_conflicts_for_display,
-    format_resolutions_for_display,
     get_pip_packages,
-    parse_dpkg_status,
-    parse_version,
+    validate_version_constraint,
 )
-from cortex.dependency_resolver import Dependency, DependencyGraph
 
 
 class TestConflictPrediction(unittest.TestCase):
@@ -66,6 +61,23 @@ class TestConflictPrediction(unittest.TestCase):
         self.assertEqual(conflict_dict["package1"], "mysql-server")
         self.assertEqual(conflict_dict["conflict_type"], "mutual_exclusion")
 
+    def test_conflict_with_extended_fields(self):
+        """Test conflict with installed_by and version fields"""
+        conflict = ConflictPrediction(
+            package1="tensorflow",
+            package2="numpy",
+            conflict_type=ConflictType.VERSION,
+            confidence=0.95,
+            explanation="Version mismatch",
+            installed_by="pandas",
+            current_version="2.1.0",
+            required_constraint="< 2.0",
+        )
+
+        self.assertEqual(conflict.installed_by, "pandas")
+        self.assertEqual(conflict.current_version, "2.1.0")
+        self.assertEqual(conflict.required_constraint, "< 2.0")
+
 
 class TestResolutionStrategy(unittest.TestCase):
     """Test ResolutionStrategy data class"""
@@ -76,7 +88,7 @@ class TestResolutionStrategy(unittest.TestCase):
             strategy_type=StrategyType.UPGRADE,
             description="Upgrade to version 2.16",
             safety_score=0.85,
-            commands=["sudo apt-get install tensorflow=2.16"],
+            commands=["pip install tensorflow==2.16"],
             risks=["May break compatibility"],
             estimated_time_minutes=3.0,
         )
@@ -108,127 +120,171 @@ class TestConflictPredictor(unittest.TestCase):
 
     def test_predictor_initialization(self):
         """Test predictor initializes correctly"""
-        self.assertIsNotNone(self.predictor.dependency_resolver)
-        self.assertIsNotNone(self.predictor.version_conflicts)
-        self.assertIsNotNone(self.predictor.port_conflicts)
-        self.assertIsNotNone(self.predictor.mutual_exclusions)
+        self.assertIsNone(self.predictor.llm_router)
+        self.assertIsNotNone(self.predictor.history)
 
-    def test_mutual_exclusion_patterns(self):
-        """Test mutual exclusion patterns are loaded"""
-        self.assertIn("mysql-server", self.predictor.mutual_exclusions)
-        self.assertIn("mariadb-server", self.predictor.mutual_exclusions["mysql-server"])
+    def test_predictor_with_llm_router(self):
+        """Test predictor with LLM router"""
+        mock_router = MagicMock()
+        predictor = ConflictPredictor(llm_router=mock_router)
+        self.assertEqual(predictor.llm_router, mock_router)
 
-    def test_port_conflict_patterns(self):
-        """Test port conflict patterns are loaded"""
-        self.assertIn(80, self.predictor.port_conflicts)
-        self.assertIn("apache2", self.predictor.port_conflicts[80])
-        self.assertIn("nginx", self.predictor.port_conflicts[80])
+    def test_predict_conflicts_no_llm(self):
+        """Test prediction returns empty when no LLM router"""
+        conflicts = self.predictor.predict_conflicts("tensorflow")
+        self.assertEqual(conflicts, [])
 
-    @patch("cortex.conflict_predictor.DependencyResolver")
-    def test_predict_conflicts_no_conflicts(self, mock_resolver):
-        """Test prediction when no conflicts exist"""
-        # Mock dependency graph with no conflicts
-        mock_graph = MagicMock(spec=DependencyGraph)
-        mock_graph.all_dependencies = []
-        mock_graph.conflicts = []
+    def test_predict_conflicts_with_resolutions_no_llm(self):
+        """Test combined prediction returns empty when no LLM router"""
+        conflicts, strategies = self.predictor.predict_conflicts_with_resolutions("tensorflow")
+        self.assertEqual(conflicts, [])
+        self.assertEqual(strategies, [])
 
-        mock_resolver_instance = Mock()
-        mock_resolver_instance.resolve_dependencies.return_value = mock_graph
-        self.predictor.dependency_resolver = mock_resolver_instance
 
-        conflicts = self.predictor.predict_conflicts("nginx")
+class TestLLMResponseParsing(unittest.TestCase):
+    """Test LLM response parsing"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.mock_router = MagicMock()
+        self.predictor = ConflictPredictor(llm_router=self.mock_router)
+
+    def test_parse_combined_response_with_conflicts(self):
+        """Test parsing LLM response with conflicts"""
+        response = json.dumps(
+            {
+                "has_conflicts": True,
+                "conflicts": [
+                    {
+                        "conflicting_package": "numpy",
+                        "current_version": "2.1.0",
+                        "required_constraint": "< 2.0",
+                        "type": "VERSION",
+                        "confidence": 0.95,
+                        "severity": "HIGH",
+                        "explanation": "tensorflow requires numpy < 2.0",
+                    }
+                ],
+                "strategies": [
+                    {
+                        "type": "VENV",
+                        "description": "Use virtual environment",
+                        "safety_score": 0.95,
+                        "commands": ["python3 -m venv myenv"],
+                        "benefits": ["Isolation"],
+                        "risks": ["Must activate"],
+                    }
+                ],
+            }
+        )
+
+        conflicts, strategies = self.predictor._parse_combined_response(response, "tensorflow")
+
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0].package2, "numpy")
+        self.assertEqual(conflicts[0].confidence, 0.95)
+        self.assertEqual(len(strategies), 1)
+        self.assertEqual(strategies[0].strategy_type, StrategyType.VENV)
+
+    def test_parse_combined_response_no_conflicts(self):
+        """Test parsing LLM response with no conflicts"""
+        response = json.dumps(
+            {
+                "has_conflicts": False,
+                "conflicts": [],
+                "strategies": [],
+            }
+        )
+
+        conflicts, strategies = self.predictor._parse_combined_response(response, "requests")
 
         self.assertEqual(len(conflicts), 0)
+        self.assertEqual(len(strategies), 0)
 
-    @patch("cortex.conflict_predictor.DependencyResolver")
-    def test_detect_mutual_exclusion(self, mock_resolver):
-        """Test detection of mutual exclusion conflicts"""
-        # Mock scenario: trying to install mysql-server when mariadb-server exists
-        mock_graph = MagicMock(spec=DependencyGraph)
-        mock_graph.all_dependencies = [
-            Dependency(
-                name="mariadb-server",
-                version="10.6",
-                is_satisfied=True,  # Already installed
-            )
-        ]
-        mock_graph.conflicts = []
+    def test_parse_combined_response_invalid_json(self):
+        """Test parsing invalid JSON returns empty"""
+        response = "This is not JSON"
 
-        mock_resolver_instance = Mock()
-        mock_resolver_instance.resolve_dependencies.return_value = mock_graph
-        self.predictor.dependency_resolver = mock_resolver_instance
+        conflicts, strategies = self.predictor._parse_combined_response(response, "pkg")
 
-        conflicts = self.predictor.predict_conflicts("mysql-server")
+        self.assertEqual(len(conflicts), 0)
+        self.assertEqual(len(strategies), 0)
 
-        self.assertGreater(len(conflicts), 0)
-        conflict = conflicts[0]
-        self.assertEqual(conflict.conflict_type, ConflictType.MUTUAL_EXCLUSION)
-        self.assertEqual(conflict.confidence, 1.0)
-        self.assertIn("mariadb-server", conflict.explanation)
+    def test_parse_combined_response_unknown_conflict_type(self):
+        """Test parsing handles unknown conflict types"""
+        response = json.dumps(
+            {
+                "conflicts": [
+                    {
+                        "conflicting_package": "pkg2",
+                        "type": "UNKNOWN_TYPE",
+                        "confidence": 0.8,
+                        "explanation": "Some conflict",
+                    }
+                ],
+            }
+        )
 
-    def test_deduplicate_conflicts(self):
-        """Test conflict deduplication"""
-        conflicts = [
-            ConflictPrediction(
-                package1="pkg1",
-                package2="pkg2",
-                conflict_type=ConflictType.VERSION,
-                confidence=0.9,
-                explanation="Test",
-            ),
-            ConflictPrediction(
-                package1="pkg1",
-                package2="pkg2",
-                conflict_type=ConflictType.VERSION,
-                confidence=0.8,
-                explanation="Test duplicate",
-            ),
-            ConflictPrediction(
-                package1="pkg3",
-                package2="pkg4",
-                conflict_type=ConflictType.PORT,
-                confidence=0.95,
-                explanation="Different conflict",
-            ),
-        ]
+        conflicts, _ = self.predictor._parse_combined_response(response, "pkg1")
 
-        unique = self.predictor._deduplicate_conflicts(conflicts)
-
-        self.assertEqual(len(unique), 2)
-
-    def test_is_complex_scenario(self):
-        """Test complex scenario detection"""
-        # Simple scenario
-        simple_graph = MagicMock(spec=DependencyGraph)
-        simple_graph.all_dependencies = [Dependency(name="pkg1")]
-        simple_graph.conflicts = []
-
-        self.assertFalse(self.predictor._is_complex_scenario(simple_graph))
-
-        # Complex scenario (many dependencies)
-        complex_graph = MagicMock(spec=DependencyGraph)
-        complex_graph.all_dependencies = [Dependency(name=f"pkg{i}") for i in range(15)]
-        complex_graph.conflicts = []
-
-        self.assertTrue(self.predictor._is_complex_scenario(complex_graph))
-
-        # Complex scenario (has conflicts)
-        conflict_graph = MagicMock(spec=DependencyGraph)
-        conflict_graph.all_dependencies = [Dependency(name="pkg1")]
-        conflict_graph.conflicts = [("pkg1", "pkg2")]
-
-        self.assertTrue(self.predictor._is_complex_scenario(conflict_graph))
+        self.assertEqual(len(conflicts), 1)
+        # Should default to VERSION
+        self.assertEqual(conflicts[0].conflict_type, ConflictType.VERSION)
 
 
-class TestResolutionGeneration(unittest.TestCase):
-    """Test resolution strategy generation"""
+class TestExtractJsonFromResponse(unittest.TestCase):
+    """Test JSON extraction utility"""
+
+    def test_extract_simple_json(self):
+        """Test extracting simple JSON"""
+        response = '{"key": "value"}'
+        result = extract_json_from_response(response)
+        self.assertEqual(result, {"key": "value"})
+
+    def test_extract_json_with_prefix(self):
+        """Test extracting JSON with text prefix"""
+        response = 'Here is the analysis: {"conflicts": []}'
+        result = extract_json_from_response(response)
+        self.assertEqual(result, {"conflicts": []})
+
+    def test_extract_json_with_markdown(self):
+        """Test extracting JSON wrapped in markdown"""
+        response = '```json\n{"has_conflicts": true}\n```'
+        result = extract_json_from_response(response)
+        self.assertEqual(result, {"has_conflicts": True})
+
+    def test_extract_nested_json(self):
+        """Test extracting nested JSON"""
+        response = '{"outer": {"inner": [1, 2, 3]}}'
+        result = extract_json_from_response(response)
+        self.assertEqual(result["outer"]["inner"], [1, 2, 3])
+
+    def test_extract_no_json(self):
+        """Test extracting from text without JSON"""
+        response = "No JSON here"
+        result = extract_json_from_response(response)
+        self.assertIsNone(result)
+
+    def test_extract_empty_response(self):
+        """Test extracting from empty response"""
+        result = extract_json_from_response("")
+        self.assertIsNone(result)
+
+    def test_extract_none_response(self):
+        """Test extracting from None"""
+        result = extract_json_from_response(None)
+        self.assertIsNone(result)
+
+
+class TestBasicStrategyGeneration(unittest.TestCase):
+    """Test basic strategy generation (fallback when no LLM)"""
 
     def setUp(self):
         """Set up test fixtures"""
         self.predictor = ConflictPredictor()
 
-    def test_generate_resolutions(self):
-        """Test generating resolutions for conflicts"""
+    def test_generate_basic_strategies(self):
+        """Test generating basic strategies"""
         conflicts = [
             ConflictPrediction(
                 package1="tensorflow",
@@ -239,152 +295,152 @@ class TestResolutionGeneration(unittest.TestCase):
             )
         ]
 
-        resolutions = self.predictor.generate_resolutions(conflicts)
+        strategies = self.predictor._generate_basic_strategies(conflicts)
 
-        self.assertGreater(len(resolutions), 0)
-        # Strategies should be sorted by safety score
-        for i in range(len(resolutions) - 1):
-            self.assertGreaterEqual(resolutions[i].safety_score, resolutions[i + 1].safety_score)
-
-    def test_venv_strategy_generation(self):
-        """Test virtual environment strategy is generated"""
-        conflicts = [
-            ConflictPrediction(
-                package1="test-package",
-                package2="conflict-package",
-                conflict_type=ConflictType.VERSION,
-                confidence=0.8,
-                explanation="Test",
-            )
-        ]
-
-        strategies = self.predictor._generate_strategies_for_conflict(conflicts[0])
-
+        self.assertGreater(len(strategies), 0)
+        # Should include VENV as safest
         venv_strategies = [s for s in strategies if s.strategy_type == StrategyType.VENV]
         self.assertGreater(len(venv_strategies), 0)
 
-        venv = venv_strategies[0]
-        self.assertIn("venv", " ".join(venv.commands))
-
-    def test_remove_conflict_strategy_generation(self):
-        """Test removal strategy is generated (but with low safety)"""
+    def test_strategies_sorted_by_safety(self):
+        """Test strategies are sorted by safety score"""
         conflicts = [
             ConflictPrediction(
                 package1="pkg1",
                 package2="pkg2",
-                conflict_type=ConflictType.MUTUAL_EXCLUSION,
-                confidence=1.0,
+                conflict_type=ConflictType.VERSION,
+                confidence=0.9,
                 explanation="Test",
             )
         ]
 
-        strategies = self.predictor._generate_strategies_for_conflict(conflicts[0])
+        strategies = self.predictor._generate_basic_strategies(conflicts)
 
-        remove_strategies = [
-            s for s in strategies if s.strategy_type == StrategyType.REMOVE_CONFLICT
+        for i in range(len(strategies) - 1):
+            self.assertGreaterEqual(strategies[i].safety_score, strategies[i + 1].safety_score)
+
+    def test_strategies_limited_to_four(self):
+        """Test strategies limited to 4 max"""
+        conflicts = [
+            ConflictPrediction(
+                package1="pkg1",
+                package2="pkg2",
+                conflict_type=ConflictType.VERSION,
+                confidence=0.9,
+                explanation="Test",
+                required_constraint="< 2.0",
+            )
         ]
-        self.assertGreater(len(remove_strategies), 0)
+
+        strategies = self.predictor._generate_basic_strategies(conflicts)
+
+        self.assertLessEqual(len(strategies), 4)
 
 
-class TestSafetyScore(unittest.TestCase):
-    """Test safety score calculation"""
+class TestSecurityValidation(unittest.TestCase):
+    """Test security validation functions"""
 
-    def setUp(self):
-        """Set up test fixtures"""
-        self.predictor = ConflictPredictor()
+    def test_validate_version_constraint_valid(self):
+        """Test valid version constraints"""
+        # Note: constraints without spaces are valid (pip style)
+        self.assertTrue(validate_version_constraint("<2.0"))
+        self.assertTrue(validate_version_constraint(">=1.0"))
+        self.assertTrue(validate_version_constraint("==1.2.3"))
+        self.assertTrue(validate_version_constraint("!=2.0"))
+        self.assertTrue(validate_version_constraint("~=1.4.2"))
+        self.assertTrue(validate_version_constraint("1.0.0"))
 
-    def test_venv_has_high_safety(self):
-        """Test virtual environment has highest safety score"""
-        strategy = ResolutionStrategy(
-            strategy_type=StrategyType.VENV,
-            description="Test",
-            safety_score=0.0,
-            commands=["test"],
-        )
+    def test_validate_version_constraint_empty(self):
+        """Test empty constraint is valid"""
+        self.assertTrue(validate_version_constraint(""))
+        self.assertTrue(validate_version_constraint(None))
 
-        score = self.predictor._calculate_safety_score(strategy)
-        self.assertGreater(score, 0.9)
+    def test_validate_version_constraint_invalid(self):
+        """Test invalid/malicious constraints are rejected"""
+        # Command injection attempts
+        self.assertFalse(validate_version_constraint("; rm -rf /"))
+        self.assertFalse(validate_version_constraint("$(whoami)"))
+        self.assertFalse(validate_version_constraint("`cat /etc/passwd`"))
 
-    def test_remove_has_low_safety(self):
-        """Test removal has low safety score"""
-        strategy = ResolutionStrategy(
-            strategy_type=StrategyType.REMOVE_CONFLICT,
-            description="Test",
-            safety_score=0.0,
-            commands=["test"],
-        )
+    def test_escape_command_arg(self):
+        """Test command argument escaping"""
+        # Normal package name - shlex.quote only adds quotes when needed
+        result = escape_command_arg("numpy")
+        self.assertIn("numpy", result)
+        # Package with special chars - should be quoted
+        result = escape_command_arg("pkg; rm -rf /")
+        self.assertIn("'", result)  # Should be quoted for safety
 
-        score = self.predictor._calculate_safety_score(strategy)
-        self.assertLess(score, 0.5)
 
-    def test_risks_reduce_safety(self):
-        """Test that risks reduce safety score"""
-        no_risk = ResolutionStrategy(
-            strategy_type=StrategyType.UPGRADE,
-            description="Test",
-            safety_score=0.0,
-            commands=["test"],
-            risks=[],
-        )
+class TestDisplayFormatting(unittest.TestCase):
+    """Test display/UI formatting functions"""
 
-        with_risks = ResolutionStrategy(
-            strategy_type=StrategyType.UPGRADE,
-            description="Test",
-            safety_score=0.0,
-            commands=["test"],
-            risks=["Risk 1", "Risk 2", "Risk 3"],
-        )
+    def test_format_conflict_summary_empty(self):
+        """Test formatting with no conflicts"""
+        result = format_conflict_summary([], [])
+        self.assertEqual(result, "")
 
-        score_no_risk = self.predictor._calculate_safety_score(no_risk)
-        score_with_risks = self.predictor._calculate_safety_score(with_risks)
+    def test_format_conflict_summary_with_data(self):
+        """Test formatting conflicts with data"""
+        conflicts = [
+            ConflictPrediction(
+                package1="tensorflow",
+                package2="numpy",
+                conflict_type=ConflictType.VERSION,
+                confidence=0.95,
+                explanation="tensorflow 2.15 requires numpy < 2.0",
+                severity="HIGH",
+                installed_by="pandas",
+                current_version="2.1.0",
+            )
+        ]
+        strategies = [
+            ResolutionStrategy(
+                strategy_type=StrategyType.VENV,
+                description="Use virtual environment",
+                safety_score=0.95,
+                commands=["python3 -m venv myenv"],
+                benefits=["Isolation"],
+                risks=["Must activate"],
+            ),
+        ]
 
-        self.assertGreater(score_no_risk, score_with_risks)
+        result = format_conflict_summary(conflicts, strategies)
 
-    def test_many_affected_packages_reduce_safety(self):
-        """Test that affecting many packages reduces safety"""
-        few_packages = ResolutionStrategy(
-            strategy_type=StrategyType.UPGRADE,
-            description="Test",
-            safety_score=0.0,
-            commands=["test"],
-            affects_packages=["pkg1", "pkg2"],
-        )
+        self.assertIn("tensorflow 2.15 requires numpy < 2.0", result)
+        self.assertIn("pandas", result)
+        self.assertIn("2.1.0", result)
+        self.assertIn("[RECOMMENDED]", result)
+        self.assertIn("Safety:", result)
 
-        many_packages = ResolutionStrategy(
-            strategy_type=StrategyType.UPGRADE,
-            description="Test",
-            safety_score=0.0,
-            commands=["test"],
-            affects_packages=[f"pkg{i}" for i in range(15)],
-        )
+    def test_format_conflict_summary_safety_bar(self):
+        """Test safety bar is displayed"""
+        conflicts = [
+            ConflictPrediction(
+                package1="pkg1",
+                package2="pkg2",
+                conflict_type=ConflictType.VERSION,
+                confidence=0.9,
+                explanation="Test conflict",
+            )
+        ]
+        strategies = [
+            ResolutionStrategy(
+                strategy_type=StrategyType.VENV,
+                description="Test",
+                safety_score=0.90,
+                commands=["test"],
+            ),
+        ]
 
-        score_few = self.predictor._calculate_safety_score(few_packages)
-        score_many = self.predictor._calculate_safety_score(many_packages)
+        result = format_conflict_summary(conflicts, strategies)
 
-        self.assertGreater(score_few, score_many)
+        self.assertIn("█", result)  # Should have filled blocks
+        self.assertIn("90%", result)
 
 
 class TestSystemParsing(unittest.TestCase):
     """Test system state parsing functions"""
-
-    @patch("builtins.open", create=True)
-    def test_parse_dpkg_status(self, mock_open):
-        """Test parsing dpkg status file"""
-        mock_data = """Package: nginx
-Status: install ok installed
-Version: 1.18.0-1ubuntu1
-
-Package: apache2
-Status: install ok installed
-Version: 2.4.41-4ubuntu3
-"""
-        mock_open.return_value.__enter__.return_value = mock_data.split("\n")
-
-        packages = parse_dpkg_status()
-
-        self.assertIn("nginx", packages)
-        self.assertIn("apache2", packages)
-        self.assertEqual(packages["nginx"]["version"], "1.18.0-1ubuntu1")
 
     @patch("subprocess.run")
     def test_get_pip_packages_success(self, mock_run):
@@ -414,9 +470,20 @@ Version: 2.4.41-4ubuntu3
 
         self.assertEqual(len(packages), 0)
 
+    @patch("subprocess.run")
+    def test_get_pip_packages_timeout(self, mock_run):
+        """Test handling pip timeout"""
+        import subprocess
+
+        mock_run.side_effect = subprocess.TimeoutExpired("pip3", 5)
+
+        packages = get_pip_packages()
+
+        self.assertEqual(len(packages), 0)
+
 
 class TestRecordResolution(unittest.TestCase):
-    """Test recording conflict resolutions for learning"""
+    """Test recording conflict resolutions"""
 
     def setUp(self):
         """Set up test fixtures"""
@@ -436,7 +503,7 @@ class TestRecordResolution(unittest.TestCase):
             strategy_type=StrategyType.UPGRADE,
             description="Upgrade tensorflow",
             safety_score=0.85,
-            commands=["apt install tensorflow=2.16"],
+            commands=["pip install tensorflow==2.16"],
         )
 
         # Should not raise exception
@@ -456,7 +523,7 @@ class TestRecordResolution(unittest.TestCase):
             strategy_type=StrategyType.DOWNGRADE,
             description="Downgrade pkg2",
             safety_score=0.6,
-            commands=["apt install pkg2=1.0"],
+            commands=["pip install pkg2==1.0"],
         )
 
         # Should not raise exception
@@ -465,244 +532,299 @@ class TestRecordResolution(unittest.TestCase):
         )
 
 
-class TestVersionParsing(unittest.TestCase):
-    """Test version parsing and comparison functions"""
+class TestCommandInjectionProtection(unittest.TestCase):
+    """Test command injection protection"""
 
-    def test_parse_version_simple(self):
-        """Test parsing simple version strings"""
-        self.assertEqual(parse_version("1.2.3"), (1, 2, 3))
-        self.assertEqual(parse_version("2.0"), (2, 0))
-        self.assertEqual(parse_version("10.5.2"), (10, 5, 2))
+    def test_malicious_package_name_in_strategy(self):
+        """Test that malicious package names are escaped in generated commands"""
+        predictor = ConflictPredictor()
+        conflicts = [
+            ConflictPrediction(
+                package1="pkg; rm -rf /",
+                package2="numpy",
+                conflict_type=ConflictType.VERSION,
+                confidence=0.9,
+                explanation="Test",
+            )
+        ]
 
-    def test_parse_version_with_suffix(self):
-        """Test parsing versions with suffixes like rc1, a1"""
-        self.assertEqual(parse_version("2.0.0rc1"), (2, 0, 0))
-        self.assertEqual(parse_version("1.5.0a1"), (1, 5, 0))
-        self.assertEqual(parse_version("3.0dev"), (3, 0))
+        strategies = predictor._generate_basic_strategies(conflicts)
 
-    def test_parse_version_empty(self):
-        """Test parsing empty version string"""
-        self.assertEqual(parse_version(""), (0,))
-        self.assertEqual(parse_version(None), (0,))
+        # All commands should have the malicious package name properly quoted
+        for strategy in strategies:
+            for cmd in strategy.commands:
+                if "pkg" in cmd:
+                    # The malicious name should be quoted with single quotes
+                    self.assertIn("'pkg; rm -rf /'", cmd)
 
-    def test_compare_versions_equal(self):
-        """Test comparing equal versions"""
-        self.assertEqual(compare_versions("1.0.0", "1.0.0"), 0)
-        self.assertEqual(compare_versions("2.5", "2.5.0"), 0)
+    def test_malicious_constraint_rejected(self):
+        """Test that malicious version constraints are rejected"""
+        predictor = ConflictPredictor()
+        conflicts = [
+            ConflictPrediction(
+                package1="pkg1",
+                package2="pkg2",
+                conflict_type=ConflictType.VERSION,
+                confidence=0.9,
+                explanation="Test",
+                required_constraint="; rm -rf /",  # Malicious constraint
+            )
+        ]
 
-    def test_compare_versions_less_than(self):
-        """Test comparing versions where first is less"""
-        self.assertEqual(compare_versions("1.0.0", "2.0.0"), -1)
-        self.assertEqual(compare_versions("1.9.9", "2.0.0"), -1)
-        self.assertEqual(compare_versions("1.0", "1.0.1"), -1)
+        strategies = predictor._generate_basic_strategies(conflicts)
 
-    def test_compare_versions_greater_than(self):
-        """Test comparing versions where first is greater"""
-        self.assertEqual(compare_versions("2.0.0", "1.0.0"), 1)
-        self.assertEqual(compare_versions("1.10.0", "1.9.0"), 1)
-        self.assertEqual(compare_versions("2.0", "1.99.99"), 1)
-
-
-class TestVersionConstraints(unittest.TestCase):
-    """Test version constraint checking"""
-
-    def test_less_than(self):
-        """Test < operator"""
-        self.assertTrue(check_version_constraint("1.9.0", "< 2.0"))
-        self.assertFalse(check_version_constraint("2.0.0", "< 2.0"))
-        self.assertFalse(check_version_constraint("2.1.0", "< 2.0"))
-
-    def test_less_than_or_equal(self):
-        """Test <= operator"""
-        self.assertTrue(check_version_constraint("1.9.0", "<= 2.0"))
-        self.assertTrue(check_version_constraint("2.0.0", "<= 2.0"))
-        self.assertFalse(check_version_constraint("2.1.0", "<= 2.0"))
-
-    def test_greater_than(self):
-        """Test > operator"""
-        self.assertTrue(check_version_constraint("2.1.0", "> 2.0"))
-        self.assertFalse(check_version_constraint("2.0.0", "> 2.0"))
-        self.assertFalse(check_version_constraint("1.9.0", "> 2.0"))
-
-    def test_greater_than_or_equal(self):
-        """Test >= operator"""
-        self.assertTrue(check_version_constraint("2.1.0", ">= 2.0"))
-        self.assertTrue(check_version_constraint("2.0.0", ">= 2.0"))
-        self.assertFalse(check_version_constraint("1.9.0", ">= 2.0"))
-
-    def test_equal(self):
-        """Test == operator"""
-        self.assertTrue(check_version_constraint("2.0.0", "== 2.0"))
-        self.assertFalse(check_version_constraint("2.0.1", "== 2.0"))
-
-    def test_not_equal(self):
-        """Test != operator"""
-        self.assertTrue(check_version_constraint("2.0.1", "!= 2.0"))
-        self.assertFalse(check_version_constraint("2.0.0", "!= 2.0"))
-
-    def test_implied_equal(self):
-        """Test version without operator (implied ==)"""
-        self.assertTrue(check_version_constraint("2.0.0", "2.0"))
+        # Should not generate DOWNGRADE strategy with malicious constraint
+        downgrade_strategies = [s for s in strategies if s.strategy_type == StrategyType.DOWNGRADE]
+        self.assertEqual(len(downgrade_strategies), 0)
 
 
-class TestFindCompatibleVersion(unittest.TestCase):
-    """Test finding compatible versions"""
+class TestJsonExtractionRobustness(unittest.TestCase):
+    """Test JSON extraction edge cases"""
 
-    def test_find_compatible_less_than(self):
-        """Test finding version less than constraint"""
-        versions = ["2.1.0", "2.0.0", "1.9.0", "1.8.0"]
-        result = find_compatible_version("numpy", "< 2.0", versions)
-        self.assertEqual(result, "1.9.0")
+    def test_json_with_trailing_text(self):
+        """Test JSON followed by additional text"""
+        response = '{"key": "value"} and some more text here'
+        result = extract_json_from_response(response)
+        self.assertEqual(result, {"key": "value"})
 
-    def test_find_compatible_greater_than(self):
-        """Test finding version greater than constraint"""
-        versions = ["1.5.0", "1.6.0", "1.7.0", "2.0.0"]
-        result = find_compatible_version("pkg", ">= 1.6", versions)
-        self.assertEqual(result, "2.0.0")  # Newest compatible
+    def test_multiple_json_objects(self):
+        """Test only first JSON object is extracted"""
+        response = '{"first": 1} {"second": 2}'
+        result = extract_json_from_response(response)
+        self.assertEqual(result, {"first": 1})
 
-    def test_find_compatible_no_match(self):
-        """Test when no compatible version exists"""
-        versions = ["3.0.0", "3.1.0", "3.2.0"]
-        result = find_compatible_version("pkg", "< 2.0", versions)
-        self.assertIsNone(result)
+    def test_json_with_special_characters(self):
+        """Test JSON with special characters in strings"""
+        response = '{"explanation": "numpy < 2.0 && numpy >= 1.0"}'
+        result = extract_json_from_response(response)
+        self.assertEqual(result["explanation"], "numpy < 2.0 && numpy >= 1.0")
 
-    def test_find_compatible_empty_versions(self):
-        """Test with empty versions list"""
-        result = find_compatible_version("pkg", "< 2.0", [])
-        self.assertIsNone(result)
+    def test_malformed_json_recovery(self):
+        """Test recovery from malformed JSON at start"""
+        response = '{bad json} {"valid": true}'
+        result = extract_json_from_response(response)
+        # Should find the valid JSON
+        self.assertEqual(result, {"valid": True})
+
+    def test_deeply_nested_json(self):
+        """Test deeply nested JSON structures"""
+        response = '{"a": {"b": {"c": {"d": [1, 2, {"e": "value"}]}}}}'
+        result = extract_json_from_response(response)
+        self.assertEqual(result["a"]["b"]["c"]["d"][2]["e"], "value")
 
 
-class TestDisplayFormatting(unittest.TestCase):
-    """Test display/UI formatting functions"""
+class TestMalformedDpkgHandling(unittest.TestCase):
+    """Test handling of malformed dpkg output"""
 
-    def test_format_conflicts_empty(self):
-        """Test formatting with no conflicts"""
-        result = format_conflicts_for_display([])
-        self.assertIn("No conflicts predicted", result)
+    @patch("subprocess.run")
+    def test_malformed_dpkg_lines_skipped(self, mock_run):
+        """Test that malformed dpkg lines are safely skipped"""
+        from cortex.conflict_predictor import get_apt_packages_summary
 
-    def test_format_conflicts_with_data(self):
-        """Test formatting conflicts with data"""
+        # Mix of valid and malformed lines
+        mock_run.return_value = Mock(
+            returncode=0,
+            stdout="python3\tinstall\n\t\n\npython-dev\tinstall\nbadline\n",
+        )
+
+        packages = get_apt_packages_summary()
+
+        # Should have extracted valid packages without error
+        self.assertIn("python3", packages)
+        self.assertIn("python-dev", packages)
+
+    @patch("subprocess.run")
+    def test_empty_dpkg_output(self, mock_run):
+        """Test handling of empty dpkg output"""
+        from cortex.conflict_predictor import get_apt_packages_summary
+
+        mock_run.return_value = Mock(returncode=0, stdout="")
+
+        packages = get_apt_packages_summary()
+
+        self.assertEqual(packages, [])
+
+
+class TestFullConflictPredictionFlow(unittest.TestCase):
+    """Integration tests for full conflict prediction flow"""
+
+    def test_full_flow_with_mock_llm(self):
+        """Test complete prediction flow with mocked LLM"""
+        mock_router = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = json.dumps(
+            {
+                "has_conflicts": True,
+                "conflicts": [
+                    {
+                        "conflicting_package": "numpy",
+                        "type": "VERSION",
+                        "confidence": 0.95,
+                        "severity": "HIGH",
+                        "explanation": "tensorflow requires numpy < 2.0",
+                        "current_version": "2.1.0",
+                    }
+                ],
+                "strategies": [
+                    {
+                        "type": "VENV",
+                        "description": "Use venv",
+                        "safety_score": 0.95,
+                        "commands": ["python3 -m venv tf_env"],
+                    }
+                ],
+            }
+        )
+        mock_router.complete.return_value = mock_response
+
+        predictor = ConflictPredictor(llm_router=mock_router)
+
+        with patch("cortex.conflict_predictor.get_pip_packages", return_value={"numpy": "2.1.0"}):
+            with patch("cortex.conflict_predictor.get_apt_packages_summary", return_value=[]):
+                conflicts, strategies = predictor.predict_conflicts_with_resolutions(
+                    "tensorflow", "2.15.0"
+                )
+
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0].package2, "numpy")
+        self.assertEqual(len(strategies), 1)
+        self.assertEqual(strategies[0].strategy_type, StrategyType.VENV)
+
+    def test_full_flow_llm_returns_no_conflicts(self):
+        """Test flow when LLM returns no conflicts"""
+        mock_router = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = json.dumps(
+            {
+                "has_conflicts": False,
+                "conflicts": [],
+                "strategies": [],
+            }
+        )
+        mock_router.complete.return_value = mock_response
+
+        predictor = ConflictPredictor(llm_router=mock_router)
+
+        with patch("cortex.conflict_predictor.get_pip_packages", return_value={}):
+            with patch("cortex.conflict_predictor.get_apt_packages_summary", return_value=[]):
+                conflicts, strategies = predictor.predict_conflicts_with_resolutions("requests")
+
+        self.assertEqual(len(conflicts), 0)
+        self.assertEqual(len(strategies), 0)
+
+
+class TestStrategyExecutionOrder(unittest.TestCase):
+    """Test strategy execution order and command structure"""
+
+    def test_venv_commands_order(self):
+        """Test venv strategy has commands in correct order"""
+        predictor = ConflictPredictor()
         conflicts = [
             ConflictPrediction(
                 package1="tensorflow",
                 package2="numpy",
                 conflict_type=ConflictType.VERSION,
-                confidence=0.95,
-                explanation="tensorflow 2.15 requires numpy < 2.0",
-                severity="HIGH",
-                installed_by="pandas",
-                current_version="2.1.0",
+                confidence=0.9,
+                explanation="Test",
             )
         ]
-        result = format_conflicts_for_display(conflicts)
 
-        self.assertIn("tensorflow 2.15 requires numpy < 2.0", result)
-        self.assertIn("pandas", result)
-        self.assertIn("2.1.0", result)
+        strategies = predictor._generate_basic_strategies(conflicts)
+        venv_strategy = next(s for s in strategies if s.strategy_type == StrategyType.VENV)
 
-    def test_format_resolutions_empty(self):
-        """Test formatting with no resolutions"""
-        result = format_resolutions_for_display([])
-        self.assertIn("No automatic resolutions available", result)
+        # Commands should be: create venv, activate, install
+        self.assertEqual(len(venv_strategy.commands), 3)
+        self.assertIn("venv", venv_strategy.commands[0])
+        self.assertIn("source", venv_strategy.commands[1])
+        self.assertIn("pip install", venv_strategy.commands[2])
 
-    def test_format_resolutions_has_recommended(self):
-        """Test that first resolution is marked as RECOMMENDED"""
-        strategies = [
-            ResolutionStrategy(
-                strategy_type=StrategyType.UPGRADE,
-                description="Upgrade to 2.16",
-                safety_score=0.85,
-                commands=["pip install tensorflow==2.16"],
-            ),
-            ResolutionStrategy(
-                strategy_type=StrategyType.DOWNGRADE,
-                description="Downgrade numpy",
-                safety_score=0.60,
-                commands=["pip install numpy==1.26.4"],
-            ),
-        ]
-        result = format_resolutions_for_display(strategies)
-
-        self.assertIn("[RECOMMENDED]", result)
-        # RECOMMENDED should only appear once (for first item)
-        self.assertEqual(result.count("[RECOMMENDED]"), 1)
-
-    def test_format_resolutions_safety_bar(self):
-        """Test that safety bar is shown"""
-        strategies = [
-            ResolutionStrategy(
-                strategy_type=StrategyType.VENV,
-                description="Use venv",
-                safety_score=0.90,
-                commands=["python3 -m venv myenv"],
-            ),
-        ]
-        result = format_resolutions_for_display(strategies)
-
-        self.assertIn("Safety:", result)
-        self.assertIn("█", result)  # Should have filled blocks
-
-    def test_format_conflict_summary(self):
-        """Test complete conflict summary formatting"""
+    def test_remove_conflict_commands_order(self):
+        """Test remove strategy has commands in correct order"""
+        predictor = ConflictPredictor()
         conflicts = [
             ConflictPrediction(
-                package1="tensorflow",
-                package2="numpy",
+                package1="pkg1",
+                package2="pkg2",
                 conflict_type=ConflictType.VERSION,
-                confidence=0.95,
-                explanation="Version conflict",
+                confidence=0.9,
+                explanation="Test",
             )
         ]
-        strategies = [
-            ResolutionStrategy(
-                strategy_type=StrategyType.UPGRADE,
-                description="Upgrade",
-                safety_score=0.85,
-                commands=["pip install tensorflow==2.16"],
-            ),
-        ]
-        result = format_conflict_summary(conflicts, strategies)
 
-        self.assertIn("Conflict predicted", result)
-        self.assertIn("Suggestions", result)
-        self.assertIn("[RECOMMENDED]", result)
-
-
-class TestConflictPredictionExtendedFields(unittest.TestCase):
-    """Test extended fields in ConflictPrediction"""
-
-    def test_conflict_with_installed_by(self):
-        """Test conflict with installed_by field"""
-        conflict = ConflictPrediction(
-            package1="tensorflow",
-            package2="numpy",
-            conflict_type=ConflictType.VERSION,
-            confidence=0.95,
-            explanation="Version mismatch",
-            installed_by="pandas",
-            current_version="2.1.0",
-            required_constraint="< 2.0",
+        strategies = predictor._generate_basic_strategies(conflicts)
+        remove_strategy = next(
+            s for s in strategies if s.strategy_type == StrategyType.REMOVE_CONFLICT
         )
 
-        self.assertEqual(conflict.installed_by, "pandas")
-        self.assertEqual(conflict.current_version, "2.1.0")
-        self.assertEqual(conflict.required_constraint, "< 2.0")
+        # Commands should be: uninstall conflicting, install new
+        self.assertEqual(len(remove_strategy.commands), 2)
+        self.assertIn("uninstall", remove_strategy.commands[0])
+        self.assertIn("install", remove_strategy.commands[1])
 
-    def test_conflict_to_dict_with_extended_fields(self):
-        """Test to_dict includes extended fields"""
-        conflict = ConflictPrediction(
-            package1="pkg1",
-            package2="pkg2",
-            conflict_type=ConflictType.VERSION,
-            confidence=0.9,
-            explanation="Test",
-            installed_by="pkg3",
-            current_version="1.0.0",
+
+class TestTimeoutProtection(unittest.TestCase):
+    """Test timeout protection in system calls"""
+
+    @patch("subprocess.run")
+    def test_pip_timeout_handled(self, mock_run):
+        """Test pip command timeout is handled gracefully"""
+        import subprocess
+
+        mock_run.side_effect = subprocess.TimeoutExpired("pip3", 5)
+
+        packages = get_pip_packages()
+
+        self.assertEqual(packages, {})
+        # Should not raise exception
+
+    @patch("subprocess.run")
+    def test_dpkg_timeout_handled(self, mock_run):
+        """Test dpkg command timeout is handled gracefully"""
+        import subprocess
+
+        from cortex.conflict_predictor import get_apt_packages_summary
+
+        mock_run.side_effect = subprocess.TimeoutExpired("dpkg", 5)
+
+        packages = get_apt_packages_summary()
+
+        self.assertEqual(packages, [])
+        # Should not raise exception
+
+
+class TestMemoryUsageWithLargePackages(unittest.TestCase):
+    """Test handling of large package lists"""
+
+    @patch("subprocess.run")
+    def test_pip_packages_limited(self, mock_run):
+        """Test that pip packages are limited in prompt"""
+        # Create a large list of packages
+        large_package_list = [{"name": f"package{i}", "version": "1.0.0"} for i in range(200)]
+        mock_run.return_value = Mock(returncode=0, stdout=json.dumps(large_package_list))
+
+        packages = get_pip_packages()
+
+        # Should return all packages (limiting happens in prompt building)
+        self.assertEqual(len(packages), 200)
+
+    def test_prompt_limits_packages(self):
+        """Test that prompt building limits package count"""
+        predictor = ConflictPredictor()
+
+        # Create large package dicts
+        pip_packages = {f"pkg{i}": "1.0.0" for i in range(100)}
+        apt_packages = [f"lib{i}" for i in range(50)]
+
+        prompt = predictor._build_combined_prompt(
+            "tensorflow", "2.15.0", pip_packages, apt_packages
         )
 
-        d = conflict.to_dict()
-        self.assertEqual(d["installed_by"], "pkg3")
-        self.assertEqual(d["current_version"], "1.0.0")
+        # Should limit pip to 50 and apt to 30
+        pip_count = prompt.count("==1.0.0")
+        apt_count = prompt.count("lib")
+
+        self.assertLessEqual(pip_count, 50)
+        self.assertLessEqual(apt_count, 30)
 
 
 if __name__ == "__main__":

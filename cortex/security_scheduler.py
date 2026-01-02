@@ -246,11 +246,8 @@ class SecurityScheduler:
 
             # Update schedule
             schedule.last_run = datetime.now().isoformat()
-            schedule.next_run = (
-                self._calculate_next_run(schedule.frequency, schedule.custom_cron).isoformat()
-                if self._calculate_next_run(schedule.frequency, schedule.custom_cron)
-                else None
-            )
+            next_run_time = self._calculate_next_run(schedule.frequency, schedule.custom_cron)
+            schedule.next_run = next_run_time.isoformat() if next_run_time else None
             self._save_schedules()
 
         except Exception as e:

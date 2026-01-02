@@ -1015,7 +1015,9 @@ class CortexCLI:
                 console.print("=" * 80)
                 for vuln in critical[:20]:  # Limit to 20
                     console.print(f"\n[red]CVE: {vuln.cve_id}[/red]")
-                    console.print(f"Package: [yellow]{vuln.package_name}[/yellow] {vuln.installed_version}")
+                    console.print(
+                        f"Package: [yellow]{vuln.package_name}[/yellow] {vuln.installed_version}"
+                    )
                     console.print(f"Description: {vuln.description[:100]}...")
                     if vuln.fixed_version:
                         console.print(f"Fixed in: [green]{vuln.fixed_version}[/green]")
@@ -1046,7 +1048,9 @@ class CortexCLI:
                         Severity.LOW: "green",
                     }.get(vuln.severity, "white")
 
-                    console.print(f"\n[{severity_color}]CVE: {vuln.cve_id} [{vuln.severity.value.upper()}][/{severity_color}]")
+                    console.print(
+                        f"\n[{severity_color}]CVE: {vuln.cve_id} [{vuln.severity.value.upper()}][/{severity_color}]"
+                    )
                     console.print(f"Description: {vuln.description}")
                     if vuln.fixed_version:
                         console.print(f"Fixed in: {vuln.fixed_version}")
@@ -1178,7 +1182,9 @@ class CortexCLI:
                         f"  Vulnerabilities found: {results['scan_result']['vulnerabilities_found']}"
                     )
                 if results["patch_result"]:
-                    console.print(f"  Packages updated: {results['patch_result']['packages_updated']}")
+                    console.print(
+                        f"  Packages updated: {results['patch_result']['packages_updated']}"
+                    )
             else:
                 self._print_error("❌ Schedule execution failed")
                 for error in results["errors"]:
@@ -1996,12 +2002,18 @@ def main():
     sec_scan_parser = security_subs.add_parser("scan", help="Scan for vulnerabilities")
     sec_scan_parser.add_argument("--package", help="Scan specific package")
     sec_scan_parser.add_argument("--all", action="store_true", help="Scan all packages")
-    sec_scan_parser.add_argument("--critical", action="store_true", help="Show only critical vulnerabilities")
+    sec_scan_parser.add_argument(
+        "--critical", action="store_true", help="Show only critical vulnerabilities"
+    )
 
     # Security patch
     sec_patch_parser = security_subs.add_parser("patch", help="Patch vulnerabilities")
-    sec_patch_parser.add_argument("--scan-and-patch", action="store_true", help="Scan and patch automatically")
-    sec_patch_parser.add_argument("--dry-run", action="store_true", default=True, help="Dry run mode (default)")
+    sec_patch_parser.add_argument(
+        "--scan-and-patch", action="store_true", help="Scan and patch automatically"
+    )
+    sec_patch_parser.add_argument(
+        "--dry-run", action="store_true", default=True, help="Dry run mode (default)"
+    )
     sec_patch_parser.add_argument("--apply", action="store_true", help="Actually apply patches")
     sec_patch_parser.add_argument(
         "--strategy",
@@ -2012,7 +2024,9 @@ def main():
 
     # Security schedule
     sec_schedule_parser = security_subs.add_parser("schedule", help="Manage security schedules")
-    sec_schedule_subs = sec_schedule_parser.add_subparsers(dest="schedule_action", help="Schedule actions")
+    sec_schedule_subs = sec_schedule_parser.add_subparsers(
+        dest="schedule_action", help="Schedule actions"
+    )
     sec_schedule_create = sec_schedule_subs.add_parser("create", help="Create a schedule")
     sec_schedule_create.add_argument("id", help="Schedule ID")
     sec_schedule_create.add_argument(
@@ -2025,7 +2039,9 @@ def main():
     sec_schedule_subs.add_parser("list", help="List schedules")
     sec_schedule_run = sec_schedule_subs.add_parser("run", help="Run a schedule")
     sec_schedule_run.add_argument("id", help="Schedule ID")
-    sec_schedule_install = sec_schedule_subs.add_parser("install-timer", help="Install systemd timer")
+    sec_schedule_install = sec_schedule_subs.add_parser(
+        "install-timer", help="Install systemd timer"
+    )
     sec_schedule_install.add_argument("id", help="Schedule ID")
 
     # --- Environment Variable Management Commands ---

@@ -103,13 +103,14 @@ class TestSecurityScheduler(unittest.TestCase):
         # Patch the config path
         self.config_patcher = patch.object(
             SecurityScheduler,
-            '__init__',
+            "__init__",
             lambda self_obj: self._init_scheduler(self_obj),
         )
 
     def _init_scheduler(self, scheduler_obj):
         """Custom init for testing with temp config path"""
         from pathlib import Path
+
         scheduler_obj.config_path = Path(self.config_path)
         scheduler_obj.schedules = {}
         # Don't call _load_schedules since config doesn't exist yet
@@ -123,7 +124,7 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_initialization(self):
         """Test scheduler initializes correctly"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.config_path = None
             scheduler.schedules = {}
@@ -132,9 +133,10 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_create_schedule(self):
         """Test creating a schedule"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             from pathlib import Path
+
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
 
@@ -150,9 +152,10 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_create_schedule_with_patch(self):
         """Test creating schedule with patching enabled"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             from pathlib import Path
+
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
 
@@ -171,9 +174,10 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_get_schedule(self):
         """Test getting a schedule by ID"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             from pathlib import Path
+
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
 
@@ -190,7 +194,7 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_get_nonexistent_schedule(self):
         """Test getting non-existent schedule returns None"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -199,9 +203,10 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_delete_schedule(self):
         """Test deleting a schedule"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             from pathlib import Path
+
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
 
@@ -218,9 +223,10 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_delete_nonexistent_schedule(self):
         """Test deleting non-existent schedule returns False"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             from pathlib import Path
+
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
 
@@ -229,9 +235,10 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_list_schedules(self):
         """Test listing all schedules"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             from pathlib import Path
+
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
 
@@ -255,7 +262,7 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_calculate_next_run_daily(self):
         """Test calculating next run time for daily schedule"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -269,7 +276,7 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_calculate_next_run_weekly(self):
         """Test calculating next run time for weekly schedule"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -283,7 +290,7 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_calculate_next_run_monthly(self):
         """Test calculating next run time for monthly schedule"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -297,7 +304,7 @@ class TestSecurityScheduler(unittest.TestCase):
 
     def test_calculate_next_run_custom(self):
         """Test calculating next run for custom frequency returns None"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -320,7 +327,7 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
 
     def test_frequency_to_systemd_daily(self):
         """Test converting daily frequency to systemd format"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -329,7 +336,7 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
 
     def test_frequency_to_systemd_weekly(self):
         """Test converting weekly frequency to systemd format"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -338,7 +345,7 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
 
     def test_frequency_to_systemd_monthly(self):
         """Test converting monthly frequency to systemd format"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -347,7 +354,7 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
 
     def test_frequency_to_systemd_custom(self):
         """Test custom frequency defaults to monthly"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -359,7 +366,7 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
         """Test root privilege check when running as root"""
         mock_geteuid.return_value = 0
 
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -373,7 +380,7 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
         mock_geteuid.return_value = 1000  # Non-root
         mock_run.return_value = MagicMock(returncode=0)
 
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -387,7 +394,7 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
         mock_geteuid.return_value = 1000  # Non-root
         mock_run.return_value = MagicMock(returncode=1)
 
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -399,8 +406,9 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
         """Test installing timer fails without root"""
         mock_has_root.return_value = False
 
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             from pathlib import Path
+
             scheduler = SecurityScheduler()
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
@@ -416,7 +424,7 @@ class TestSecuritySchedulerSystemd(unittest.TestCase):
 
     def test_install_systemd_timer_nonexistent_schedule(self):
         """Test installing timer for non-existent schedule fails"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -451,8 +459,9 @@ class TestSecuritySchedulerExecution(unittest.TestCase):
         mock_scanner.scan_all_packages.return_value = mock_scan_result
         mock_scanner_class.return_value = mock_scanner
 
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             from pathlib import Path
+
             scheduler = SecurityScheduler()
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
@@ -472,7 +481,7 @@ class TestSecuritySchedulerExecution(unittest.TestCase):
 
     def test_run_nonexistent_schedule(self):
         """Test running non-existent schedule raises error"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             scheduler = SecurityScheduler()
             scheduler.schedules = {}
 
@@ -509,8 +518,9 @@ class TestSecuritySchedulerExecution(unittest.TestCase):
         mock_patcher.patch_vulnerabilities.return_value = mock_patch_result
         mock_patcher_class.return_value = mock_patcher
 
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             from pathlib import Path
+
             scheduler = SecurityScheduler()
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
@@ -544,8 +554,9 @@ class TestSecuritySchedulerSaveLoad(unittest.TestCase):
 
     def test_save_schedules(self):
         """Test saving schedules to file"""
-        with patch.object(SecurityScheduler, '__init__', lambda x: None):
+        with patch.object(SecurityScheduler, "__init__", lambda x: None):
             from pathlib import Path
+
             scheduler = SecurityScheduler()
             scheduler.config_path = Path(self.config_path)
             scheduler.schedules = {}
@@ -572,6 +583,7 @@ class TestSecuritySchedulerSaveLoad(unittest.TestCase):
         """Test loading schedules from file"""
         # Create a config file manually
         from pathlib import Path
+
         config_path = Path(self.config_path)
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -611,4 +623,3 @@ class TestSecuritySchedulerSaveLoad(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -305,7 +305,10 @@ WantedBy=timers.target
             # Check for root privileges first (required to write to /etc/systemd/system)
             if not self._has_root_privileges():
                 logger.warning("Cannot install systemd timer: root privileges required")
-                logger.info("Try running with sudo: sudo cortex security schedule install-timer " + schedule_id)
+                logger.info(
+                    "Try running with sudo: sudo cortex security schedule install-timer "
+                    + schedule_id
+                )
                 return False
 
             # Write service file
@@ -332,7 +335,9 @@ WantedBy=timers.target
 
         except PermissionError as e:
             logger.error(f"Permission denied: {e}")
-            logger.info("Try running with sudo: sudo cortex security schedule install-timer " + schedule_id)
+            logger.info(
+                "Try running with sudo: sudo cortex security schedule install-timer " + schedule_id
+            )
             return False
         except Exception as e:
             logger.error(f"Failed to install systemd timer: {e}")
@@ -359,9 +364,7 @@ WantedBy=timers.target
 
         # Check if we have passwordless sudo access
         try:
-            result = subprocess.run(
-                ["sudo", "-n", "true"], capture_output=True, timeout=2
-            )
+            result = subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=2)
             return result.returncode == 0
         except Exception:
             return False
@@ -472,7 +475,9 @@ if __name__ == "__main__":
             if results["success"]:
                 print("✅ Schedule execution complete")
                 if results["scan_result"]:
-                    print(f"  Vulnerabilities found: {results['scan_result']['vulnerabilities_found']}")
+                    print(
+                        f"  Vulnerabilities found: {results['scan_result']['vulnerabilities_found']}"
+                    )
                 if results["patch_result"]:
                     print(f"  Packages updated: {results['patch_result']['packages_updated']}")
             else:
@@ -499,4 +504,3 @@ if __name__ == "__main__":
         print(f"❌ Error: {e}", file=sys.stderr)
         logger.exception("CLI error")
         sys.exit(1)
-

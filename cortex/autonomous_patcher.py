@@ -199,9 +199,7 @@ class AutonomousPatcher:
         """
         try:
             # Check for available updates (apt-get update should be called beforehand)
-            success, stdout, _ = self._run_command(
-                ["apt-cache", "policy", package_name]
-            )
+            success, stdout, _ = self._run_command(["apt-cache", "policy", package_name])
 
             if success:
                 # Parse output to find candidate version
@@ -312,9 +310,7 @@ class AutonomousPatcher:
             Severity.UNKNOWN: 0,
         }
 
-        if severity_order.get(vulnerability.severity, 0) < severity_order.get(
-            self.min_severity, 0
-        ):
+        if severity_order.get(vulnerability.severity, 0) < severity_order.get(self.min_severity, 0):
             return False
 
         # Check strategy
@@ -329,9 +325,7 @@ class AutonomousPatcher:
 
         return False
 
-    def create_patch_plan(
-        self, vulnerabilities: list[Vulnerability] | None = None
-    ) -> PatchPlan:
+    def create_patch_plan(self, vulnerabilities: list[Vulnerability] | None = None) -> PatchPlan:
         """
         Create a plan for patching vulnerabilities.
 
@@ -392,7 +386,10 @@ class AutonomousPatcher:
                     fixes_any = True
                 else:
                     skipped_vulns.append(
-                        (vuln, f"update to {update_version} does not fix (requires >= {vuln.fixed_version})")
+                        (
+                            vuln,
+                            f"update to {update_version} does not fix (requires >= {vuln.fixed_version})",
+                        )
                     )
 
             # Only include the package if it fixes at least one vulnerability
@@ -405,7 +402,9 @@ class AutonomousPatcher:
 
         # Log skipped vulnerabilities
         if skipped_vulns:
-            logger.info(f"Skipped {len(skipped_vulns)} vulnerabilities that cannot be fixed by available updates:")
+            logger.info(
+                f"Skipped {len(skipped_vulns)} vulnerabilities that cannot be fixed by available updates:"
+            )
             for vuln, reason in skipped_vulns[:5]:  # Log first 5
                 logger.info(f"  - {vuln.cve_id} ({vuln.package_name}): {reason}")
             if len(skipped_vulns) > 5:
@@ -541,9 +540,7 @@ class AutonomousPatcher:
             logger.error(error_msg)
             errors.append(error_msg)
 
-            self.history.update_installation(
-                install_id, InstallationStatus.FAILED, error_msg
-            )
+            self.history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
 
             return PatchResult(
                 patch_id=patch_id,
@@ -617,9 +614,15 @@ if __name__ == "__main__":
     import sys
 
     parser = argparse.ArgumentParser(description="Autonomous security patcher")
-    parser.add_argument("--scan-and-patch", action="store_true", help="Scan and patch vulnerabilities")
-    parser.add_argument("--dry-run", action="store_true", default=True, help="Dry run mode (default)")
-    parser.add_argument("--apply", action="store_true", help="Actually apply patches (disable dry-run)")
+    parser.add_argument(
+        "--scan-and-patch", action="store_true", help="Scan and patch vulnerabilities"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", default=True, help="Dry run mode (default)"
+    )
+    parser.add_argument(
+        "--apply", action="store_true", help="Actually apply patches (disable dry-run)"
+    )
     parser.add_argument(
         "--strategy",
         choices=["automatic", "critical_only", "high_and_above", "manual"],
@@ -673,4 +676,3 @@ if __name__ == "__main__":
 
     if not any([args.scan_and_patch, args.whitelist, args.blacklist, args.min_severity]):
         parser.print_help()
-

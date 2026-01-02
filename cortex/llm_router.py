@@ -168,16 +168,16 @@ class LLMRouter:
         else:
             logger.warning("⚠️  No Kimi K2 API key provided")
 
-        # 1. NEW GUARDRAIL: Only enable if explicitly configured
+        # 1. NEW GUARDRAIL: Only enable if explicitly configured with a non-empty value
+        ollama_url_env = os.getenv("OLLAMA_BASE_URL")
         self.ollama_enabled = (
             os.getenv("CORTEX_PROVIDER") == "ollama"
-            or os.getenv("OLLAMA_BASE_URL") is not None
-            or ollama_base_url is not None
+            or bool(ollama_url_env)  # Empty strings "" are now False
+            or bool(ollama_base_url)
         )
 
-        self.ollama_base_url = ollama_base_url or os.getenv(
-            "OLLAMA_BASE_URL", "http://localhost:11434"
-        )
+        # Use the parameter, or the env var, or the default—guaranteeing no empty strings
+        self.ollama_base_url = ollama_base_url or ollama_url_env or "http://localhost:11434"
         self.ollama_model = ollama_model or os.getenv("OLLAMA_MODEL", "llama3.2")
         self.ollama_client = None
         self.ollama_client_async = None

@@ -154,29 +154,29 @@ class AutonomousPatcher:
     def ensure_apt_updated(self, force: bool = False) -> bool:
         """
         Ensure apt package list is updated. Thread-safe and rate-limited.
-        
+
         Args:
             force: If True, force update even if recently updated
-            
+
         Returns:
             True if update succeeded or was recently done, False on failure
         """
         global _apt_last_updated
-        
+
         with _apt_update_lock:
             now = datetime.now()
-            
+
             # Check if we need to update
             if not force and _apt_last_updated is not None:
                 elapsed = (now - _apt_last_updated).total_seconds()
                 if elapsed < _APT_UPDATE_INTERVAL_SECONDS:
                     logger.debug(f"Apt cache still fresh ({elapsed:.0f}s old), skipping update")
                     return True
-            
+
             # Run apt-get update
             logger.info("Updating apt package list...")
             success, stdout, stderr = self._run_command(["apt-get", "update", "-qq"])
-            
+
             if success:
                 _apt_last_updated = now
                 logger.info("Apt package list updated successfully")

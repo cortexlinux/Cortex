@@ -202,7 +202,7 @@ class SourceBuilder:
             urllib.request.urlretrieve(url, archive_path)
 
             # Extract
-            cx_print(f"📦 Extracting source...", "info")
+            cx_print("📦 Extracting source...", "info")
             extract_dir = temp_dir / "extracted"
             extract_dir.mkdir()
 
@@ -444,7 +444,7 @@ class SourceBuilder:
             )
 
             # Detect and install build dependencies
-            cx_print(f"🔍 Checking build dependencies...", "info")
+            cx_print("🔍 Checking build dependencies...", "info")
             missing_deps = self.detect_build_dependencies(package_name, build_system)
 
             if missing_deps:
@@ -461,10 +461,10 @@ class SourceBuilder:
                         error_message=f"Failed to install build dependencies: {result.stderr}",
                     )
             else:
-                cx_print(f"   ✓ All build dependencies satisfied", "success")
+                cx_print("   ✓ All build dependencies satisfied", "success")
 
             # Configure
-            cx_print(f"⚙️  Configuring build...", "info")
+            cx_print("⚙️  Configuring build...", "info")
             configure_commands = self.configure_build(source_dir, config)
             for cmd in configure_commands:
                 result = run_command(cmd, cwd=str(source_dir), timeout=300)
@@ -479,7 +479,7 @@ class SourceBuilder:
                     )
 
             # Build
-            cx_print(f"🔨 Compiling (this may take a while)...", "info")
+            cx_print("🔨 Compiling (this may take a while)...", "info")
             build_commands = self.build(source_dir, config)
             for cmd in build_commands:
                 result = run_command(cmd, cwd=str(source_dir), timeout=3600)  # 1 hour timeout

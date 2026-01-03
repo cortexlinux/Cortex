@@ -337,8 +337,8 @@ class APIKeyDetector:
                 if key_field in data:
                     return data[key_field]
         except json.JSONDecodeError:
-            pass
-        return None
+            # Content is not valid JSON; indicate no key found from JSON and let callers try other formats.
+            return None
 
     def _extract_from_env_format(self, content: str, env_var: str) -> str | None:
         """Extract API key from KEY=value format."""

@@ -316,11 +316,12 @@ class TestConvenienceFunctions:
         """Test auto_detect_api_key function."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Use fresh detector with isolated cache
-            with patch(
-                "cortex.api_key_detector.APIKeyDetector.__init__",
-                lambda self, cache_dir=None: setattr(self, "cache_dir", Path(tmpdir))
-                or setattr(self, "cache_file", Path(tmpdir) / ".api_key_cache"),
-            ):
+            def mock_detector_init(self, cache_dir=None):
+                """Mock APIKeyDetector.__init__ to use temporary cache directory."""
+                self.cache_dir = Path(tmpdir)
+                self.cache_file = Path(tmpdir) / ".api_key_cache"
+
+            with patch("cortex.api_key_detector.APIKeyDetector.__init__", mock_detector_init):
                 with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True):
                     found, key, provider, _ = auto_detect_api_key()
                     assert found is True

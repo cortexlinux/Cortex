@@ -189,25 +189,22 @@ class APIKeyDetector:
         console.print("  [bold]2.[/bold] OpenAI")
         console.print("  [bold]3.[/bold] Ollama (local, no key needed)")
 
-        try:
-            choice = input("\nEnter choice [1/2/3]: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            return None
+        while True:
+            try:
+                choice = input("\nEnter choice [1/2/3]: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                return None
 
-        if choice == "3":
-            cx_print("✓ Using Ollama (local mode)", "success")
-            return "ollama"
+            if choice == "3":
+                cx_print("✓ Using Ollama (local mode)", "success")
+                return "ollama"
 
-        if choice == "1":
-            provider = "anthropic"
-        elif choice == "2":
-            provider = "openai"
-        else:
-            provider = None
-
-        if not provider:
-            cx_print("Invalid choice.", "warning")
-        return provider
+            if choice == "1":
+                return "anthropic"
+            elif choice == "2":
+                return "openai"
+            else:
+                cx_print("Invalid choice. Please enter 1, 2, or 3.", "warning")
 
     def _get_and_validate_key(self, provider: str) -> str | None:
         """Get and validate API key from user."""

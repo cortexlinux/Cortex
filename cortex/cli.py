@@ -1535,6 +1535,10 @@ class CortexCLI:
                 mgr.remove(args.package, dry_run=args.dry_run)
             elif action == "list":
                 mgr.list_packages()
+            elif action == "storage":
+                mgr.storage_analysis()
+            elif action == "permissions":
+                mgr.check_permissions(args.package)
             else:
                 self._print_error("Unknown package manager action")
                 return 1
@@ -1899,6 +1903,13 @@ def main():
 
     # pkg list
     pkg_subs.add_parser("list", help="List packages")
+
+    # pkg storage
+    pkg_subs.add_parser("storage", help="Analyze package storage usage")
+
+    # pkg permissions <package>
+    pkg_perm = pkg_subs.add_parser("permissions", help="Check package permissions")
+    pkg_perm.add_argument("package", help="Package name")
 
     # --------------------------
 

@@ -233,7 +233,9 @@ class SourceBuilder:
                 f"Python-{version or '3.12.0'}.tgz"
             ),
             "nginx": "https://nginx.org/download/nginx-1.24.0.tar.gz",
-            "redis": f"https://download.redis.io/releases/redis-{version or '7.0'}.tar.gz",
+            "redis": (
+                f"https://download.redis.io/releases/redis-{version or '7.0'}.tar.gz"
+            ),
         }
 
         if package_name.lower() in common_urls:

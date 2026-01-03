@@ -366,16 +366,29 @@ class APIKeyDetector:
         return None
 
     def _is_valid_key(self, value: str) -> bool:
-        """Check if a value matches known API key patterns."""
-        return any(value.startswith(prefix) for prefix in KEY_PATTERNS.keys())
+        """Check if a value matches known API key patterns.
+
+        More specific (longer) prefixes are checked first to avoid ambiguity
+        when prefixes overlap (e.g., "sk-ant-" vs "sk-").
+        """
+        for prefix in sorted(KEY_PATTERNS.keys(), key=len, reverse=True):
+            if value.startswith(prefix):
+                return True
+        return False
 
     def _get_provider_from_var(self, env_var: str) -> str:
         """Get provider name from environment variable name."""
         return ENV_VAR_PROVIDERS.get(env_var, "unknown")
 
     def _get_provider_from_key(self, key: str) -> str | None:
-        """Get provider name from API key format."""
-        for prefix, provider in KEY_PATTERNS.items():
+        """Get provider name from API key format.
+
+        More specific (longer) prefixes are checked first to ensure that
+        overlapping prefixes resolve to the most specific provider.
+        """
+        for prefix, provider in sorted(
+            KEY_PATTERNS.items(), key=lambda item: len(item[0]), reverse=True
+        ):
             if key.startswith(prefix):
                 return provider
         return None

@@ -72,7 +72,7 @@ class TestAPIKeyDetector:
 
     def test_detect_from_environment(self, detector):
         """Test detection from environment variables."""
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test123"}):
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test123"}, clear=True):
             found, key, provider, source = detector.detect()
             assert found is True
             assert key == "sk-ant-test123"

@@ -131,6 +131,15 @@
       ],
       "signed_date": "2026-01-03",
       "cla_version": "1.0"
+    },
+    {
+      "name": "Murat Aslan",
+      "github_username": "murataslan1",
+      "emails": [
+        "murataslan1@users.noreply.github.com"
+      ],
+      "signed_date": "2026-01-03",
+      "cla_version": "1.0"
     }
   ],
   "corporations": {

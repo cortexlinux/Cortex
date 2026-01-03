@@ -23,6 +23,7 @@ from cortex.network_config import NetworkConfig
 from cortex.notification_manager import NotificationManager
 from cortex.stack_manager import StackManager
 from cortex.validators import validate_api_key, validate_install_request
+from cortex.docker_fixer import DockerPermissionFixer
 
 # Suppress noisy log messages in normal operation
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -1521,6 +1522,12 @@ class CortexCLI:
                 console.print(f"Error: {result.error_message}", style="red")
             return 1
 
+    def fix_docker(self) -> int:
+        """Run the Interactive Docker Permission Fixer."""
+        fixer = DockerPermissionFixer()
+        fixer.run()
+        return 0
+
     # --------------------------
 
 
@@ -1857,6 +1864,13 @@ def main():
     env_template_apply_parser.add_argument(
         "--encrypt-keys", help="Comma-separated list of keys to encrypt"
     )
+
+    # --- Docker Fixer Command ---
+    subparsers.add_parser(
+        "fix-docker",
+        help="Diagnose and fix Docker permission issues",
+        aliases=["docker-fix"]
+    )
     # --------------------------
 
     args = parser.parse_args()
@@ -1903,6 +1917,8 @@ def main():
             return 1
         elif args.command == "env":
             return cli.env(args)
+        elif args.command in ["fix-docker", "docker-fix"]:
+            return cli.fix_docker()
         else:
             parser.print_help()
             return 1

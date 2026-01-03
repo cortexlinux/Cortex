@@ -4,6 +4,9 @@ Source Package Builder for Cortex Linux
 
 Builds and installs packages from source code when binaries are unavailable.
 Supports common build systems: autotools, cmake, make, python setup.py, etc.
+
+This module handles fetching, configuring, building, and installing packages
+from source code with automatic dependency detection and build system detection.
 """
 
 from __future__ import annotations

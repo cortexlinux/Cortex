@@ -96,20 +96,24 @@ class PrinterWizard:
             return
 
         if Confirm.ask("Execute this command now?"):
-            self._run_command(cmd_str)
+            self._run_command(cmd_parts)
 
-    def _run_command(self, cmd_str: str):
+    def _run_command(self, cmd: List[str]):
         """
         Execute the generated shell command using subprocess.
         """
         try:
-            subprocess.check_call(cmd_str, shell=True)
+            # Join for display, but run as list for safety
+            cmd_str = " ".join(cmd)
+            cx_print(f"Running: {cmd_str}", "info")
+            subprocess.check_call(cmd)
             cx_print(f"Printer added successfully.", "success")
             
             if Confirm.ask("Print a test page?"):
-                printer_name = cmd_str.split()[3] # crude parsing, but effective/MVP
-                test_cmd = f"lp -d {printer_name} /usr/share/cups/data/testprint"
-                subprocess.call(test_cmd, shell=True)
+                # Extract printer name safely
+                printer_name = cmd[cmd.index("-p") + 1]
+                test_cmd = ["lp", "-d", printer_name, "/usr/share/cups/data/testprint"]
+                subprocess.call(test_cmd)
 
         except subprocess.CalledProcessError as e:
             cx_print(f"Failed to add printer: {e}", "error")
@@ -183,17 +187,21 @@ class ScannerWizard:
 
     def _test_scan(self, device: str, dry_run: bool):
         """Run a test scan."""
-        cmd = f"scanimage -d {device} --format=pnm > test_scan.pnm"
+        # Use a list for the command, avoiding shell=True
+        cmd = ["scanimage", "-d", device, "--format=pnm"]
         
         if dry_run:
-            cx_print(f"[Dry Run] {cmd}", "info")
+            cx_print(f"[Dry Run] {' '.join(cmd)} > test_scan.pnm", "info")
             return
 
         cx_print("Scanning... (this may take a while)", "info")
         try:
-             subprocess.check_call(cmd, shell=True)
+             with open("test_scan.pnm", "w") as f:
+                 subprocess.check_call(cmd, stdout=f)
              cx_print("Scan saved to 'test_scan.pnm'.", "success")
         except subprocess.CalledProcessError:
              cx_print("Scan failed.", "error")
+        except OSError as e:
+             cx_print(f"File handling error: {e}", "error")
 
 

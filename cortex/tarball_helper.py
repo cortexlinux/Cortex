@@ -18,7 +18,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from cortex.installation_history import InstallationHistory, InstallationType, InstallationStatus
+from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -1301,7 +1301,12 @@ class CortexCLI:
 
     def tarball_command(self, args: argparse.Namespace) -> int:
         """Handle tarball analysis and installation commands."""
-        from cortex.tarball_helper import TarballHelper, TarballAnalysis, BuildSystem, DependencyRequirement
+        from cortex.tarball_helper import (
+            BuildSystem,
+            DependencyRequirement,
+            TarballAnalysis,
+            TarballHelper,
+        )
 
         helper = TarballHelper(track_installations=not args.no_track)
 

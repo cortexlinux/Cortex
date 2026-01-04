@@ -1,0 +1,50 @@
+--- a/cortex/components/ComponentManager.py
++++ b/cortex/components/ComponentManager.py
+@@ -15,6 +15,7 @@
+     def __init__(self):
+         self.components = {}
++        self.dependencies = defaultdict(list)
+ 
+     def load_components(self):
+         config = ConfigManager.get_instance().get_config('components')
+@@ -23,10 +24,19 @@
+             component_data = config[component_name]
+             module_path = component_data['module']
+             class_name = component_data['class']
+-            self.components[component_name] = getattr(__import__(module_path, fromlist=[class_name]), class_name)
++            component_class = getattr(__import__(module_path, fromlist=[class_name]), class_name)
++            self.components[component_name] = component_class()
++            
++            # Handle dependencies
++            if 'dependencies' in component_data:
++                for dep in component_data['dependencies']:
++                    self.dependencies[dep].append(component_name)
+ 
+     def initialize_components(self):
+-        pass
++        # Topologically sort components based on dependencies
++        sorted_components = self.topological_sort()
++        for comp in sorted_components:
++            self.components[comp].start()
+ 
+     @staticmethod
+@@ -35,4 +45,20 @@
+         print("Component Manager Initialized.")
+         return True
+ 
++    def topological_sort(self):
++        visited = set()
++        order = []
++
++        def dfs(node):
++            if node in visited:
++                return
++            visited.add(node)
++            for neighbor in self.dependencies[node]:
++                dfs(neighbor)
++            order.append(node)
++
++        for component in self.components.keys():
++            if component not in visited:
++                dfs(component)
++        return reversed(order)

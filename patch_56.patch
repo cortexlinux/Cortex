@@ -1,0 +1,19 @@
+--- a/Makefile
++++ b/Makefile
+@@ -25,14 +25,14 @@
+ 
+ build: $(BINS) | dirs
+ 	$(foreach bin,$(BINS), \
+-		cp -r src/* build/; \
++		cp -rL src/* build/; \
+ 		)
+ 
+ clean:
+-	rm -rf build/
++	rm -rf build/ dist/
+ 
+ install: build
+-	cp -r build/* $(DESTDIR)/
++	cp -rL build/* $(DESTDIR)/
+ 
+ .PHONY: all build dirs install clean

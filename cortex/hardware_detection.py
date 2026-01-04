@@ -754,9 +754,6 @@ if __name__ == "__main__":
     print("\n✅ Detection complete!")
 
 
-
-
-
 def _run(cmd: list[str]) -> str:
     try:
         return subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()

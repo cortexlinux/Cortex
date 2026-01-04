@@ -1672,7 +1672,6 @@ def main():
         help="Estimate battery impact of current GPU usage",
     )
 
-
     # Ask command
     ask_parser = subparsers.add_parser("ask", help="Ask a question about your system")
     ask_parser.add_argument("question", type=str, help="Natural language question")
@@ -1969,8 +1968,6 @@ def main():
 
             traceback.print_exc()
         return 1
-
-
 
 
 if __name__ == "__main__":

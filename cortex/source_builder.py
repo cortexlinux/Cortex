@@ -387,7 +387,9 @@ class SourceBuilder:
         if config.build_system == "autotools" or config.build_system == "make":
             make_cmd = "make"
             if config.make_args:
-                make_cmd += " " + " ".join(config.make_args)
+                # Sanitize make args to prevent injection
+                safe_args = [shlex.quote(arg) for arg in config.make_args]
+                make_cmd += " " + " ".join(safe_args)
             else:
                 # Use parallel builds by default
                 import multiprocessing

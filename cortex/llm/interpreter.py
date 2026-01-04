@@ -259,18 +259,28 @@ Rules:
             raise RuntimeError(f"OpenAI API call failed: {str(e)}")
 
     def _extract_intent_openai(self, user_input: str) -> dict:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": self._get_intent_prompt()},
-                {"role": "user", "content": user_input},
-            ],
-            temperature=0.2,
-            max_tokens=300,
-        )
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self._get_intent_prompt()},
+                    {"role": "user", "content": user_input},
+                ],
+                temperature=0.2,
+                max_tokens=300,
+            )
 
-        content = response.choices[0].message.content.strip()
-        return json.loads(content)
+            content = response.choices[0].message.content.strip()
+            return self._parse_intent_from_text(content)
+        except Exception as e:
+            return {
+                "action": "unknown",
+                "domain": "unknown",
+                "description": f"Failed to extract intent: {str(e)}",
+                "ambiguous": True,
+                "confidence": 0.0,
+                "install_mode": "system",
+            }
 
     def _parse_intent_from_text(self, text: str) -> dict:
         """
@@ -530,7 +540,7 @@ Respond with ONLY this JSON format (no explanations):
 
     def _estimate_clarity(self, user_input: str, domain: str) -> float:
         """
-        Estimate confidence score without hardcoding meaning.
+        Estimate a heuristic clarity score for ui hinting only.
         Uses simple linguistic signals.
         """
         score = 0.0
@@ -539,8 +549,6 @@ Respond with ONLY this JSON format (no explanations):
         # Signal 1: length (more detail → more confidence)
         if len(text.split()) >= 3:
             score += 0.3
-        else:
-            score += 0.1
 
         # Signal 2: install intent words
         install_words = {"install", "setup", "set up", "configure"}
@@ -550,17 +558,14 @@ Respond with ONLY this JSON format (no explanations):
         # Signal 3: vague words reduce confidence
         vague_words = {"something", "stuff", "things", "etc"}
         if any(word in text for word in vague_words):
-            score -= 0.2
+            score -= 0.3
 
         # Signal 4: unknown domain penalty
         if domain == "unknown":
-            score -= 0.1
+            score -= 0.2
 
         # Clamp to [0.0, 1.0]
-        # Ensure some minimal confidence for valid text
-        score = max(score, 0.2)
-
-        return round(min(1.0, score), 2)
+        return round(max(0.0, min(1.0, score), 2))
 
     def extract_intent(self, user_input: str) -> dict:
         if not user_input or not user_input.strip():
@@ -572,5 +577,15 @@ Respond with ONLY this JSON format (no explanations):
             raise NotImplementedError("Intent extraction not yet implemented for Claude")
         elif self.provider == APIProvider.OLLAMA:
             return self._extract_intent_ollama(user_input)
+        elif self.provider == APIProvider.FAKE:
+            # Return a default intent for testing
+            return {
+                "action": "install",
+                "domain": "unknown",
+                "install_mode": "system",
+                "description": user_input,
+                "ambiguous": False,
+                "confidence": 1.0,
+            }
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")

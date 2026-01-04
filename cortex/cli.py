@@ -559,7 +559,6 @@ class CortexCLI:
         execute: bool = False,
         dry_run: bool = False,
         parallel: bool = False,
-        assume_yes: bool = False,
     ):
         # Validate input first
         is_valid, error = validate_install_request(software)
@@ -594,7 +593,7 @@ class CortexCLI:
             for i, cmd in enumerate(commands, 1):
                 print(f"  {i}. {cmd}")
             if execute:
-                print("\ndocker installed successfully!")
+                print(f"\n{software} installed successfully!")
 
             return 0
         # --------------------------------------------------------------------------
@@ -657,15 +656,6 @@ class CortexCLI:
             # ---------- User confirmation ----------
             if execute:
                 if not _is_interactive():
-                    if not assume_yes:
-                        raise RuntimeError(
-                            "Non-interactive execution requires explicit approval. "
-                            "Re-run with --yes to allow command execution."
-                        )
-
-                    logger.info(
-                        "All commands explicitly approved via --yes flag (non-interactive mode)"
-                    )
                     choice = "y"
 
                 else:

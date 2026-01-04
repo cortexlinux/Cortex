@@ -203,10 +203,15 @@ class TestSourceBuilder:
         mock_member.name = "source-1.0"
         mock_tar.getmembers.return_value = [mock_member]
 
+        # Track the extract_dir that will be created
+        extract_dir_path = None
+
         # Mock the tarfile to create extracted structure
         def mock_extractall(path, members=None):
+            nonlocal extract_dir_path
             # Handle both Path objects and strings
             extract_path = Path(path) if not isinstance(path, Path) else path
+            extract_dir_path = extract_path
             # Create the extracted directory structure that _fetch_from_url expects
             (extract_path / "source-1.0").mkdir(parents=True, exist_ok=True)
             # Create a file inside to make it a valid directory
@@ -217,6 +222,9 @@ class TestSourceBuilder:
         result = self.builder._fetch_from_url("https://example.com/test.tar.gz", "test", "1.0")
         assert result is not None
         assert isinstance(result, Path)
+        # Verify it returns the subdirectory when there's exactly one
+        assert result.name == "source-1.0"
+        assert result.is_dir()
 
     def test_build_from_source_missing_deps(self):
         """Test build_from_source with missing dependencies."""

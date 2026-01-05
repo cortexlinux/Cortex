@@ -755,13 +755,45 @@ if __name__ == "__main__":
 
 
 def _run(cmd: list[str]) -> str:
+    """
+    Run a system command and return its stdout output.
+
+    Args:
+        cmd: Command and arguments to execute.
+
+    Returns:
+        str: Standard output of the command, or an empty string if execution fails.
+    """
     try:
-        return subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
-    except Exception:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, OSError):
         return ""
 
 
 def detect_nvidia_gpu() -> bool:
+    """
+    Detect whether an NVIDIA GPU is present and available on the system.
+
+    This function checks for the presence of NVIDIA GPU indicators using
+    non-privileged system commands and files. It is designed to be safe to call
+    in user-space environments without requiring root access.
+
+    Returns:
+        bool: True if an NVIDIA GPU is detected, False otherwise.
+
+    Notes:
+        - This is a best-effort detection and may return False on systems where
+          NVIDIA drivers are installed but the GPU is powered down or hidden.
+        - Any underlying command execution errors are handled internally and
+          result in a False return value.
+    """
     return bool(_run(["nvidia-smi"]))
 
 
@@ -778,7 +810,7 @@ def detect_gpu_mode() -> str:
     return "Hybrid"
 
 
-def estimate_gpu_battery_impact() -> dict:
+def estimate_gpu_battery_impact() -> dict[str, Any]:
     """
     Heuristic battery impact estimation based on GPU mode.
     No realtime measurement, safe for non-root usage.

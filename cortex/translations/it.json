@@ -31,15 +31,18 @@
     "checking_deps": "Controllo delle dipendenze per {package}",
     "resolving": "Risoluzione delle dipendenze dei pacchetti...",
     "downloading": "Download di {package_count, plural, one {# pacchetto} other {# pacchetti}}",
-    "installing": "Installazione di {packages}...",
+    "installing": "Installazione di {package}...",
     "success": "{package} installato con successo",
     "failed": "Installazione di {package} non riuscita: {error}",
     "dry_run": "[DRY RUN] Installerebbe {packages}",
+    "dry_run_note": "Modalità simulazione - comandi non eseguiti",
     "already_installed": "{package} è già installato (versione {version})",
     "updating": "Aggiornamento di {package}...",
     "verifying": "Verifica dell'installazione di {package}",
     "install_time": "Installazione completata in {time}s",
-    "requires": "Richiede: {dependencies}"
+    "requires": "Richiede: {dependencies}",
+    "generated_commands": "Comandi generati",
+    "execute_note": "Per eseguire questi comandi, usa il flag --execute"
   },
   "remove": {
     "prompt": "What would you like to remove?",
@@ -75,19 +78,20 @@
   },
   "errors": {
     "network": "Errore di rete: {error}",
-    "permission": "Permission denied: {details}",
+    "permission": "Permesso negato: {details}",
     "invalid_package": "Pacchetto '{package}' non trovato",
     "disk_space": "Spazio su disco insufficiente",
     "api_key_missing": "Chiave API non impostata. Impostarla nella configurazione.",
     "timeout": "Timeout per {operation}",
-    "parse_error": "Failed to parse response: {details}",
+    "parse_error": "Impossibile analizzare la risposta: {details}",
     "invalid_input": "Input non valido: {error}",
-    "operation_failed": "Operation failed: {details}",
-    "unexpected": "An unexpected error occurred. Please try again.",
+    "operation_failed": "Operazione fallita: {details}",
+    "unexpected": "Si è verificato un errore imprevisto. Riprova.",
     "permission_denied": "Permesso negato",
     "package_conflict": "Conflitto pacchetto: {package}",
     "installation_failed": "Installazione non riuscita",
-    "unknown_error": "Errore sconosciuto"
+    "unknown_error": "Errore sconosciuto",
+    "no_commands": "Nessun comando generato. Riprova con una richiesta diversa."
   },
   "prompts": {
     "confirm_install": "Install {packages}? (y/n)",
@@ -97,13 +101,16 @@
     "confirm_dry_run": "This is a dry-run. Continue to see what would be done?"
   },
   "status": {
-    "checking": "Checking system...",
-    "detected_os": "Detected OS: {os} {version}",
-    "detected_arch": "Architecture: {arch}",
-    "hardware_info": "CPU cores: {cores}, RAM: {ram}GB",
-    "checking_updates": "Checking for updates...",
-    "up_to_date": "System is up to date",
-    "updates_available": "{count, plural, one {# update} other {# updates}} available"
+    "checking": "Controllo del sistema...",
+    "understanding": "Comprensione della richiesta...",
+    "planning": "Pianificazione dell'installazione...",
+    "analyzing": "Analisi dei requisiti di sistema...",
+    "detected_os": "Sistema operativo rilevato: {os} {version}",
+    "detected_arch": "Architettura: {arch}",
+    "hardware_info": "Core CPU: {cores}, RAM: {ram}GB",
+    "checking_updates": "Ricerca aggiornamenti...",
+    "up_to_date": "Il sistema è aggiornato",
+    "updates_available": "{count, plural, one {# aggiornamento} other {# aggiornamenti}} disponibile/i"
   },
   "wizard": {
     "welcome": "Welcome to Cortex Linux!",

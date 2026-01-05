@@ -30,15 +30,18 @@
     "checking_deps": "Verificando dependencias para {package}",
     "resolving": "Resolviendo dependencias de paquetes...",
     "downloading": "Descargando {package_count, plural, one {# paquete} other {# paquetes}}",
-    "installing": "Instalando {packages}...",
+    "installing": "Instalando {package}...",
     "success": "{package} instalado exitosamente",
     "failed": "La instalación de {package} falló: {error}",
     "dry_run": "[SIMULACIÓN] Se instalaría {packages}",
+    "dry_run_note": "Modo simulación - comandos no ejecutados",
     "already_installed": "{package} ya está instalado (versión {version})",
     "updating": "Actualizando {package}...",
     "verifying": "Verificando instalación de {package}",
     "install_time": "Instalación completada en {time}s",
-    "requires": "Requiere: {dependencies}"
+    "requires": "Requiere: {dependencies}",
+    "generated_commands": "Comandos generados",
+    "execute_note": "Para ejecutar estos comandos, usa la opción --execute"
   },
 
   "remove": {
@@ -84,7 +87,8 @@
     "parse_error": "Error al analizar respuesta: {details}",
     "invalid_input": "Entrada inválida: {details}",
     "operation_failed": "La operación falló: {details}",
-    "unexpected": "Ocurrió un error inesperado. Por favor, intenta de nuevo."
+    "unexpected": "Ocurrió un error inesperado. Por favor, intenta de nuevo.",
+    "no_commands": "No se generaron comandos. Por favor, intenta con una solicitud diferente."
   },
 
   "prompts": {
@@ -97,6 +101,9 @@
 
   "status": {
     "checking": "Verificando sistema...",
+    "understanding": "Entendiendo solicitud...",
+    "planning": "Planificando instalación...",
+    "analyzing": "Analizando requisitos del sistema...",
     "detected_os": "SO detectado: {os} {version}",
     "detected_arch": "Arquitectura: {arch}",
     "hardware_info": "Núcleos de CPU: {cores}, RAM: {ram}GB",

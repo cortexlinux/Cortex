@@ -3,7 +3,7 @@
 **Project**: GitHub Issue #93 – Multi-Language CLI Support  
 **Status**: ✅ **COMPLETE & PRODUCTION READY**  
 **Date**: December 29, 2025  
-**Languages Supported**: 12 (English, Spanish, Hindi, Japanese, Arabic, Portuguese, French, German, Italian, Russian, Chinese, Korean)
+**Languages Supported**: 10 (English, Spanish, Hindi, Japanese, Arabic, German, Italian, Russian, Chinese, Korean)
 
 ---
 
@@ -28,7 +28,7 @@
 
 A comprehensive, **production-ready multi-language (i18n) support system** has been implemented for Cortex Linux. This solution provides:
 
-✅ **12 Languages Out-of-the-Box**: Complete support with fallback to English  
+✅ **10 Languages Out-of-the-Box**: Complete support with fallback to English  
 ✅ **1,296+ Translation Strings**: Full coverage of CLI interface  
 ✅ **Zero Breaking Changes**: Completely backward compatible  
 ✅ **Modular Architecture**: 5 core Python modules (~1,000 lines)  
@@ -72,9 +72,8 @@ cortex/
     ├── it.json                    # Italian (108 keys)
     ├── ru.json                    # Russian (108 keys)
     ├── zh.json                    # Chinese Simplified (108 keys)
-    ├── ko.json                    # Korean (108 keys)
-    ├── pt.json                    # Portuguese (108 keys)
-    └── fr.json                    # French (108 keys)
+    └── ko.json                    # Korean (108 keys)
+    # Future: pt.json (Portuguese), fr.json (French)
 
 docs/
 └── I18N_COMPLETE_IMPLEMENTATION.md  # This comprehensive guide
@@ -189,7 +188,7 @@ git push origin feature/add-language-xx
 
 ## Supported Languages
 
-### Language Table (12 Languages)
+### Language Table (10 Languages)
 
 | Code | Language | Native Name | RTL | Status |
 |------|----------|------------|-----|--------|
@@ -298,10 +297,10 @@ class LanguageManager:
         """Auto-detect system language from locale"""
 ```
 
-**Supported Languages Registry** (12 languages):
+**Supported Languages Registry** (10 languages):
 - English, Spanish, Hindi, Japanese, Arabic
-- Portuguese, French, German, Italian, Russian
-- Chinese (Simplified), Korean
+- German, Italian, Russian, Chinese (Simplified), Korean
+- _Planned: Portuguese, French_
 
 ### 3. Pluralization Module (`pluralization.py`)
 
@@ -332,14 +331,14 @@ msg = translator.get_plural('files_deleted', count=count)
 # count=1 → "1 file was deleted"
 # count=5 → "5 files were deleted"
 
-# Arabic - 6 forms
+# Arabic - 6 forms (CLDR thresholds: 0=zero, 1=one, 2=two, 3-10=few, 11-99=many, 100+=other)
 msg = translator.get_plural('items', count=count)
-# count=0 → "No items"
-# count=1 → "One item"
-# count=2 → "Two items"
-# count=5 → "Five items"
-# count=11 → "Eleven items"
-# count=100 → "Hundred items"
+# count=0 → "zero" form → "No items"
+# count=1 → "one" form → "One item"
+# count=2 → "two" form → "Two items"
+# count=5 → "few" form (3-10) → "A few items"
+# count=11 → "many" form (11-99) → "Many items"
+# count=100 → "other" form (100+) → "Items"
 
 # Russian - 3 forms
 msg = translator.get_plural('days', count=count)
@@ -347,6 +346,17 @@ msg = translator.get_plural('days', count=count)
 # count=2 → "2 дня"
 # count=5 → "5 дней"
 ```
+
+**⚠️ Known Limitation - Pluralization Parser**:
+
+The current `_parse_pluralization` method only extracts `one` and `other` plural forms from message strings. This means:
+
+- **Arabic** (6 forms: zero, one, two, few, many, other) - Complex pluralization in message strings will fall back to `other` for all non-singular counts
+- **Russian** (3 forms: one, few, many) - Will use `other` instead of `few`/`many` for counts != 1
+
+The `PluralRules` class correctly implements all CLDR plural forms, but the message string parser (`{count, plural, one {...} other {...}}`) only supports the two most common forms. For full multi-form pluralization, translations should use separate keys or the application should call `PluralRules.get_plural_form()` directly.
+
+**Workaround for translators**: Use the `other` form as a generic plural that works for all non-singular cases.
 
 ### 4. Fallback Handler (`fallback_handler.py`)
 
@@ -441,7 +451,7 @@ csv_content = handler.export_missing_for_translation()
 **Key Features**:
 - 12 logical namespaces per language file
 - 108 total keys per language
-- 1,296+ total translation strings across all 12 languages
+- 1,080+ total translation strings across all 10 languages
 - Variable placeholders with `{variable}` syntax
 - Pluralization with ICU MessageFormat syntax
 - UTF-8 encoding for all languages
@@ -887,8 +897,8 @@ For languages with multiple plural forms, translate each form appropriately:
 // Russian - 3 forms
 "files": "Загрузка {count, plural, one {# файла} few {# файлов} other {# файлов}}"
 
-// Arabic - 6 forms
-"files": "Downloading {count, plural, zero {no files} one {# file} two {# files} few {# files} many {# files} other {# files}}"
+// Arabic - 6 forms (0=zero, 1=one, 2=two, 3-10=few, 11-99=many, 100+=other)
+"files": "تحميل {count, plural, zero {لا ملفات} one {ملف #} two {ملفان} few {# ملفات} many {# ملفًا} other {# ملف}}"
 ```
 
 #### 5. Special Characters
@@ -940,7 +950,7 @@ For languages with multiple plural forms, translate each form appropriately:
 2. ✅ **Translations Directory Path** (FIXED)
    - Issue: Translator looking in wrong directory
    - Status: Updated path to `parent.parent / "translations"`
-   - Test: All 12 languages load successfully
+   - Test: All 10 languages load successfully
 
 3. ✅ **Pluralization Parser Logic** (FIXED)
    - Issue: Parser not matching nested braces correctly
@@ -959,7 +969,7 @@ For languages with multiple plural forms, translate each form appropriately:
 python3 << 'EOF'
 from cortex.i18n import Translator, LanguageManager
 
-# Test all 12 languages
+# Test all 10 languages
 languages = ['en', 'es', 'ja', 'ar', 'hi', 'de', 'it', 'ru', 'zh', 'ko', 'pt', 'fr']
 for lang in languages:
     t = Translator(lang)
@@ -1218,7 +1228,7 @@ EOF
 
 The Cortex Linux i18n implementation provides a **complete, production-ready multi-language support system** with:
 
-- ✅ 12 languages supported (1,296+ translation strings)
+- ✅ 10 languages supported (1,080+ translation strings)
 - ✅ Modular, maintainable architecture (~1,000 lines)
 - ✅ Zero breaking changes (fully backward compatible)
 - ✅ Graceful fallback (English fallback for missing keys)

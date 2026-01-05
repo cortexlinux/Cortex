@@ -97,6 +97,9 @@
 
   "status": {
     "checking": "システムを確認中...",
+    "understanding": "リクエストを理解中...",
+    "planning": "インストールを計画中...",
+    "analyzing": "システム要件を分析中...",
     "detected_os": "検出された OS: {os} {version}",
     "detected_arch": "アーキテクチャ: {arch}",
     "hardware_info": "CPU コア: {cores}、RAM: {ram}GB",

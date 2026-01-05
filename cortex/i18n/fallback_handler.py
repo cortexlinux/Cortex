@@ -8,7 +8,6 @@ Author: Cortex Linux Team
 License: Apache 2.0
 """
 
-import csv
 import logging
 import os
 import tempfile

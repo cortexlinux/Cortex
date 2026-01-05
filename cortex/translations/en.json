@@ -30,15 +30,18 @@
     "checking_deps": "Checking dependencies for {package}",
     "resolving": "Resolving package dependencies...",
     "downloading": "Downloading {package_count, plural, one {# package} other {# packages}}",
-    "installing": "Installing {packages}...",
+    "installing": "Installing {package}...",
     "success": "{package} installed successfully",
     "failed": "Installation of {package} failed: {error}",
     "dry_run": "[DRY RUN] Would install {packages}",
+    "dry_run_note": "Dry run mode - commands not executed",
     "already_installed": "{package} is already installed (version {version})",
     "updating": "Updating {package}...",
     "verifying": "Verifying installation of {package}",
     "install_time": "Installation completed in {time}s",
-    "requires": "Requires: {dependencies}"
+    "requires": "Requires: {dependencies}",
+    "generated_commands": "Generated commands",
+    "execute_note": "To execute these commands, run with --execute flag"
   },
 
   "remove": {
@@ -84,7 +87,8 @@
     "parse_error": "Failed to parse response: {details}",
     "invalid_input": "Invalid input: {details}",
     "operation_failed": "Operation failed: {details}",
-    "unexpected": "An unexpected error occurred. Please try again."
+    "unexpected": "An unexpected error occurred. Please try again.",
+    "no_commands": "No commands generated. Please try again with a different request."
   },
 
   "prompts": {
@@ -97,6 +101,9 @@
 
   "status": {
     "checking": "Checking system...",
+    "understanding": "Understanding request...",
+    "planning": "Planning installation...",
+    "analyzing": "Analyzing system requirements...",
     "detected_os": "Detected OS: {os} {version}",
     "detected_arch": "Architecture: {arch}",
     "hardware_info": "CPU cores: {cores}, RAM: {ram}GB",

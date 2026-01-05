@@ -22,10 +22,13 @@ Welcome! This guide helps you contribute translations to Cortex Linux.
 | hi | हिन्दी | Complete ✓ |
 | ja | 日本語 | Complete ✓ |
 | ar | العربية | Complete ✓ |
+| de | Deutsch | Complete ✓ |
+| it | Italiano | Complete ✓ |
+| ko | 한국어 | Complete ✓ |
+| ru | Русский | Complete ✓ |
+| zh | 中文 | Complete ✓ |
 | pt | Português | Not started |
 | fr | Français | Not started |
-| zh | 中文 | Planned |
-| de | Deutsch | Planned |
 
 ## Translation File Structure
 

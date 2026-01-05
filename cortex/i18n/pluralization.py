@@ -4,6 +4,12 @@ Pluralization Rules for Cortex Linux i18n
 Implements language-specific pluralization rules following CLDR standards.
 Supports different plural forms for languages with varying pluralization patterns.
 
+Note: The PluralRules class correctly implements all CLDR plural forms.
+However, the message string parser in translator.py (_parse_pluralization)
+currently only extracts 'one' and 'other' forms. For full multi-form
+pluralization (Arabic 6 forms, Russian 3 forms), use PluralRules.get_plural_form()
+directly or use the 'other' form as a catch-all in translation strings.
+
 Author: Cortex Linux Team
 License: Apache 2.0
 """
@@ -185,13 +191,16 @@ RUSSIAN_RULES = {
 ARABIC_RULES = {
     "plural_forms": 6,
     "forms": ["zero", "one", "two", "few", "many", "other"],
+    # Thresholds: 0=zero, 1=one, 2=two, 3-10=few, 11-99=many, 100+=other
     "examples": {
         0: "zero",
         1: "one",
         2: "two",
-        5: "few",
-        50: "many",
-        100: "other",
+        3: "few",      # Start of "few" range
+        10: "few",     # End of "few" range
+        11: "many",    # Start of "many" range
+        99: "many",    # End of "many" range
+        100: "other",  # Start of "other" range
     },
 }
 

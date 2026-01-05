@@ -30,15 +30,18 @@
     "checking_deps": "{package} के लिए निर्भरताएं जांच रहे हैं",
     "resolving": "पैकेज निर्भरताओं को हल कर रहे हैं...",
     "downloading": "{package_count, plural, one {# पैकेज} other {# पैकेज}} डाउनलोड कर रहे हैं",
-    "installing": "{packages} स्थापित कर रहे हैं...",
+    "installing": "{package} स्थापित कर रहे हैं...",
     "success": "{package} सफलतापूर्वक स्थापित हुआ",
     "failed": "{package} की स्थापना विफल रही: {error}",
     "dry_run": "[ड्राई रन] {packages} स्थापित होते",
+    "dry_run_note": "सिमुलेशन मोड - कमांड निष्पादित नहीं की गईं",
     "already_installed": "{package} पहले से स्थापित है (संस्करण {version})",
     "updating": "{package} को अपडेट कर रहे हैं...",
     "verifying": "{package} की स्थापना की पुष्टि कर रहे हैं",
     "install_time": "स्थापना {time}s में पूर्ण हुई",
-    "requires": "आवश्यकता: {dependencies}"
+    "requires": "आवश्यकता: {dependencies}",
+    "generated_commands": "उत्पन्न कमांड",
+    "execute_note": "इन कमांड को निष्पादित करने के लिए --execute फ्लैग का उपयोग करें"
   },
 
   "remove": {
@@ -84,7 +87,8 @@
     "parse_error": "प्रतिक्रिया को पार्स करने में विफल: {details}",
     "invalid_input": "अमान्य इनपुट: {details}",
     "operation_failed": "ऑपरेशन विफल: {details}",
-    "unexpected": "एक अप्रत्याशित त्रुटि हुई। कृपया पुनः प्रयास करें।"
+    "unexpected": "एक अप्रत्याशित त्रुटि हुई। कृपया पुनः प्रयास करें।",
+    "no_commands": "कोई कमांड उत्पन्न नहीं हुई। कृपया किसी अन्य अनुरोध के साथ पुनः प्रयास करें।"
   },
 
   "prompts": {
@@ -97,6 +101,9 @@
 
   "status": {
     "checking": "सिस्टम जांच रहे हैं...",
+    "understanding": "अनुरोध समझ रहे हैं...",
+    "planning": "स्थापना की योजना बना रहे हैं...",
+    "analyzing": "सिस्टम आवश्यकताओं का विश्लेषण कर रहे हैं...",
     "detected_os": "पहचानी गई OS: {os} {version}",
     "detected_arch": "आर्किटेक्चर: {arch}",
     "hardware_info": "CPU कोर: {cores}, RAM: {ram}GB",

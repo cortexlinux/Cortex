@@ -156,10 +156,18 @@ class LanguageManager:
             Language code if detected, None otherwise
         """
         try:
-            # Get system locale
-            system_locale, _ = locale.getdefaultlocale()
+            # Initialize locale from environment and get current locale
+            # Using setlocale + getlocale instead of deprecated getdefaultlocale()
+            try:
+                locale.setlocale(locale.LC_ALL, "")
+            except locale.Error:
+                # If setting locale fails, continue with current settings
+                pass
 
-            if not system_locale:
+            system_locale, _ = locale.getlocale()
+
+            # Handle cases where getlocale() returns None
+            if system_locale is None:
                 logger.debug("Could not determine system locale")
                 return None
 

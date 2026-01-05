@@ -30,15 +30,18 @@
     "checking_deps": "جاري التحقق من التبعيات لـ {package}",
     "resolving": "جاري حل تبعيات الحزم...",
     "downloading": "جاري تحميل {package_count, plural, one {# حزمة} other {# حزم}}",
-    "installing": "جاري تثبيت {packages}...",
+    "installing": "جاري تثبيت {package}...",
     "success": "تم تثبيت {package} بنجاح",
     "failed": "فشل تثبيت {package}: {error}",
     "dry_run": "[محاكاة] سيتم تثبيت {packages}",
+    "dry_run_note": "وضع المحاكاة - لم يتم تنفيذ الأوامر",
     "already_installed": "{package} مثبت بالفعل (الإصدار {version})",
     "updating": "جاري تحديث {package}...",
     "verifying": "جاري التحقق من تثبيت {package}",
     "install_time": "اكتمل التثبيت في {time}ث",
-    "requires": "يتطلب: {dependencies}"
+    "requires": "يتطلب: {dependencies}",
+    "generated_commands": "الأوامر المُنشأة",
+    "execute_note": "لتنفيذ هذه الأوامر، استخدم الخيار --execute"
   },
 
   "remove": {
@@ -84,7 +87,8 @@
     "parse_error": "فشل تحليل الرد: {details}",
     "invalid_input": "إدخال غير صحيح: {details}",
     "operation_failed": "فشلت العملية: {details}",
-    "unexpected": "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى."
+    "unexpected": "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.",
+    "no_commands": "لم يتم إنشاء أي أوامر. يرجى المحاولة بطلب مختلف."
   },
 
   "prompts": {
@@ -97,6 +101,9 @@
 
   "status": {
     "checking": "جاري فحص النظام...",
+    "understanding": "جاري فهم الطلب...",
+    "planning": "جاري تخطيط التثبيت...",
+    "analyzing": "جاري تحليل متطلبات النظام...",
     "detected_os": "نظام التشغيل المكتشف: {os} {version}",
     "detected_arch": "المعمارية: {arch}",
     "hardware_info": "نوى CPU: {cores}، RAM: {ram}GB",

@@ -1883,25 +1883,28 @@ def main():
         from cortex.permission_manager import PermissionManager
 
         manager = PermissionManager(os.getcwd())
-        cx_print("🔍 Scanning for Docker-related permission issues...")
+        cx_print("🔍 Scanning for Docker-related permission issues...", "info")
 
-        # 1. Provide the suggestion tip first
-        manager.check_compose_config()  # Suggest better settings
-
-        # 2. Run the diagnosis
+        manager.check_compose_config()
         issues = manager.diagnose()
 
         if not issues:
-            cx_print("[green]✅ No root-owned files detected in bind mounts![/green]")
+            cx_print("[green]✅ No root-owned files detected in bind mounts![/green]", "success")
+            sys.exit(0)
         else:
-            cx_print(f"[yellow]⚠️ Found {len(issues)} files owned by root.[/yellow]")
+            cx_print(f"[yellow]⚠️ Found {len(issues)} files owned by root.[/yellow]", "warning")
             confirm = console.input("[bold cyan]Fix these permissions now? (y/n): [/bold cyan]")
             if confirm.lower() == "y":
                 if manager.fix_permissions(issues):
-                    cx_print("[green]✨ Permissions fixed successfully![/green]")
+                    cx_print("[green]✨ Permissions fixed successfully![/green]", "success")
+                    sys.exit(0)
                 else:
-                    cx_print("[red]❌ Failed to fix permissions. You may need sudo access.[/red]")
-        sys.exit(0)
+                    cx_print(
+                        "[red]❌ Failed to fix permissions. You may need sudo access.[/red]",
+                        "error",
+                    )
+                    sys.exit(1)
+            sys.exit(0)
 
     if not args.command:
         show_rich_help()

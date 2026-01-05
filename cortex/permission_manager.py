@@ -2,7 +2,7 @@ import os
 import platform
 import subprocess
 
-from cortex.branding import console  # Import console for the colored output
+from cortex.branding import console
 
 
 class PermissionManager:
@@ -24,13 +24,14 @@ class PermissionManager:
         """
         root_owned_files = []
         for root, _, files in os.walk(self.base_path):
-            # Skip virtual environment and git folders to save time
-            if "venv" in root or ".git" in root:
+            # Improved segment matching to avoid skipping unintended folders
+            path_parts = root.split(os.sep)
+            if any(part in path_parts for part in ["venv", ".venv", ".git"]):
                 continue
+
             for name in files:
                 full_path = os.path.join(root, name)
                 try:
-                    # Check if the file is owned by root (UID 0)
                     if os.stat(full_path).st_uid == 0:
                         root_owned_files.append(full_path)
                 except (PermissionError, FileNotFoundError):
@@ -38,15 +39,10 @@ class PermissionManager:
         return root_owned_files
 
     def check_compose_config(self) -> None:
-        """Checks if docker-compose.yml uses the correct user mapping.
-
-        This scans for the 'user:' key in the docker-compose file and suggests
-        a fix if it is missing to prevent future permission lockouts.
-        """
+        """Checks if docker-compose.yml uses the correct user mapping."""
         compose_path = os.path.join(self.base_path, "docker-compose.yml")
         if os.path.exists(compose_path):
             try:
-                # Adding encoding='utf-8' is a best practice for cross-platform tools
                 with open(compose_path, encoding="utf-8") as f:
                     content = f.read()
                     if "user:" not in content:
@@ -56,7 +52,6 @@ class PermissionManager:
                             "docker-compose.yml.[/bold yellow]"
                         )
             except Exception:
-                # Silently fail if file cannot be read to avoid interrupting CLI flow
                 pass
 
     def fix_permissions(self, file_paths: list[str]) -> bool:
@@ -66,26 +61,24 @@ class PermissionManager:
             file_paths: List of full paths to files requiring ownership changes.
 
         Returns:
-            bool: True if the chown command executed successfully, False otherwise.
-
-        Raises:
-            OSError: If the system cannot execute the subprocess command.
+            bool: True on success, False on failure (handles subprocess and permission errors).
         """
         if not file_paths:
             return True
 
-        # Permissions work differently on Windows; sudo chown is a Linux/Unix command
         if platform.system() == "Windows":
             return False
 
         try:
             uid = os.getuid()
             gid = os.getgid()
-            # Combine files into one command for efficiency.
-            # capture_output=True keeps the terminal clean from unnecessary command output.
+            # Added 60s timeout to prevent hanging on sudo prompts
             subprocess.run(
-                ["sudo", "chown", f"{uid}:{gid}"] + file_paths, check=True, capture_output=True
+                ["sudo", "chown", f"{uid}:{gid}"] + file_paths,
+                check=True,
+                capture_output=True,
+                timeout=60,
             )
             return True
-        except (subprocess.CalledProcessError, PermissionError):
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, PermissionError):
             return False

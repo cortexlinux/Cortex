@@ -6,17 +6,17 @@ Tests for batch installer module
 import os
 import sys
 import unittest
-from unittest.mock import Mock, patch, MagicMock
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from unittest.mock import MagicMock, Mock, patch
 
 from cortex.batch_installer import (
-    BatchInstaller,
     BatchInstallationResult,
+    BatchInstaller,
     PackageInstallation,
     PackageStatus,
 )
-from cortex.dependency_resolver import DependencyGraph, Dependency
+from cortex.dependency_resolver import Dependency, DependencyGraph
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 class TestPackageInstallation(unittest.TestCase):

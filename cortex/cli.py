@@ -6,18 +6,15 @@ import time
 from datetime import datetime
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
-# Suppress noisy log messages in normal operation
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("cortex.installation_history").setLevel(logging.ERROR)
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from cortex.api_key_detector import auto_detect_api_key, setup_api_key
+from cortex.api_key_detector import setup_api_key
 from cortex.ask import AskHandler
+from cortex.batch_installer import BatchInstaller, PackageStatus
 from cortex.branding import VERSION, console, cx_header, cx_print, show_banner
-from cortex.coordinator import InstallationCoordinator, InstallationStep, StepStatus
+from cortex.coordinator import (
+    InstallationCoordinator,
+    InstallationStep,
+    StepStatus,
+)
 from cortex.demo import run_demo
 from cortex.dependency_importer import (
     DependencyImporter,
@@ -26,15 +23,18 @@ from cortex.dependency_importer import (
     format_package_list,
 )
 from cortex.env_manager import EnvironmentManager, get_env_manager
-from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
+from cortex.installation_history import (
+    InstallationHistory,
+    InstallationStatus,
+    InstallationType,
+)
 from cortex.llm.interpreter import CommandInterpreter
-from cortex.batch_installer import BatchInstaller, PackageStatus
-
-# Import the new Notification Manager
 from cortex.network_config import NetworkConfig
 from cortex.notification_manager import NotificationManager
 from cortex.stack_manager import StackManager
 from cortex.validators import validate_api_key, validate_install_request
+
+logger = logging.getLogger(__name__)
 
 # Suppress noisy log messages in normal operation
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -539,17 +539,6 @@ class CortexCLI:
         provider = self._get_provider()
         self._debug(f"Using provider: {provider}")
 
-    def install(self, software: str, execute: bool = False, dry_run: bool = False):
-        # Check if multiple packages are provided (space-separated)
-        package_names = [pkg.strip() for pkg in software.split() if pkg.strip()]
-
-        # If multiple packages, use batch installer
-        if len(package_names) > 1:
-            return self._install_batch(package_names, execute=execute, dry_run=dry_run)
-
-        # Single package - use existing flow
-        software = package_names[0] if package_names else software
-
         try:
             handler = AskHandler(
                 api_key=api_key,
@@ -558,17 +547,7 @@ class CortexCLI:
             answer = handler.ask(question)
             console.print(answer)
             return 0
-        except ImportError as e:
-            # Provide a helpful message if provider SDK is missing
-            self._print_error(str(e))
-            cx_print(
-                "Install the required SDK or set CORTEX_PROVIDER=ollama for local mode.", "info"
-            )
-            return 1
-        except ValueError as e:
-            self._print_error(str(e))
-            return 1
-        except RuntimeError as e:
+        except Exception as e:
             self._print_error(str(e))
             return 1
 
@@ -579,6 +558,16 @@ class CortexCLI:
         dry_run: bool = False,
         parallel: bool = False,
     ):
+        """Install software using LLM-interpreted commands or batch installer."""
+        # Check if multiple packages are provided (space-separated)
+        package_names = [pkg.strip() for pkg in software.split() if pkg.strip()]
+
+        # If multiple packages, use batch installer
+        if len(package_names) > 1:
+            return self._install_batch(package_names, execute=execute, dry_run=dry_run)
+
+        # Single package - use existing flow
+        software = package_names[0] if package_names else software
         # Validate input first
         is_valid, error = validate_install_request(software)
         if not is_valid:

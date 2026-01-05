@@ -11,14 +11,15 @@ Handles installation of multiple packages with:
 
 import logging
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
-from cortex.dependency_resolver import DependencyResolver, DependencyGraph
 from cortex.coordinator import InstallationCoordinator, InstallationResult, StepStatus
+from cortex.dependency_resolver import DependencyGraph, DependencyResolver
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -37,6 +38,73 @@ class CortexCLI:
         self.spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self.spinner_idx = 0
         self.verbose = verbose
+
+    # Define a method to handle Docker-specific permission repairs
+    def docker_permissions(self, args: argparse.Namespace) -> int:
+        """Handle the diagnosis and repair of Docker file permissions."""
+        from cortex.permission_manager import PermissionManager
+
+        try:
+            manager = PermissionManager(os.getcwd())
+            cx_print("🔍 Scanning for Docker-related permission issues...", "info")
+
+            # Check configuration settings before scanning files
+            manager.check_compose_config()
+
+            # Find all files with mismatched ownership
+            issues = manager.diagnose()
+
+            if not issues:
+                cx_print("✅ No permission mismatches detected in bind mounts!", "success")
+                return 0
+
+            cx_print(f"⚠️ Found {len(issues)} files with incorrect ownership.", "warning")
+
+            # logic for non-interactive option (Requirement R1902)
+            auto_confirm = getattr(args, "yes", False)
+
+            if auto_confirm:
+                confirm = "y"
+            else:
+                try:
+                    # Safely handle stdin: if stdin is not available, console.input raises EOFError
+                    confirm = console.input(
+                        "[bold cyan]Fix these permissions now? (y/n): [/bold cyan]"
+                    )
+                except (EOFError, KeyboardInterrupt):
+                    # Safely exit when stdin is not available or interrupted
+                    console.print()
+                    confirm = "n"
+
+            if confirm.strip().lower() in ("y", "yes"):
+                if manager.fix_permissions(issues):
+                    cx_print("✨ Permissions fixed successfully!", "success")
+                    return 0
+                else:
+                    cx_print("❌ Failed to fix permissions. Ensure you have sudo access.", "error")
+                    return 1
+
+            cx_print("Operation cancelled by user.", "info")
+            return 0
+
+        except (PermissionError, FileNotFoundError, OSError) as e:
+            # Report issues related to system access or missing files
+            cx_print(f"❌ Permission check failed: {e}", "error")
+            return 1
+
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            # Specifically catch failures from the 'sudo chown' command
+            cx_print(f"❌ Docker repair command failed: {e}", "error")
+            if self.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return 1
+
+        except RuntimeError as e:
+            # Catch logic errors without masking them as generic system failures
+            cx_print(f"❌ Logic error during repair: {e}", "error")
+            return 1
 
     def _debug(self, message: str):
         """Print debug info only in verbose mode"""
@@ -1624,17 +1692,24 @@ def main():
         description="AI-powered Linux command interpreter",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "--fix-permissions",
-        action="store_true",
-        help="Diagnose and fix Docker-related file permission issues",
-    )
 
     # Global flags
     parser.add_argument("--version", "-V", action="version", version=f"cortex {VERSION}")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Define the docker command and its associated sub-actions
+    docker_parser = subparsers.add_parser("docker", help="Docker and container utilities")
+    docker_subs = docker_parser.add_subparsers(dest="docker_action", help="Docker actions")
+
+    # Add the permissions action to allow fixing file ownership issues
+    perm_parser = docker_subs.add_parser(
+        "permissions", help="Fix file permissions from bind mounts"
+    )
+
+    # Provide an option to skip the manual confirmation prompt
+    perm_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
 
     # Demo command
     demo_parser = subparsers.add_parser("demo", help="See Cortex in action")
@@ -1879,66 +1954,22 @@ def main():
 
     args = parser.parse_args()
 
-    if args.fix_permissions:
-        from cortex.permission_manager import PermissionManager
-
-        try:
-            manager = PermissionManager(os.getcwd())
-            cx_print("🔍 Scanning for Docker-related permission issues...", "info")
-
-            # Check the configuration before running the scan
-            manager.check_compose_config()
-
-            # Identify files that require ownership changes
-            issues = manager.diagnose()
-
-            if not issues:
-                cx_print("✅ No root-owned files detected in bind mounts!", "success")
-                sys.exit(0)
-            else:
-                cx_print(f"⚠️ Found {len(issues)} files owned by root.", "warning")
-                try:
-                    confirm = console.input(
-                        "[bold cyan]Fix these permissions now? (y/n): [/bold cyan]"
-                    )
-                    if confirm.strip().lower() in ("y", "yes"):
-                        if manager.fix_permissions(issues):
-                            cx_print("✨ Permissions fixed successfully!", "success")
-                            sys.exit(0)
-                        else:
-                            cx_print(
-                                "❌ Failed to fix permissions. You may need sudo access.", "error"
-                            )
-                            sys.exit(1)
-                    else:
-                        cx_print("Operation cancelled by user.", "info")
-                        sys.exit(0)
-                except (EOFError, KeyboardInterrupt):
-                    # Handle a graceful exit if the user cancels the input
-                    console.print()
-                    cx_print("Operation cancelled by user.", "info")
-                    sys.exit(0)
-
-        except (PermissionError, FileNotFoundError, OSError) as e:
-            # Report issues related to system access or missing files
-            cx_print(f"❌ Permission check failed: {e}", "error")
-            sys.exit(1)
-        except Exception as e:
-            # Report any other unexpected errors
-            cx_print(f"❌ Unexpected error: {e}", "error")
-            if args.verbose:
-                import traceback
-
-                traceback.print_exc()
-            sys.exit(1)
-
+    # The Guard: Check for empty commands before starting the CLI
     if not args.command:
         show_rich_help()
         return 0
 
+    # Initialize the CLI handler
     cli = CortexCLI(verbose=args.verbose)
 
     try:
+        # Route the command to the appropriate method inside the cli object
+        if args.command == "docker":
+            if args.docker_action == "permissions":
+                return cli.docker_permissions(args)
+            parser.print_help()
+            return 1
+
         if args.command == "demo":
             return cli.demo()
         elif args.command == "wizard":

@@ -753,6 +753,7 @@ if __name__ == "__main__":
 
     print("\n✅ Detection complete!")
 
+
 def _run(cmd: list[str]) -> str:
     """
     Run a system command and return its stdout output.
@@ -774,7 +775,6 @@ def _run(cmd: list[str]) -> str:
         return result.stdout.strip()
     except (subprocess.CalledProcessError, OSError):
         return ""
-    
 
 
 def detect_nvidia_gpu() -> bool:

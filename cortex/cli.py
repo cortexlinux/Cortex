@@ -1950,7 +1950,7 @@ def main():
             return cli.env(args)
         elif args.command == "gpu-battery":
             return cli.gpu_battery()
-        
+
         else:
             parser.print_help()
             return 1

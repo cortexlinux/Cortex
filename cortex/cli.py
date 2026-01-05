@@ -18,6 +18,7 @@ from cortex.dependency_importer import (
     format_package_list,
 )
 from cortex.env_manager import EnvironmentManager, get_env_manager
+from cortex.hardware_detection import estimate_gpu_battery_impact
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 from cortex.llm.interpreter import CommandInterpreter
 from cortex.network_config import NetworkConfig
@@ -931,6 +932,31 @@ class CortexCLI:
         doctor = SystemDoctor()
         return doctor.run_checks()
 
+    def gpu_battery(self) -> int:
+        """Estimate battery impact based on GPU usage"""
+        data = estimate_gpu_battery_impact()
+
+        cx_print(f"GPU Mode: {data['mode']}", "info")
+        print()
+
+        cx_print("Estimated power draw:", "info")
+        print(f"- Integrated GPU only: {data['estimates']['integrated']['power']}")
+        print(f"- Hybrid (idle dGPU): {data['estimates']['hybrid_idle']['power']}")
+        print(f"- NVIDIA active: {data['estimates']['nvidia_active']['power']}")
+        print()
+
+        cx_print("Estimated battery impact:", "info")
+        print(f"- Hybrid idle: {data['estimates']['hybrid_idle']['impact']}")
+        print(f"- NVIDIA active: {data['estimates']['nvidia_active']['impact']}")
+        print()
+
+        cx_print(
+            "Note: Estimates are heuristic and vary by hardware and workload.",
+            "warning",
+        )
+
+        return 0
+
     def wizard(self):
         """Interactive setup wizard for API key configuration"""
         show_banner()
@@ -1640,6 +1666,12 @@ def main():
     # Status command (includes comprehensive health checks)
     subparsers.add_parser("status", help="Show comprehensive system status and health checks")
 
+    # GPU battery estimation
+    subparsers.add_parser(
+        "gpu-battery",
+        help="Estimate battery impact of current GPU usage",
+    )
+
     # Ask command
     ask_parser = subparsers.add_parser("ask", help="Ask a question about your system")
     ask_parser.add_argument("question", type=str, help="Natural language question")
@@ -1916,6 +1948,9 @@ def main():
             return 1
         elif args.command == "env":
             return cli.env(args)
+        elif args.command == "gpu-battery":
+            return cli.gpu_battery()
+        
         else:
             parser.print_help()
             return 1

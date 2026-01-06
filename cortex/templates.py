@@ -180,6 +180,11 @@ class TemplateValidator:
         errors = []
 
         for i, cmd in enumerate(post_install):
+            # Validate that cmd is a string (handle malformed data)
+            if not isinstance(cmd, str):
+                errors.append(f"post_install[{i}]: Must be a string, got {type(cmd).__name__}")
+                continue
+
             if not cmd or not cmd.strip():
                 continue
 
@@ -503,13 +508,22 @@ class TemplateManager:
         Generate installation commands from template.
 
         Returns:
-            List of installation commands
+            List of installation commands with sudo prefix for root-required commands
         """
         commands = []
 
         # If template has explicit steps, use those
         if template.steps:
-            commands = [step.command for step in template.steps]
+            for step in template.steps:
+                # Add sudo prefix if requires_root is True
+                if step.requires_root:
+                    # Don't add sudo if it's already there
+                    if not step.command.strip().startswith("sudo "):
+                        commands.append(f"sudo {step.command}")
+                    else:
+                        commands.append(step.command)
+                else:
+                    commands.append(step.command)
         # Otherwise, generate from packages
         elif template.packages:
             # Use package manager to generate commands
@@ -518,9 +532,9 @@ class TemplateManager:
             try:
                 commands = pm.parse(f"install {package_list}")
             except ValueError:
-                # Fallback: direct apt/yum install
+                # Fallback: direct apt/yum install with sudo
                 pm_type = pm.pm_type.value
-                commands = [f"{pm_type} install -y {' '.join(template.packages)}"]
+                commands = [f"sudo {pm_type} install -y {' '.join(template.packages)}"]
 
         return commands
 

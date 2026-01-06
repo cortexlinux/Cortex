@@ -1089,14 +1089,20 @@ class CortexCLI:
             if execute:
                 # Convert template steps to coordinator format if available
                 if template.steps:
-                    plan = [
-                        {
-                            "command": step.command,
-                            "description": step.description,
-                            "rollback": step.rollback,
-                        }
-                        for step in template.steps
-                    ]
+                    plan = []
+                    for step in template.steps:
+                        # Add sudo prefix if requires_root is True
+                        command = step.command
+                        if step.requires_root and not command.strip().startswith("sudo "):
+                            command = f"sudo {command}"
+
+                        plan.append(
+                            {
+                                "command": command,
+                                "description": step.description,
+                                "rollback": step.rollback,
+                            }
+                        )
                     coordinator = InstallationCoordinator.from_plan(
                         plan, timeout=300, stop_on_error=True
                     )

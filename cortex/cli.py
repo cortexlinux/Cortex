@@ -48,22 +48,29 @@ class CortexCLI:
         self.translator = Translator(detected_lang)
         self.language = detected_lang
 
-    def _get_prefs_manager(self):
-        """Get a simple prefs manager wrapper for LanguageManager."""
+    def _get_prefs_manager(self) -> Any:
+        """Get a simple prefs manager wrapper for LanguageManager.
+
+        Returns:
+            A PrefsWrapper instance that provides a load() method returning
+            a preferences object with a language attribute.
+        """
+
+        class PrefsObj:
+            """Simple preferences object with language attribute."""
+
+            def __init__(self, language: str = "") -> None:
+                self.language: str = language
 
         class PrefsWrapper:
-            def __init__(self):
+            """Wrapper providing preferences access for LanguageManager."""
+
+            def __init__(self) -> None:
                 self._config_mgr = ConfigManager()
 
-            def load(self):
-                prefs = self._config_mgr._load_preferences()
-
-                class PrefsObj:
-                    pass
-
-                obj = PrefsObj()
-                obj.language = prefs.get("language", "")
-                return obj
+            def load(self) -> PrefsObj:
+                prefs = self._config_mgr.load_preferences()
+                return PrefsObj(language=prefs.get("language", ""))
 
         return PrefsWrapper()
 
@@ -1351,7 +1358,7 @@ class CortexCLI:
         new_language = getattr(args, "language_code", None)
 
         # Load current preferences
-        prefs = config_mgr._load_preferences()
+        prefs = config_mgr.load_preferences()
         current_lang = prefs.get("language", "en")
 
         if new_language:
@@ -1366,7 +1373,7 @@ class CortexCLI:
 
             # Save preference
             prefs["language"] = resolved
-            config_mgr._save_preferences(prefs)
+            config_mgr.save_preferences(prefs)
 
             lang_name = lang_mgr.get_language_name(resolved)
             cx_print(f"✓ Language set to {lang_name} ({resolved})", "success")
@@ -1995,9 +2002,9 @@ def main():
         if resolved:
             # Persist the language preference
             config_mgr = ConfigManager()
-            prefs = config_mgr._load_preferences()
+            prefs = config_mgr.load_preferences()
             prefs["language"] = resolved
-            config_mgr._save_preferences(prefs)
+            config_mgr.save_preferences(prefs)
 
             lang_name = lang_mgr.get_language_name(resolved)
             cx_print(f"✓ Language set to {lang_name} ({resolved})", "success")

@@ -32,6 +32,7 @@ class TestTarballHelper(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def _make_project(self):
@@ -80,11 +81,13 @@ class TestTarballHelper(unittest.TestCase):
 
     def test_parse_configure_script_ac_check_lib(self):
         source_dir = self._make_project()
-        (source_dir / "configure").write_text("""
+        (source_dir / "configure").write_text(
+            """
 AC_CHECK_LIB(ssl, SSL_new)
 AC_CHECK_LIB(z, deflate)
 AC_CHECK_LIB(png, png_create_read_struct)
-""")
+"""
+        )
 
         deps = self.helper._parse_configure_script(source_dir)
         libs = {d.library_name for d in deps}
@@ -92,10 +95,12 @@ AC_CHECK_LIB(png, png_create_read_struct)
 
     def test_parse_configure_script_pkg_check_modules(self):
         source_dir = self._make_project()
-        (source_dir / "configure").write_text("""
+        (source_dir / "configure").write_text(
+            """
 PKG_CHECK_MODULES([GTK], [gtk+-3.0])
 PKG_CHECK_MODULES([GLIB], [glib-2.0])
-""")
+"""
+        )
 
         deps = self.helper._parse_configure_script(source_dir)
         pkgs = {d.pkg_config for d in deps}
@@ -104,10 +109,12 @@ PKG_CHECK_MODULES([GLIB], [glib-2.0])
 
     def test_parse_configure_script_ac_check_header(self):
         source_dir = self._make_project()
-        (source_dir / "configure").write_text("""
+        (source_dir / "configure").write_text(
+            """
 AC_CHECK_HEADER(openssl/ssl.h)
 AC_CHECK_HEADER(zlib.h)
-""")
+"""
+        )
 
         deps = self.helper._parse_configure_script(source_dir)
         headers = {d.header_file for d in deps}
@@ -120,11 +127,13 @@ AC_CHECK_HEADER(zlib.h)
 
     def test_parse_cmake_lists_find_package(self):
         source_dir = self._make_project()
-        (source_dir / "CMakeLists.txt").write_text("""
+        (source_dir / "CMakeLists.txt").write_text(
+            """
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB 1.2.8)
 find_package(PNG)
-""")
+"""
+        )
 
         deps = self.helper._parse_cmake_lists(source_dir)
         names = {d.name for d in deps}
@@ -132,20 +141,24 @@ find_package(PNG)
 
     def test_parse_cmake_lists_find_library(self):
         source_dir = self._make_project()
-        (source_dir / "CMakeLists.txt").write_text("""
+        (source_dir / "CMakeLists.txt").write_text(
+            """
 find_library(SSL_LIBRARY NAMES ssl)
 find_library(Z_LIBRARY NAMES z)
-""")
+"""
+        )
 
         deps = self.helper._parse_cmake_lists(source_dir)
         self.assertGreater(len(deps), 0)
 
     def test_parse_cmake_lists_pkg_check_modules(self):
         source_dir = self._make_project()
-        (source_dir / "CMakeLists.txt").write_text("""
+        (source_dir / "CMakeLists.txt").write_text(
+            """
 pkg_check_modules(GTK REQUIRED gtk+-3.0)
 pkg_check_modules(GLIB glib-2.0)
-""")
+"""
+        )
 
         deps = self.helper._parse_cmake_lists(source_dir)
         self.assertGreater(len(deps), 0)
@@ -254,9 +267,7 @@ pkg_check_modules(GLIB glib-2.0)
     @patch("cortex.tarball_helper.tarfile")
     @patch("cortex.tarball_helper.TarballHelper._detect_build_system")
     @patch("cortex.tarball_helper.TarballHelper._parse_configure_script")
-    def test_analyze_tarball_autotools(
-        self, mock_parse, mock_detect, mock_tarfile
-    ):
+    def test_analyze_tarball_autotools(self, mock_parse, mock_detect, mock_tarfile):
         mock_detect.return_value = BuildSystem.AUTOTOOLS
         mock_parse.return_value = [
             DependencyRequirement(

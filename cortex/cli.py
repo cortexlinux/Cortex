@@ -1439,6 +1439,7 @@ class CortexCLI:
             self._print_error(f"Error analyzing tarball: {e}")
             if self.verbose:
                 import traceback
+
                 traceback.print_exc()
             return 1
 
@@ -1960,9 +1961,7 @@ def main():
         "--install-deps", action="store_true", help="Install missing dependencies"
     )
     tarball_parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
-    tarball_parser.add_argument(
-        "--no-track", action="store_true", help="Don't track installations"
-    )
+    tarball_parser.add_argument("--no-track", action="store_true", help="Don't track installations")
 
     # env set <app> <KEY> <VALUE> [--encrypt] [--type TYPE] [--description DESC]
     env_set_parser = env_subs.add_parser("set", help="Set an environment variable")

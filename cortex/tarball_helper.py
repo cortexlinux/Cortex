@@ -257,9 +257,7 @@ class TarballHelper:
     def _run_command(self, cmd: list[str], cwd: str | None = None) -> tuple[bool, str, str]:
         """Execute command and return success, stdout, stderr"""
         try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=60, cwd=cwd
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=cwd)
             return (result.returncode == 0, result.stdout, result.stderr)
         except subprocess.TimeoutExpired:
             return (False, "", "Command timed out")
@@ -288,9 +286,7 @@ class TarballHelper:
                 return self.LIBRARY_TO_DEV_PACKAGE[test_name]
 
         # Try apt-cache search
-        success, stdout, _ = self._run_command(
-            ["apt-cache", "search", f"^{lib_clean}-dev"]
-        )
+        success, stdout, _ = self._run_command(["apt-cache", "search", f"^{lib_clean}-dev"])
         if success and stdout.strip():
             # Get first matching package
             for line in stdout.split("\n"):
@@ -362,7 +358,7 @@ class TarballHelper:
         # Pattern: AC_CHECK_LIB(library, function, ...)
         ac_check_lib_pattern = r"AC_CHECK_LIB\s*?\(\s*?([^\s,)]+?)\s*?[,)]"
         for match in re.finditer(ac_check_lib_pattern, content):
-            lib_name = match.group(1).strip().strip('"\'')
+            lib_name = match.group(1).strip().strip("\"'")
             if lib_name:
                 dep = DependencyRequirement(
                     name=lib_name,
@@ -392,7 +388,7 @@ class TarballHelper:
         # Pattern: AC_CHECK_HEADER(header, ...)
         ac_check_header_pattern = r"AC_CHECK_HEADER\s*?\(\s*?([^\s,)]+?)\s*?[,)]"
         for match in re.finditer(ac_check_header_pattern, content):
-            header = match.group(1).strip().strip('"\'')
+            header = match.group(1).strip().strip("\"'")
             if header:
                 dep = DependencyRequirement(
                     name=header,

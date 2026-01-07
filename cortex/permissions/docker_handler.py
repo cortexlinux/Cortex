@@ -14,8 +14,9 @@ from typing import Optional
 class DockerPermissionHandler:
     """Handle Docker-specific permission mapping and adjustments."""
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, dry_run: bool = True):
         self.verbose = verbose
+        self.dry_run = dry_run
         self.container_info = self._detect_container_environment()
 
     def _detect_container_environment(self) -> dict:

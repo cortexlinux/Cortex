@@ -22,14 +22,16 @@ class PermissionAuditor:
     - Insecure directory permissions
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, dry_run: bool = True):
         """
         Initialize the permission auditor.
 
         Args:
             verbose: If True, enable debug logging
+            dry_run: If True, run in dry-run mode (no changes)
         """
         self.verbose = verbose
+        self.dry_run = dry_run
         if verbose:
             logging.basicConfig(level=logging.DEBUG)
 
@@ -119,7 +121,7 @@ class PermissionAuditor:
 
             current = oct(mode & 0o777)[-3:] if current_perms is None else current_perms
 
-            return f"chmod {suggested} '{filepath}'  " f"# Fix: {current} → {suggested} ({reason})"
+            return f"chmod {suggested} '{filepath}'  # Fix: {current} → {suggested} ({reason})"
 
         except (OSError, PermissionError) as e:
             return f"# Cannot access {filepath}: {e}"
@@ -148,7 +150,7 @@ class PermissionAuditor:
             current_perms = oct(current_mode & 0o777)[-3:]
 
             if dry_run:
-                return f"[DRY RUN] Would change {filepath}: " f"{current_perms} → {permissions}"
+                return f"[DRY RUN] Would change {filepath}: {current_perms} → {permissions}"
             else:
                 # Preserve file type bits, only change permission bits
                 new_mode = (current_mode & ~0o777) | int(permissions, 8)
@@ -156,12 +158,12 @@ class PermissionAuditor:
 
                 # Verify the change
                 verified = oct(path.stat().st_mode & 0o777)[-3:]
-                return f"Changed {filepath}: " f"{current_perms} → {verified}"
+                return f"Changed {filepath}: {current_perms} → {verified}"
 
         except (OSError, PermissionError) as e:
             return f"Error changing permissions on {filepath}: {e}"
 
-    def scan_and_fix(self, path=".", apply_fixes=False, dry_run=False):
+    def scan_and_fix(self, path=".", apply_fixes=False, dry_run=None):
         """
         Scan directory and optionally fix issues.
         Used by CLI command.
@@ -169,11 +171,12 @@ class PermissionAuditor:
         Args:
             path: Directory to scan
             apply_fixes: If True, apply fixes
-            dry_run: If True, only show what would be done
-
-        Returns:
-            Dictionary with results and report
+            dry_run: If None, use self.dry_run; if True/False, override
         """
+        # Use instance dry_run if not specified
+        if dry_run is None:
+            dry_run = self.dry_run
+
         # Scan for issues
         scan_result = self.scan_directory(path)
 

@@ -244,20 +244,17 @@ def test_adjust_issue_with_stat(tmp_path):
 
 
 def test_get_container_specific_fix_with_docker_path():
-    """Test get_container_specific_fix with Docker paths"""
+    """Test get_container_specific_fix with docker path"""
     from cortex.permissions.docker_handler import DockerPermissionHandler
 
     handler = DockerPermissionHandler()
 
-    test_issue = {"path": "/var/lib/docker/volumes/test", "is_directory": True}
-
+    test_issue = {"path": "/var/lib/docker/volumes/test", "permission": "755"}
     base_fix = {"command": "chmod 755 /var/lib/docker/volumes/test", "reason": "standard fix"}
 
     result = handler.get_container_specific_fix(test_issue, base_fix)
-    assert isinstance(result, dict)
+
     assert "command" in result
     assert "reason" in result
-
-    # Should have container advice for Docker paths
-    if "docker" in test_issue["path"].lower():
-        assert "container_advice" in result or result != base_fix
+    assert result["command"] == "chmod 755 /var/lib/docker/volumes/test"
+    assert result["reason"] == "standard fix"

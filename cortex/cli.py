@@ -2827,7 +2827,7 @@ class CortexCLI:
 
     # --------------------------
 
-    def dashboard(self):
+    def dashboard(self) -> int:
         """Launch the real-time system monitoring dashboard"""
         try:
             from cortex.dashboard import DashboardApp

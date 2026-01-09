@@ -1037,16 +1037,7 @@ class CortexCLI:
         """
         try:
             data = estimate_gpu_battery_impact()
-        except (
-            OSError,
-            PermissionError,
-            subprocess.CalledProcessError,
-            ValueError,
-            RuntimeError,
-        ) as e:
-            cx_print(f"Failed to probe battery/GPU info: {e}", "error")
-            return 2
-        except Exception as e:
+        except (OSError, PermissionError, ValueError, RuntimeError) as e:
             cx_print(f"Failed to probe battery/GPU info: {e}", "error")
             return 2
 

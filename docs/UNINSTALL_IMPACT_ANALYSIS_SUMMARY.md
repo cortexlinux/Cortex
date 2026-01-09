@@ -139,29 +139,29 @@ Recommendation: Remove specific packages instead:
 ## 📁 Files Created/Modified
 
 ### New Files Created
-1. `/home/anuj/cortex/cortex/uninstall_impact.py` (506 lines)
+1. `cortex/uninstall_impact.py` (506 lines)
    - Core analyzer implementation
    - 12+ public methods
    - 4 dataclasses for type safety
    - Full docstrings and type hints
 
-2. `/home/anuj/cortex/tests/test_uninstall_impact.py` (530 lines)
+2. `tests/test_uninstall_impact.py` (530 lines)
    - 12 test classes
    - 36 unit tests
    - 92% coverage
 
-3. `/home/anuj/cortex/docs/UNINSTALL_IMPACT_ANALYSIS.md` (430+ lines)
+3. `docs/UNINSTALL_IMPACT_ANALYSIS.md` (430+ lines)
    - User guide
    - Usage examples
    - Architecture explanation
 
-4. `/home/anuj/cortex/docs/UNINSTALL_IMPACT_ANALYSIS_DEVELOPER.md` (390+ lines)
+4. `docs/UNINSTALL_IMPACT_ANALYSIS_DEVELOPER.md` (390+ lines)
    - Developer guide
    - Implementation details
    - Performance optimization
 
 ### Modified Files
-1. `/home/anuj/cortex/cortex/cli.py`
+1. `cortex/cli.py`
    - Added `remove` method (120+ lines)
    - Added argument parser for remove command
    - Updated help documentation

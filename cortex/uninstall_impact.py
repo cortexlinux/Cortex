@@ -24,7 +24,7 @@ class ImpactedPackage:
     """Represents a package that depends on the target package"""
 
     name: str
-    version: Optional[str] = None
+    version: str | None = None
     dependency_type: str = "direct"  # direct, indirect, optional
     critical: bool = False  # True if system would break without this package
 
@@ -46,7 +46,7 @@ class UninstallImpactAnalysis:
 
     package_name: str
     installed: bool = False
-    installed_version: Optional[str] = None
+    installed_version: str | None = None
     directly_depends: list[ImpactedPackage] = field(default_factory=list)
     indirectly_depends: list[ImpactedPackage] = field(default_factory=list)
     optional_depends: list[ImpactedPackage] = field(default_factory=list)
@@ -132,7 +132,7 @@ class UninstallImpactAnalyzer:
         with self._cache_lock:
             return package_name in self._installed_packages
 
-    def get_installed_version(self, package_name: str) -> Optional[str]:
+    def get_installed_version(self, package_name: str) -> str | None:
         """Get version of installed package"""
         if not self.is_package_installed(package_name):
             return None
@@ -244,9 +244,7 @@ class UninstallImpactAnalyzer:
         for service_name, packages in self.SERVICE_PACKAGE_MAP.items():
             if package_name in packages:
                 # Try to get service status
-                success, status_out, _ = self._run_command(
-                    ["systemctl", "is-active", service_name]
-                )
+                success, status_out, _ = self._run_command(["systemctl", "is-active", service_name])
 
                 status = "active" if success and "active" in status_out else "inactive"
 
@@ -269,9 +267,9 @@ class UninstallImpactAnalyzer:
         """
         Find packages that would become orphaned if this package is removed.
         A package is orphaned if it's not critical, not explicitly installed,
-        and only depends on the package being removed.
+        and its only dependency is the package being removed.
         """
-        orphaned = []
+        orphaned: list[str] = []
         reverse_deps = self.get_reverse_dependencies(package_name)
 
         for dep_name in reverse_deps:
@@ -281,14 +279,23 @@ class UninstallImpactAnalyzer:
             if dep_name in self.CRITICAL_PACKAGES:
                 continue
 
-            # Check if this package only depends on the target package
+            # Check if this package's only dependency is the target package
             success, stdout, _ = self._run_command(["apt-cache", "depends", dep_name])
 
             if success:
-                deps_count = len([line for line in stdout.split("\n") if "Depends:" in line])
+                # Parse actual dependency names
+                dep_lines = [line.strip() for line in stdout.split("\n") if "Depends:" in line]
+                actual_deps = []
+                for line in dep_lines:
+                    # Extract package name from "  Depends: <package>" format
+                    parts = line.split(":", 1)
+                    if len(parts) == 2:
+                        dep_pkg = parts[1].strip().split()[0] if parts[1].strip() else ""
+                        if dep_pkg:
+                            actual_deps.append(dep_pkg)
 
-                # If package only has 1 dependency (the one being removed), it's orphaned
-                if deps_count <= 1:
+                # Package is only orphaned if its ONLY dependency is the one being removed
+                if len(actual_deps) == 1 and actual_deps[0] == package_name:
                     orphaned.append(dep_name)
 
         return orphaned
@@ -328,9 +335,9 @@ class UninstallImpactAnalyzer:
         )
 
         # Determine if safe to remove
-        safe_to_remove = (
-            severity not in ["high", "critical"] and not self.is_package_installed(package_name)
-        ) or (is_installed and severity == "low")
+        # Only installed packages can be evaluated for safe removal
+        # Safe if installed AND severity is acceptable (not high/critical)
+        safe_to_remove = is_installed and severity not in ["high", "critical"]
 
         total_affected = len(directly_depends) + len(indirectly_depends)
 
@@ -385,7 +392,9 @@ class UninstallImpactAnalyzer:
         recommendations = []
 
         if severity == "critical":
-            recommendations.append(f"⚠️  DO NOT REMOVE {package_name.upper()} - This is a critical system package")
+            recommendations.append(
+                f"⚠️  DO NOT REMOVE {package_name.upper()} - This is a critical system package"
+            )
             recommendations.append(
                 "Removing it will break your system and may require manual recovery."
             )
@@ -403,7 +412,9 @@ class UninstallImpactAnalyzer:
             dep_names = [d.name for d in directly_depends[:3]]
             more = len(directly_depends) - 3
             more_str = f" and {more} more" if more > 0 else ""
-            recommendations.append(f"Remove dependent packages first: {', '.join(dep_names)}{more_str}")
+            recommendations.append(
+                f"Remove dependent packages first: {', '.join(dep_names)}{more_str}"
+            )
 
         if orphaned:
             recommendations.append(

@@ -111,9 +111,7 @@ class TestUninstallImpactAnalyzerCommands(unittest.TestCase):
     @patch("cortex.uninstall_impact.subprocess.run")
     def test_run_command_success(self, mock_run):
         """Test successful command execution"""
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="output", stderr=""
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="output", stderr="")
 
         success, stdout, stderr = self.analyzer._run_command(["echo", "test"])
 
@@ -124,9 +122,7 @@ class TestUninstallImpactAnalyzerCommands(unittest.TestCase):
     @patch("cortex.uninstall_impact.subprocess.run")
     def test_run_command_failure(self, mock_run):
         """Test failed command execution"""
-        mock_run.return_value = MagicMock(
-            returncode=1, stdout="", stderr="error"
-        )
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
 
         success, _, stderr = self.analyzer._run_command(["false"])
 
@@ -228,9 +224,7 @@ Reverse Depends:
     @patch.object(UninstallImpactAnalyzer, "get_reverse_dependencies")
     @patch.object(UninstallImpactAnalyzer, "is_package_installed")
     @patch.object(UninstallImpactAnalyzer, "get_installed_version")
-    def test_get_directly_dependent_packages(
-        self, mock_version, mock_installed, mock_reverse
-    ):
+    def test_get_directly_dependent_packages(self, mock_version, mock_installed, mock_reverse):
         """Test getting directly dependent packages"""
         mock_reverse.return_value = ["nginx", "certbot"]
         mock_installed.side_effect = lambda x: x in ["nginx", "certbot"]
@@ -244,9 +238,7 @@ Reverse Depends:
     @patch.object(UninstallImpactAnalyzer, "get_reverse_dependencies")
     @patch.object(UninstallImpactAnalyzer, "is_package_installed")
     @patch.object(UninstallImpactAnalyzer, "get_installed_version")
-    def test_get_indirectly_dependent_packages(
-        self, mock_version, mock_installed, mock_reverse
-    ):
+    def test_get_indirectly_dependent_packages(self, mock_version, mock_installed, mock_reverse):
         """Test getting indirectly dependent packages"""
         direct_deps = [ImpactedPackage(name="nginx"), ImpactedPackage(name="apache2")]
 
@@ -478,7 +470,7 @@ class TestUninstallImpactAnalyzerExport(unittest.TestCase):
         try:
             analyzer.export_analysis_json(analysis, temp_path)
 
-            with open(temp_path, "r") as f:
+            with open(temp_path) as f:
                 data = json.load(f)
 
             self.assertEqual(data["package_name"], "nginx")
@@ -507,9 +499,7 @@ class TestUninstallImpactAnalyzerConcurrency(unittest.TestCase):
             result = analyzer.is_package_installed(pkg)
             results.append(result)
 
-        threads = [
-            threading.Thread(target=check_package, args=("nginx",)) for _ in range(5)
-        ]
+        threads = [threading.Thread(target=check_package, args=("nginx",)) for _ in range(5)]
 
         for thread in threads:
             thread.start()

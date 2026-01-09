@@ -4,7 +4,6 @@ import os
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from cortex.api_key_detector import auto_detect_api_key, setup_api_key
@@ -27,7 +26,7 @@ from cortex.stack_manager import StackManager
 from cortex.validators import validate_api_key, validate_install_request
 
 if TYPE_CHECKING:
-    from cortex.shell_env_analyzer import ShellEnvironmentAnalyzer
+    from cortex.uninstall_impact import UninstallImpactAnalysis
 
 # Suppress noisy log messages in normal operation
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -889,17 +888,49 @@ class CortexCLI:
     ) -> int:
         """
         Remove/uninstall packages with impact analysis.
-        
+
         Args:
             software: Package(s) to remove
             execute: Execute removal commands
             dry_run: Show what would be removed without executing
             cascading: Remove dependent packages automatically
         """
+        history = InstallationHistory()
+        remove_id: str | None = None
+        start_time = datetime.now()
+        options = {
+            "execute": execute,
+            "dry_run": dry_run,
+            "cascading": cascading,
+        }
+
+        def _record_history(
+            outcome: str, error_message: str | None = None, packages: list[str] | None = None
+        ) -> None:
+            """Best-effort history recording - catches and logs errors without affecting exit code."""
+            nonlocal remove_id
+            try:
+                if remove_id is None and packages:
+                    # Record initial entry
+                    commands = self._generate_removal_commands(packages, cascading)
+                    remove_id = history.record_installation(
+                        InstallationType.REMOVE, packages, commands, start_time
+                    )
+                if remove_id:
+                    status = (
+                        InstallationStatus.SUCCESS
+                        if outcome == "success"
+                        else InstallationStatus.FAILED
+                    )
+                    history.update_installation(remove_id, status, error_message)
+            except Exception as hist_err:
+                logging.debug(f"History write failed (non-fatal): {hist_err}")
+
         try:
             # Parse and validate packages
             packages = self._parse_removal_packages(software)
             if not packages:
+                _record_history("failure", "No packages specified for removal", [software])
                 return 1
 
             # Analyze and display impact
@@ -908,17 +939,33 @@ class CortexCLI:
 
             # Check safety and return early if just analyzing
             if not self._should_proceed_with_removal(execute, dry_run):
+                _record_history("success", None, packages)
                 return 0
 
             # Validate safety constraints
             if not self._validate_removal_safety(analyses, cascading):
+                _record_history(
+                    "failure",
+                    "Cannot remove packages with high/critical impact without --cascading flag",
+                    packages,
+                )
                 return 1
 
             # Execute removal
-            return self._execute_removal(software, packages, cascading, execute, dry_run)
+            result = self._execute_removal(software, packages, cascading, execute, dry_run)
+
+            # Record outcome
+            if result == 0:
+                _record_history("success", None, packages)
+            else:
+                _record_history("failure", "Removal execution failed", packages)
+
+            return result
 
         except Exception as e:
-            self._print_error(f"Error during removal: {str(e)}")
+            error_msg = f"Error during removal: {str(e)}"
+            self._print_error(error_msg)
+            _record_history("failure", error_msg, [software])
             return 1
 
     def _parse_removal_packages(self, software: str) -> list[str]:
@@ -928,12 +975,12 @@ class CortexCLI:
             self._print_error("No packages specified for removal")
         return packages
 
-    def _analyze_removal_impact(self, packages: list[str]) -> list:
+    def _analyze_removal_impact(self, packages: list[str]) -> list["UninstallImpactAnalysis"]:
         """Analyze impact for all packages"""
         from cortex.uninstall_impact import UninstallImpactAnalyzer
 
         analyzer = UninstallImpactAnalyzer()
-        analyses = []
+        analyses: list[UninstallImpactAnalysis] = []
         for package in packages:
             analysis = analyzer.analyze_uninstall_impact(package)
             analyses.append(analysis)
@@ -947,7 +994,9 @@ class CortexCLI:
             return False
         return True
 
-    def _validate_removal_safety(self, analyses: list, cascading: bool) -> bool:
+    def _validate_removal_safety(
+        self, analyses: list["UninstallImpactAnalysis"], cascading: bool
+    ) -> bool:
         """Validate that removal is safe given constraints"""
         has_critical = any(a.severity in ["high", "critical"] for a in analyses)
         if has_critical and not cascading:
@@ -977,7 +1026,7 @@ class CortexCLI:
         """Run the removal coordinator to execute commands"""
         self._print_status("⚙️", f"Removing {software}...")
         print("\nRemoving packages...")
-        
+
         coordinator = InstallationCoordinator(
             commands=commands,
             descriptions=[f"Step {i+1}" for i in range(len(commands))],
@@ -1000,7 +1049,7 @@ class CortexCLI:
                 print(f"  Error: {result.error_message}", file=sys.stderr)
             return 1
 
-    def _display_removal_impact(self, analyses: list) -> None:
+    def _display_removal_impact(self, analyses: list["UninstallImpactAnalysis"]) -> None:
         """Display impact analysis for package removal"""
         print("\n⚠️  Impact Analysis:")
         print("=" * 70)
@@ -1011,10 +1060,10 @@ class CortexCLI:
         self._print_impact_summary(analyses)
         self._print_impact_recommendations(analyses)
 
-    def _print_package_impact(self, analysis) -> None:
+    def _print_package_impact(self, analysis: "UninstallImpactAnalysis") -> None:
         """Print impact details for a single package"""
         pkg = analysis.package_name
-        
+
         if not analysis.installed:
             print(f"\n📦 {pkg}: [Not installed]")
             return
@@ -1025,7 +1074,7 @@ class CortexCLI:
         self._print_services(analysis)
         self._print_orphaned(analysis)
 
-    def _print_dependencies(self, analysis, pkg: str) -> None:
+    def _print_dependencies(self, analysis: "UninstallImpactAnalysis", pkg: str) -> None:
         """Print directly dependent packages"""
         if not analysis.directly_depends:
             return
@@ -1037,7 +1086,7 @@ class CortexCLI:
         if len(analysis.directly_depends) > 5:
             print(f"      ... and {len(analysis.directly_depends) - 5} more")
 
-    def _print_services(self, analysis) -> None:
+    def _print_services(self, analysis: "UninstallImpactAnalysis") -> None:
         """Print affected services"""
         if not analysis.affected_services:
             return
@@ -1047,20 +1096,20 @@ class CortexCLI:
             critical = " ⚠️ CRITICAL" if svc.critical else ""
             print(f"      • {svc.service_name} ({svc.status}){critical}")
 
-    def _print_orphaned(self, analysis) -> None:
+    def _print_orphaned(self, analysis: "UninstallImpactAnalysis") -> None:
         """Print orphaned packages"""
         if analysis.orphaned_packages:
             print(f"\n   Would orphan: {', '.join(analysis.orphaned_packages[:3])}")
 
-    def _print_impact_summary(self, analyses: list) -> None:
+    def _print_impact_summary(self, analyses: list["UninstallImpactAnalysis"]) -> None:
         """Print removal impact summary"""
         total_affected = sum(len(a.directly_depends) for a in analyses)
         total_services = sum(len(a.affected_services) for a in analyses)
-        
+
         print(f"\n{'=' * 70}")
         print(f"Would affect: {total_affected} packages, {total_services} services")
 
-    def _print_impact_recommendations(self, analyses: list) -> None:
+    def _print_impact_recommendations(self, analyses: list["UninstallImpactAnalysis"]) -> None:
         """Print removal recommendations"""
         print("\n💡 Recommendations:")
         for analysis in analyses:
@@ -1068,22 +1117,26 @@ class CortexCLI:
                 print(f"   {rec}")
 
     def _generate_removal_commands(self, packages: list[str], cascading: bool) -> list[str]:
-        """Generate apt removal commands"""
-        commands = []
-        
+        """Generate apt removal commands.
+
+        Note: Commands do NOT include -y flag to require interactive confirmation.
+        Users must explicitly confirm removals for safety.
+        """
+        commands: list[str] = []
+
         pkg_list = " ".join(packages)
-        
+
         if cascading:
-            # Remove with dependencies
-            commands.append(f"sudo apt-get remove -y --auto-remove {pkg_list}")
+            # Remove with dependencies - requires user confirmation
+            commands.append(f"sudo apt-get remove --auto-remove {pkg_list}")
         else:
-            # Simple removal
-            commands.append(f"sudo apt-get remove -y {pkg_list}")
-        
-        # Clean up
-        commands.append("sudo apt-get autoremove -y")
-        commands.append("sudo apt-get autoclean -y")
-        
+            # Simple removal - requires user confirmation
+            commands.append(f"sudo apt-get remove {pkg_list}")
+
+        # Clean up commands also require confirmation
+        commands.append("sudo apt-get autoremove")
+        commands.append("sudo apt-get autoclean")
+
         return commands
 
     def cache_stats(self) -> int:
@@ -2351,19 +2404,15 @@ def main():
         help="Enable parallel execution for multi-step installs",
     )
 
-    # Import command - import dependencies from package manager files
-    import_parser = subparsers.add_parser(
-        "import",
-        help="Import and install dependencies from package files",
+    # Remove/Uninstall command
+    remove_parser = subparsers.add_parser(
+        "remove", help="Remove/uninstall packages with impact analysis"
     )
-    import_parser.add_argument(
-        "file",
-        nargs="?",
-        help="Dependency file (requirements.txt, package.json, Gemfile, Cargo.toml, go.mod)",
-    )
-    import_parser.add_argument(
-        "--all",
-        "-a",
+    remove_parser.add_argument("software", type=str, help="Package(s) to remove")
+    remove_parser.add_argument("--execute", action="store_true", help="Execute removal")
+    remove_parser.add_argument("--dry-run", action="store_true", help="Show what would be removed")
+    remove_parser.add_argument(
+        "--cascading",
         action="store_true",
         help="Scan directory for all dependency files",
     )

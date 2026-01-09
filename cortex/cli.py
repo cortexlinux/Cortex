@@ -1154,10 +1154,7 @@ class CortexCLI:
                     if resp not in ("y", "yes"):
                         return 0
 
-                        
-
                 return apply_gpu_mode_switch(plan, execute=True)
-
 
             return 0
 

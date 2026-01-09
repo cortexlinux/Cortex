@@ -836,7 +836,6 @@ def detect_nvidia_gpu() -> bool:
     return bool(_run(["nvidia-smi"]))
 
 
-
 def detect_gpu_mode() -> str:
     """
     Best-effort GPU mode detection

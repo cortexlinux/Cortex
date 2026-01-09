@@ -1620,6 +1620,11 @@ class CortexCLI:
             wiz = PrinterWizard()
             action = getattr(args, "printer_action", None)
 
+            if not action:
+                self._print_error("Please specify a subcommand: setup")
+                cx_print("Usage: cortex printer setup [--dry-run]", "info")
+                return 1
+
             if action == "setup":
                 wiz.setup(dry_run=args.dry_run)
             else:
@@ -1634,9 +1639,15 @@ class CortexCLI:
         """Handle scanner commands."""
         try:
             from cortex.printer_wizard import ScannerWizard
+
             wiz = ScannerWizard()
-            
             action = getattr(args, "scanner_action", None)
+
+            if not action:
+                self._print_error("Please specify a subcommand: setup")
+                cx_print("Usage: cortex scanner setup [--dry-run]", "info")
+                return 1
+
             if action == "setup":
                 wiz.setup(dry_run=args.dry_run)
             else:

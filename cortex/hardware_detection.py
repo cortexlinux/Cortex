@@ -838,7 +838,16 @@ def detect_nvidia_gpu() -> bool:
 
 def detect_gpu_mode() -> str:
     """
-    Best-effort GPU mode detection
+    Detect GPU mode for NVIDIA Optimus hybrid systems.
+    
+    Returns:
+        "NVIDIA": NVIDIA GPU detected (nvidia-smi available)
+        "Hybrid": Non-NVIDIA GPU detected via lspci (e.g., AMD dGPU with iGPU)
+        "Integrated": No discrete GPU detected or lspci unavailable
+    
+    Note: This detection is NVIDIA-centric and may not accurately classify
+    non-NVIDIA discrete GPUs. Returns "Hybrid" for any PCI GPU when NVIDIA
+    is not present.
     """
     if not _run(["lspci"]):
         return "Integrated"

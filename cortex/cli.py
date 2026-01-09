@@ -2360,10 +2360,14 @@ def main():
     app_rm.add_argument("app")
 
     gpu_run = gpu_sub.add_parser("run")
-    gpu_run.add_argument("--app")
-    gpu_run.add_argument("--nvidia", action="store_true")
-    gpu_run.add_argument("--integrated", action="store_true")
+
+    gpu_run_mode = gpu_run.add_mutually_exclusive_group(required=True)
+    gpu_run_mode.add_argument("--nvidia", action="store_true", help="Force NVIDIA GPU")
+    gpu_run_mode.add_argument("--integrated", action="store_true", help="Force integrated GPU")
+    gpu_run_mode.add_argument("--app", help="Use saved per-app GPU preference")
+
     gpu_run.add_argument("cmd", nargs=argparse.REMAINDER)
+
 
     # Ask command
     ask_parser = subparsers.add_parser("ask", help="Ask a question about your system")

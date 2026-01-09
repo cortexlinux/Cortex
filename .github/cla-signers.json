@@ -185,6 +185,15 @@
       ],
       "signed_date": "2026-01-09",
       "cla_version": "1.0"
+    },
+    {
+      "name": "Jay Surse",
+      "github_username": "jaysurse",
+      "emails": [
+        "jaysurse07@gmail.com"
+      ],
+      "signed_date": "2026-01-09",
+      "cla_version": "1.0"
     }
     
 

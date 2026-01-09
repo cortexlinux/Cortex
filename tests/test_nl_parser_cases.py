@@ -38,8 +38,8 @@ def test_python_dev_environment(fake_interpreter: CommandInterpreter) -> None:
 
 
 def test_install_docker_kubernetes(fake_interpreter: CommandInterpreter) -> None:
-    """Test parsing of Docker and Kubernetes installation requests."""
-    commands = fake_interpreter.parse("install docker and kubernetes")
+    """Test parsing of containerizationinstallation requests."""
+    commands = fake_interpreter.parse("install containerization tools")
     assert len(commands) >= 1
 
 
@@ -51,7 +51,7 @@ def test_ambiguous_request(fake_interpreter: CommandInterpreter) -> None:
 
 def test_typo_tolerance(fake_interpreter: CommandInterpreter) -> None:
     """Test tolerance for typos in installation requests."""
-    commands = fake_interpreter.parse("instal dockr")
+    commands = fake_interpreter.parse("instal psycpg2")
     assert commands
 
 

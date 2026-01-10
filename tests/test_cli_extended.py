@@ -103,6 +103,7 @@ class TestCortexCLIExtended(unittest.TestCase):
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key"}, clear=True)
     @patch.object(CortexCLI, "_get_provider", return_value="openai")
+    @patch.object(CortexCLI, "_get_api_key_for_provider", return_value="sk-test-key")
     @patch.object(CortexCLI, "_animate_spinner", return_value=None)
     @patch.object(CortexCLI, "_clear_line", return_value=None)
     @patch("cortex.cli.CommandInterpreter")
@@ -111,6 +112,7 @@ class TestCortexCLIExtended(unittest.TestCase):
         mock_interpreter_class,
         _mock_clear_line,
         _mock_spinner,
+        _mock_get_api_key_for_provider,
         _mock_get_provider,
     ) -> None:
         mock_interpreter = Mock()
@@ -124,6 +126,7 @@ class TestCortexCLIExtended(unittest.TestCase):
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key"}, clear=True)
     @patch.object(CortexCLI, "_get_provider", return_value="openai")
+    @patch.object(CortexCLI, "_get_api_key_for_provider", return_value="sk-test-key")
     @patch.object(CortexCLI, "_animate_spinner", return_value=None)
     @patch.object(CortexCLI, "_clear_line", return_value=None)
     @patch("cortex.cli.CommandInterpreter")
@@ -132,6 +135,7 @@ class TestCortexCLIExtended(unittest.TestCase):
         mock_interpreter_class,
         _mock_clear_line,
         _mock_spinner,
+        _mock_get_api_key_for_provider,
         _mock_get_provider,
     ) -> None:
         mock_interpreter = Mock()
@@ -145,6 +149,7 @@ class TestCortexCLIExtended(unittest.TestCase):
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key"}, clear=True)
     @patch.object(CortexCLI, "_get_provider", return_value="openai")
+    @patch.object(CortexCLI, "_get_api_key_for_provider", return_value="sk-test-key")
     @patch.object(CortexCLI, "_animate_spinner", return_value=None)
     @patch.object(CortexCLI, "_clear_line", return_value=None)
     @patch("cortex.cli.CommandInterpreter")
@@ -155,6 +160,7 @@ class TestCortexCLIExtended(unittest.TestCase):
         mock_interpreter_class,
         _mock_clear_line,
         _mock_spinner,
+        _mock_get_api_key_for_provider,
         _mock_get_provider,
     ) -> None:
         mock_interpreter = Mock()

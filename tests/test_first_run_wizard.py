@@ -202,9 +202,11 @@ class TestGetValidApiKey:
             assert result == "sk-ant-shell-key-12345"
 
     @patch("cortex.first_run_wizard.read_key_from_env_file")
-    def test_get_valid_api_key_no_key_anywhere(self, mock_read):
+    @patch("cortex.first_run_wizard.detect_api_key")
+    def test_get_valid_api_key_no_key_anywhere(self, mock_detect, mock_read):
         """Test returns None when no valid key exists anywhere."""
         mock_read.return_value = None
+        mock_detect.return_value = None
 
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -342,28 +344,37 @@ class TestWizardSteps:
 
         assert result.success is True
 
+    @patch("cortex.first_run_wizard.get_valid_api_key")
     @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test-key-12345678"})
-    def test_step_api_setup_existing_anthropic_key(self, wizard):
+    def test_step_api_setup_existing_anthropic_key(self, mock_get_key, wizard):
         """Test API setup with existing Anthropic key."""
+        mock_get_key.side_effect = lambda env_var, key_type: (
+            "sk-ant-test-key-12345678" if env_var == "ANTHROPIC_API_KEY" else None
+        )
+
         result = wizard._step_api_setup()
 
         assert result.success is True
         assert wizard.config.get("api_provider") == "anthropic"
 
+    @patch("cortex.first_run_wizard.get_valid_api_key")
     @patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key-12345678"}, clear=True)
-    def test_step_api_setup_existing_openai_key(self, wizard):
+    def test_step_api_setup_existing_openai_key(self, mock_get_key, wizard):
         """Test API setup with existing OpenAI key."""
+        mock_get_key.side_effect = lambda env_var, key_type: (
+            "sk-test-key-12345678" if env_var == "OPENAI_API_KEY" else None
+        )
+
         result = wizard._step_api_setup()
 
         assert result.success is True
         assert wizard.config.get("api_provider") == "openai"
 
+    @patch("cortex.first_run_wizard.get_valid_api_key")
     @patch.dict(os.environ, {}, clear=True)
-    def test_step_api_setup_no_key(self, wizard):
+    def test_step_api_setup_no_key(self, mock_get_key, wizard):
         """Test API setup without existing key."""
-        # Remove any existing keys
-        os.environ.pop("ANTHROPIC_API_KEY", None)
-        os.environ.pop("OPENAI_API_KEY", None)
+        mock_get_key.return_value = None
 
         result = wizard._step_api_setup()
 

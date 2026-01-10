@@ -632,18 +632,306 @@ class CortexCLI:
             self._print_error(str(e))
             return 1
 
+    def _run_conflict_prediction(self, software: str) -> int | None:
+        """
+        Run AI-powered conflict prediction before installation.
+
+        Returns:
+            None if safe to proceed
+            int (exit code) if should stop
+        """
+        from cortex.conflict_predictor import (
+            ConflictSeverity,
+            DependencyConflictPredictor,
+        )
+
+        cx_print("Analyzing dependencies for potential conflicts...", "info")
+
+        try:
+            predictor = DependencyConflictPredictor()
+
+            # Split software into individual packages
+            packages = software.split()
+
+            # Run prediction for each package
+            all_conflicts = []
+            for pkg in packages:
+                # Skip commands like "pip install" or "apt-get"
+                if pkg in ("pip", "pip3", "apt", "apt-get", "install", "-y", "&&"):
+                    continue
+
+                prediction = predictor.predict_conflicts(pkg)
+
+                if prediction.conflicts:
+                    all_conflicts.append(prediction)
+
+            if not all_conflicts:
+                cx_print("No conflicts predicted. Safe to proceed.", "success")
+                console.print()
+                return None  # Safe to proceed
+
+            # Display conflicts
+            console.print()
+            for prediction in all_conflicts:
+                # Format the prediction nicely
+                risk_emoji = {
+                    ConflictSeverity.LOW: "[yellow]",
+                    ConflictSeverity.MEDIUM: "[orange1]",
+                    ConflictSeverity.HIGH: "[red]",
+                    ConflictSeverity.CRITICAL: "[bold red]",
+                }
+                risk_color = risk_emoji.get(prediction.overall_risk, "")
+
+                console.print(
+                    f"{risk_color}Conflict predicted[/]: {prediction.package_name}"
+                )
+                console.print(
+                    f"   Risk Level: {risk_color}{prediction.overall_risk.value.upper()}[/]"
+                )
+                console.print(
+                    f"   Confidence: {prediction.prediction_confidence:.0%}"
+                )
+                console.print()
+
+                # Show each conflict
+                for i, conflict in enumerate(prediction.conflicts, 1):
+                    console.print(f"   {i}. {conflict.description}")
+                    console.print(
+                        f"      {conflict.conflicting_package} "
+                        f"{conflict.conflicting_version} (installed)"
+                    )
+                    console.print()
+
+                # Show top suggestions
+                if prediction.resolutions:
+                    console.print("   [bold cyan]Suggestions (ranked by safety):[/bold cyan]")
+                    for i, res in enumerate(prediction.resolutions[:3], 1):
+                        rec_tag = " [RECOMMENDED]" if res.recommended else ""
+                        console.print(f"   {i}. {res.description}{rec_tag}")
+                        if res.command:
+                            console.print(f"      [dim]$ {res.command}[/dim]")
+                    console.print()
+
+            # Check if we should stop for critical conflicts
+            critical_predictions = [
+                p for p in all_conflicts if p.overall_risk == ConflictSeverity.CRITICAL
+            ]
+
+            if critical_predictions:
+                cx_print(
+                    "Critical conflicts detected. Installation blocked.",
+                    "error",
+                )
+                cx_print(
+                    "Resolve conflicts above or use --no-predict to skip this check.",
+                    "warning",
+                )
+                return 1  # Stop with error
+
+            # For non-critical conflicts, ask user
+            high_predictions = [
+                p for p in all_conflicts if p.overall_risk == ConflictSeverity.HIGH
+            ]
+
+            if high_predictions:
+                try:
+                    response = console.input(
+                        "[bold yellow]High-risk conflicts detected. "
+                        "Proceed anyway? (y/N): [/bold yellow]"
+                    )
+                    if response.lower() not in ("y", "yes"):
+                        cx_print("Installation cancelled", "info")
+                        return 0  # User cancelled
+                except (EOFError, KeyboardInterrupt):
+                    console.print()
+                    cx_print("Installation cancelled", "info")
+                    return 0
+
+            # Medium/Low conflicts - just warn and proceed
+            return None  # Safe to proceed
+
+        except ImportError as e:
+            # Conflict predictor module not available - just warn and continue
+            self._debug(f"Conflict prediction unavailable: {e}")
+            return None
+        except Exception as e:
+            # Don't let prediction errors block installation
+            cx_print(f"Conflict prediction failed: {e}", "warning")
+            cx_print("Proceeding with installation...", "info")
+            return None
+
+    def predict(self, package: str, json_output: bool = False, verbose: bool = False) -> int:
+        """
+        Predict dependency conflicts for a package before installation.
+
+        This is the standalone 'cortex predict' command.
+        """
+        import json as json_lib
+
+        from cortex.conflict_predictor import (
+            ConflictSeverity,
+            DependencyConflictPredictor,
+        )
+
+        try:
+            predictor = DependencyConflictPredictor()
+
+            # Split packages if multiple provided
+            packages = package.split()
+            predictions = []
+
+            cx_print(f"Analyzing {len(packages)} package(s) for conflicts...", "info")
+            console.print()
+
+            for pkg in packages:
+                prediction = predictor.predict_conflicts(pkg)
+                predictions.append(prediction)
+
+            if json_output:
+                # JSON output mode
+                output = {
+                    "packages": [
+                        predictor.export_prediction_json(p) for p in predictions
+                    ],
+                    "summary": {
+                        "total_packages": len(predictions),
+                        "packages_with_conflicts": sum(
+                            1 for p in predictions if p.conflicts
+                        ),
+                        "critical_conflicts": sum(
+                            1
+                            for p in predictions
+                            if p.overall_risk == ConflictSeverity.CRITICAL
+                        ),
+                    },
+                }
+                console.print(json_lib.dumps(output, indent=2))
+            else:
+                # Human-readable output
+                for prediction in predictions:
+                    if not prediction.conflicts:
+                        console.print(
+                            f"[green]No conflicts predicted[/green] for "
+                            f"[bold]{prediction.package_name}[/bold]"
+                        )
+                        console.print(
+                            f"   Confidence: {prediction.prediction_confidence:.0%}"
+                        )
+                        console.print()
+                        continue
+
+                    # Risk color coding
+                    risk_color = {
+                        ConflictSeverity.LOW: "yellow",
+                        ConflictSeverity.MEDIUM: "orange1",
+                        ConflictSeverity.HIGH: "red",
+                        ConflictSeverity.CRITICAL: "bold red",
+                    }.get(prediction.overall_risk, "white")
+
+                    console.print(
+                        f"[{risk_color}]Conflict predicted[/{risk_color}]: "
+                        f"[bold]{prediction.package_name}[/bold]"
+                    )
+                    console.print()
+
+                    # Show conflicts
+                    for i, conflict in enumerate(prediction.conflicts, 1):
+                        severity_badge = f"[{conflict.severity.value.upper()}]"
+                        console.print(f"   {i}. {severity_badge} {conflict.description}")
+                        console.print(
+                            f"      Installed: {conflict.conflicting_package} "
+                            f"{conflict.conflicting_version}"
+                        )
+                        console.print(f"      Type: {conflict.conflict_type}")
+                        console.print(
+                            f"      Confidence: {conflict.confidence:.0%}"
+                        )
+                        console.print()
+
+                    # Show suggestions
+                    if prediction.resolutions:
+                        console.print(
+                            "   [bold cyan]Suggestions (ranked by safety):[/bold cyan]"
+                        )
+                        for i, res in enumerate(prediction.resolutions[:4], 1):
+                            rec = " [RECOMMENDED]" if res.recommended else ""
+                            console.print(f"   {i}. {res.description}")
+                            if res.command:
+                                console.print(f"      [dim]$ {res.command}[/dim]")
+                            console.print(
+                                f"      Safety: {res.safety_score:.0%}{rec}"
+                            )
+                            if verbose and res.side_effects:
+                                for effect in res.side_effects:
+                                    console.print(f"      [dim]- {effect}[/dim]")
+                            console.print()
+
+                    # Show analysis details if verbose
+                    if verbose and prediction.analysis_details:
+                        console.print("   [dim]Analysis Details:[/dim]")
+                        for key, value in prediction.analysis_details.items():
+                            console.print(f"      {key}: {value}")
+                        console.print()
+
+            # Summary
+            conflicts_found = sum(1 for p in predictions if p.conflicts)
+            critical = sum(
+                1
+                for p in predictions
+                if p.overall_risk == ConflictSeverity.CRITICAL
+            )
+
+            console.print("-" * 50)
+            if conflicts_found == 0:
+                console.print(
+                    f"[bold green]All {len(predictions)} package(s) safe to install[/bold green]"
+                )
+                return 0
+            else:
+                console.print(
+                    f"[bold yellow]{conflicts_found}/{len(predictions)} package(s) "
+                    f"have potential conflicts[/bold yellow]"
+                )
+                if critical > 0:
+                    console.print(
+                        f"[bold red]{critical} CRITICAL conflict(s) detected[/bold red]"
+                    )
+                    return 1
+                return 0
+
+        except ImportError as e:
+            self._print_error(f"Conflict prediction module not available: {e}")
+            return 1
+        except Exception as e:
+            self._print_error(f"Prediction failed: {e}")
+            if verbose:
+                import traceback
+
+                traceback.print_exc()
+            return 1
+
     def install(
         self,
         software: str,
         execute: bool = False,
         dry_run: bool = False,
         parallel: bool = False,
+        predict: bool = False,
+        no_predict: bool = False,
     ):
         # Validate input first
         is_valid, error = validate_install_request(software)
         if not is_valid:
             self._print_error(error)
             return 1
+
+        # Run conflict prediction if requested or if executing (unless --no-predict)
+        should_predict = predict or (execute and not no_predict)
+        if should_predict:
+            prediction_result = self._run_conflict_prediction(software)
+            if prediction_result is not None:
+                # Non-None means we should stop (critical conflict or user cancelled)
+                return prediction_result
 
         # Special-case the ml-cpu stack:
         # The LLM sometimes generates outdated torch==1.8.1+cpu installs
@@ -2031,6 +2319,7 @@ def show_rich_help():
     table.add_row("wizard", "Configure API key")
     table.add_row("status", "System status")
     table.add_row("install <pkg>", "Install software")
+    table.add_row("predict <pkg>", "Predict dependency conflicts")
     table.add_row("import <file>", "Import deps from package files")
     table.add_row("history", "View history")
     table.add_row("rollback <id>", "Undo installation")
@@ -2143,6 +2432,29 @@ def main():
         "--parallel",
         action="store_true",
         help="Enable parallel execution for multi-step installs",
+    )
+    install_parser.add_argument(
+        "--predict",
+        action="store_true",
+        help="Predict dependency conflicts before installation",
+    )
+    install_parser.add_argument(
+        "--no-predict",
+        action="store_true",
+        help="Skip automatic conflict prediction",
+    )
+
+    # Predict command - standalone conflict prediction
+    predict_parser = subparsers.add_parser(
+        "predict",
+        help="Predict dependency conflicts before installation",
+    )
+    predict_parser.add_argument("package", type=str, help="Package(s) to analyze")
+    predict_parser.add_argument(
+        "--json", "-j", action="store_true", help="Output as JSON"
+    )
+    predict_parser.add_argument(
+        "--verbose", action="store_true", help="Show detailed analysis"
     )
 
     # Import command - import dependencies from package manager files
@@ -2510,6 +2822,14 @@ def main():
                 execute=args.execute,
                 dry_run=args.dry_run,
                 parallel=args.parallel,
+                predict=args.predict,
+                no_predict=args.no_predict,
+            )
+        elif args.command == "predict":
+            return cli.predict(
+                args.package,
+                json_output=args.json,
+                verbose=args.verbose,
             )
         elif args.command == "import":
             return cli.import_deps(args)

@@ -38,6 +38,7 @@ class TaskType(Enum):
     ERROR_DEBUGGING = "error_debugging"  # Diagnosing failures
     CODE_GENERATION = "code_generation"  # Writing scripts
     DEPENDENCY_RESOLUTION = "dependency_resolution"  # Figuring out deps
+    CONFLICT_PREDICTION = "conflict_prediction"  # AI-powered conflict prediction
     CONFIGURATION = "configuration"  # System config files
     TOOL_EXECUTION = "tool_execution"  # Running system tools
 
@@ -110,6 +111,7 @@ class LLMRouter:
         TaskType.ERROR_DEBUGGING: LLMProvider.KIMI_K2,
         TaskType.CODE_GENERATION: LLMProvider.KIMI_K2,
         TaskType.DEPENDENCY_RESOLUTION: LLMProvider.KIMI_K2,
+        TaskType.CONFLICT_PREDICTION: LLMProvider.KIMI_K2,  # Technical analysis
         TaskType.CONFIGURATION: LLMProvider.KIMI_K2,
         TaskType.TOOL_EXECUTION: LLMProvider.KIMI_K2,
     }

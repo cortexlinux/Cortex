@@ -212,7 +212,9 @@ class TestCortexCLI(unittest.TestCase):
         mock_install.return_value = 0
         result = main()
         self.assertEqual(result, 0)
-        mock_install.assert_called_once_with("docker", execute=False, dry_run=False, parallel=False)
+        mock_install.assert_called_once_with(
+            "docker", execute=False, dry_run=False, parallel=False, predict=False, no_predict=False
+        )
 
     @patch("sys.argv", ["cortex", "install", "docker", "--execute"])
     @patch("cortex.cli.CortexCLI.install")
@@ -220,7 +222,9 @@ class TestCortexCLI(unittest.TestCase):
         mock_install.return_value = 0
         result = main()
         self.assertEqual(result, 0)
-        mock_install.assert_called_once_with("docker", execute=True, dry_run=False, parallel=False)
+        mock_install.assert_called_once_with(
+            "docker", execute=True, dry_run=False, parallel=False, predict=False, no_predict=False
+        )
 
     @patch("sys.argv", ["cortex", "install", "docker", "--dry-run"])
     @patch("cortex.cli.CortexCLI.install")
@@ -228,7 +232,49 @@ class TestCortexCLI(unittest.TestCase):
         mock_install.return_value = 0
         result = main()
         self.assertEqual(result, 0)
-        mock_install.assert_called_once_with("docker", execute=False, dry_run=True, parallel=False)
+        mock_install.assert_called_once_with(
+            "docker", execute=False, dry_run=True, parallel=False, predict=False, no_predict=False
+        )
+
+    @patch("sys.argv", ["cortex", "install", "tensorflow", "--predict"])
+    @patch("cortex.cli.CortexCLI.install")
+    def test_main_install_with_predict(self, mock_install):
+        """Test install command with --predict flag"""
+        mock_install.return_value = 0
+        result = main()
+        self.assertEqual(result, 0)
+        mock_install.assert_called_once_with(
+            "tensorflow", execute=False, dry_run=False, parallel=False, predict=True, no_predict=False
+        )
+
+    @patch("sys.argv", ["cortex", "install", "numpy", "--execute", "--no-predict"])
+    @patch("cortex.cli.CortexCLI.install")
+    def test_main_install_with_no_predict(self, mock_install):
+        """Test install command with --no-predict flag"""
+        mock_install.return_value = 0
+        result = main()
+        self.assertEqual(result, 0)
+        mock_install.assert_called_once_with(
+            "numpy", execute=True, dry_run=False, parallel=False, predict=False, no_predict=True
+        )
+
+    @patch("sys.argv", ["cortex", "predict", "tensorflow"])
+    @patch("cortex.cli.CortexCLI.predict")
+    def test_main_predict_command(self, mock_predict):
+        """Test standalone predict command"""
+        mock_predict.return_value = 0
+        result = main()
+        self.assertEqual(result, 0)
+        mock_predict.assert_called_once_with("tensorflow", json_output=False, verbose=False)
+
+    @patch("sys.argv", ["cortex", "predict", "numpy", "--json"])
+    @patch("cortex.cli.CortexCLI.predict")
+    def test_main_predict_with_json(self, mock_predict):
+        """Test predict command with --json flag"""
+        mock_predict.return_value = 0
+        result = main()
+        self.assertEqual(result, 0)
+        mock_predict.assert_called_once_with("numpy", json_output=True, verbose=False)
 
     def test_spinner_animation(self):
         initial_idx = self.cli.spinner_idx

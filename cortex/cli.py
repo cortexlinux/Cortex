@@ -2334,7 +2334,7 @@ def main():
     config_lang_parser.add_argument(
         "language_code",
         nargs="?",
-        help="Language code to set (e.g., en, es, de, ja, zh, ko, ar, hi, ru, it)",
+        help="Language code to set (e.g., en, es, fr, de, pt, ja, zh, ko, ar, hi, ru, it)",
     )
 
     # --- Sandbox Commands (Docker-based package testing) ---

@@ -23,9 +23,9 @@ import pytest
 
 # Check if cryptography is available for encryption tests
 try:
-    from cryptography.fernet import Fernet
+    from cryptography import fernet as _fernet
 
-    HAS_CRYPTOGRAPHY = True
+    HAS_CRYPTOGRAPHY = _fernet is not None
 except ImportError:
     HAS_CRYPTOGRAPHY = False
 

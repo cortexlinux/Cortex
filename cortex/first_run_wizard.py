@@ -18,13 +18,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-# Import API key validation utilities
+# Main branch import for encrypted storage
+from cortex.env_manager import get_env_manager
 from cortex.utils.api_key_validator import validate_anthropic_api_key, validate_openai_api_key
 
-# Setup logger at module level
 logger = logging.getLogger(__name__)
 
-# Examples for dry run prompts
+# Application name for storing cortex API keys
+CORTEX_APP_NAME = "cortex"
+
+# Examples for dry run prompts (your addition)
 DRY_RUN_EXAMPLES = [
     "Machine learning module",
     "libraries for video compression tool",
@@ -39,18 +42,28 @@ DRY_RUN_EXAMPLES = [
 ]
 
 
+# ============================================================================
+# YOUR HELPER FUNCTIONS (with fixed default path for api_key_detector sync)
+# ============================================================================
+
 def get_env_file_path() -> Path:
-    """Get the path to the .env file."""
+    """Get the path to the .env file.
+
+    Returns the first existing .env file found, or ~/.cortex/.env as default.
+    This ensures compatibility with api_key_detector which checks ~/.cortex/.env
+    as priority #2.
+    """
     possible_paths = [
+        Path.home() / ".cortex" / ".env",  # Check this FIRST (sync with api_key_detector)
         Path.cwd() / ".env",
         Path(__file__).parent.parent / ".env",
         Path(__file__).parent.parent.parent / ".env",
-        Path.home() / ".cortex" / ".env",
     ]
     for path in possible_paths:
         if path.exists():
             return path
-    return Path.cwd() / ".env"
+    # DEFAULT: ~/.cortex/.env (syncs with api_key_detector priority #2)
+    return Path.home() / ".cortex" / ".env"
 
 
 def read_key_from_env_file(key_name: str) -> str | None:
@@ -90,8 +103,12 @@ def save_key_to_env_file(key_name: str, key_value: str) -> bool:
     """
     Save an API key to the .env file.
     Updates existing key or adds new one.
+    Ensures parent directory exists.
     """
     env_path = get_env_file_path()
+
+    # Ensure ~/.cortex directory exists
+    env_path.parent.mkdir(parents=True, exist_ok=True)
 
     lines = []
     key_found = False
@@ -123,7 +140,8 @@ def save_key_to_env_file(key_name: str, key_value: str) -> bool:
         with open(env_path, "w") as f:
             f.writelines(new_lines)
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Error saving to .env file: {e}")
         return False
 
 
@@ -161,7 +179,6 @@ def get_valid_api_key(env_var: str, key_type: str = "generic") -> str | None:
             return key_from_file
         else:
             logger.debug(f"Key in .env file for {env_var} is invalid (wrong format)")
-            # Don't return yet - check os.environ as fallback
 
     # Second priority: valid key from shell environment (already exported)
     key_from_env = os.environ.get(env_var)
@@ -173,7 +190,6 @@ def get_valid_api_key(env_var: str, key_type: str = "generic") -> str | None:
         else:
             logger.debug(f"Key in os.environ for {env_var} is invalid (wrong format)")
 
-    # No valid key found in either location
     logger.debug(f"No valid key found for {env_var}")
     return None
 
@@ -191,6 +207,10 @@ def detect_available_providers() -> list[str]:
 
     return providers
 
+
+# ============================================================================
+# WIZARD CLASSES
+# ============================================================================
 
 class WizardStep(Enum):
     """Steps in the first-run wizard."""
@@ -403,15 +423,9 @@ class FirstRunWizard:
         env_path = get_env_file_path()
         try:
             from dotenv import load_dotenv
-
-            # Load .env file but don't override existing shell-exported keys
-            # This preserves keys set via `export ANTHROPIC_API_KEY=xxx`
             load_dotenv(dotenv_path=env_path, override=False)
         except ImportError:
             pass
-
-        # Note: We no longer delete shell-exported keys when .env is empty.
-        # The get_valid_api_key function now properly checks both sources.
 
         available_providers = detect_available_providers()
         has_ollama = shutil.which("ollama") is not None
@@ -462,15 +476,11 @@ class FirstRunWizard:
         provider = provider_map.get(choice)
 
         if not provider:
-            print(
-                f"Invalid choice. Please enter a number between {valid_choices[0]} and {valid_choices[-1]}."
-            )
+            print(f"Invalid choice. Please enter a number between {valid_choices[0]} and {valid_choices[-1]}.")
             return False
 
         if provider == "skip_reconfig":
-            print(
-                f"\n✓ Keeping current provider: {provider_names.get(current_provider, current_provider)}"
-            )
+            print(f"\n✓ Keeping current provider: {provider_names.get(current_provider, current_provider)}")
             self.mark_setup_complete()
             return True
 
@@ -478,48 +488,36 @@ class FirstRunWizard:
             existing_key = get_valid_api_key("ANTHROPIC_API_KEY", "anthropic")
 
             if existing_key:
-                print("\n✓ Existing Anthropic API key found in .env file.")
-                replace = self._prompt(
-                    "Do you want to replace it with a new key? [y/N]: ", default="n"
-                )
+                print("\n✓ Existing Anthropic API key found.")
+                replace = self._prompt("Do you want to replace it with a new key? [y/N]: ", default="n")
                 if replace.strip().lower() in ("y", "yes"):
                     key = self._prompt_for_api_key("anthropic")
                     if key is None:
                         print("\nSetup cancelled.")
                         return False
-                    if save_key_to_env_file("ANTHROPIC_API_KEY", key):
-                        print(f"✓ New API key saved to {get_env_file_path()}")
-                    else:
-                        print("⚠ Could not save to .env file, saving to shell config instead.")
-                        self._save_env_var("ANTHROPIC_API_KEY", key)
+                    self._save_env_var("ANTHROPIC_API_KEY", key)
                     os.environ["ANTHROPIC_API_KEY"] = key
                 else:
                     print("\n✓ Keeping existing API key.")
             else:
-                print("\nNo valid Anthropic API key found in .env file (blank or missing).")
+                print("\nNo valid Anthropic API key found.")
                 key = self._prompt_for_api_key("anthropic")
                 if key is None:
                     print("\nSetup cancelled.")
                     return False
-                if save_key_to_env_file("ANTHROPIC_API_KEY", key):
-                    print(f"✓ API key saved to {get_env_file_path()}")
-                else:
-                    print("⚠ Could not save to .env file, saving to shell config instead.")
-                    self._save_env_var("ANTHROPIC_API_KEY", key)
+                self._save_env_var("ANTHROPIC_API_KEY", key)
                 os.environ["ANTHROPIC_API_KEY"] = key
 
             self.config["api_provider"] = "anthropic"
             self.config["api_key_configured"] = True
 
-            random_example = random.choice(DRY_RUN_EXAMPLES)  # noqa: S311
+            # Dry run verification
+            random_example = random.choice(DRY_RUN_EXAMPLES)
             print(f'\nVerifying setup with dry run: cortex install "{random_example}"...')
             try:
                 from cortex.cli import CortexCLI
-
                 cli = CortexCLI()
-                result = cli.install(
-                    random_example, execute=False, dry_run=True, forced_provider="claude"
-                )
+                result = cli.install(random_example, execute=False, dry_run=True, forced_provider="claude")
                 if result != 0:
                     print("\n❌ Dry run failed. Please check your API key and network.")
                     return False
@@ -532,48 +530,36 @@ class FirstRunWizard:
             existing_key = get_valid_api_key("OPENAI_API_KEY", "openai")
 
             if existing_key:
-                print("\n✓ Existing OpenAI API key found in .env file.")
-                replace = self._prompt(
-                    "Do you want to replace it with a new key? [y/N]: ", default="n"
-                )
+                print("\n✓ Existing OpenAI API key found.")
+                replace = self._prompt("Do you want to replace it with a new key? [y/N]: ", default="n")
                 if replace.strip().lower() in ("y", "yes"):
                     key = self._prompt_for_api_key("openai")
                     if key is None:
                         print("\nSetup cancelled.")
                         return False
-                    if save_key_to_env_file("OPENAI_API_KEY", key):
-                        print(f"✓ New API key saved to {get_env_file_path()}")
-                    else:
-                        print("⚠ Could not save to .env file, saving to shell config instead.")
-                        self._save_env_var("OPENAI_API_KEY", key)
+                    self._save_env_var("OPENAI_API_KEY", key)
                     os.environ["OPENAI_API_KEY"] = key
                 else:
                     print("\n✓ Keeping existing API key.")
             else:
-                print("\nNo valid OpenAI API key found in .env file (blank or missing).")
+                print("\nNo valid OpenAI API key found.")
                 key = self._prompt_for_api_key("openai")
                 if key is None:
                     print("\nSetup cancelled.")
                     return False
-                if save_key_to_env_file("OPENAI_API_KEY", key):
-                    print(f"✓ API key saved to {get_env_file_path()}")
-                else:
-                    print("⚠ Could not save to .env file, saving to shell config instead.")
-                    self._save_env_var("OPENAI_API_KEY", key)
+                self._save_env_var("OPENAI_API_KEY", key)
                 os.environ["OPENAI_API_KEY"] = key
 
             self.config["api_provider"] = "openai"
             self.config["api_key_configured"] = True
 
-            random_example = random.choice(DRY_RUN_EXAMPLES)  # noqa: S311
+            # Dry run verification
+            random_example = random.choice(DRY_RUN_EXAMPLES)
             print(f'\nVerifying setup with dry run: cortex install "{random_example}"...')
             try:
                 from cortex.cli import CortexCLI
-
                 cli = CortexCLI()
-                result = cli.install(
-                    random_example, execute=False, dry_run=True, forced_provider="openai"
-                )
+                result = cli.install(random_example, execute=False, dry_run=True, forced_provider="openai")
                 if result != 0:
                     print("\n❌ Dry run failed. Please check your API key and network.")
                     return False
@@ -587,8 +573,42 @@ class FirstRunWizard:
                 print("\n⚠ Ollama is not installed.")
                 print("Install it from: https://ollama.ai")
                 return False
-            print("\n✓ Ollama detected and ready. No API key required.")
+
+            # Model selection from MAIN branch
+            print("\nWhich Ollama model would you like to use?")
+            print("  1. llama3.2 (2GB) - Recommended for most users")
+            print("  2. llama3.2:1b (1.3GB) - Faster, less RAM")
+            print("  3. mistral (4GB) - Alternative quality model")
+            print("  4. phi3 (2.3GB) - Microsoft's efficient model")
+            print("  5. Custom (enter your own)")
+
+            model_choices = {
+                "1": "llama3.2",
+                "2": "llama3.2:1b",
+                "3": "mistral",
+                "4": "phi3",
+            }
+
+            model_choice = self._prompt("\nEnter choice [1]: ", default="1")
+
+            if model_choice == "5":
+                model_name = self._prompt("Enter model name: ", default="llama3.2")
+            elif model_choice in model_choices:
+                model_name = model_choices[model_choice]
+            else:
+                print(f"Invalid choice '{model_choice}', using default model llama3.2")
+                model_name = "llama3.2"
+
+            # Pull the selected model
+            print(f"\nPulling {model_name} model (this may take a few minutes)...")
+            try:
+                subprocess.run(["ollama", "pull", model_name], check=True)
+                print("\n✓ Model ready!")
+            except subprocess.CalledProcessError:
+                print(f"\n⚠ Could not pull model - you can do this later with: ollama pull {model_name}")
+
             self.config["api_provider"] = "ollama"
+            self.config["ollama_model"] = model_name
             self.config["api_key_configured"] = True
 
         self.save_config()
@@ -600,7 +620,7 @@ class FirstRunWizard:
 
     def _clear_screen(self) -> None:
         if self.interactive:
-            os.system("clear" if os.name == "posix" else "cls")  # noqa: S605, S607
+            os.system("clear" if os.name == "posix" else "cls")
 
     def _print_banner(self) -> None:
         banner = """
@@ -610,6 +630,7 @@ class FirstRunWizard:
      | |__| (_) | |  | ||  __/>  <
       \\____\\___/|_|   \\__\\___/_/\\_\\
 
+        Linux that understands you.
     """
         print(banner)
 
@@ -631,7 +652,48 @@ class FirstRunWizard:
             return default
 
     def _save_env_var(self, name: str, value: str) -> None:
-        """Save environment variable to shell config (fallback)."""
+        """Save API key to BOTH .env file AND encrypted storage.
+
+        This ensures compatibility with:
+        - api_key_detector (reads from ~/.cortex/.env)
+        - Main branch encrypted storage (reads from env_manager)
+        """
+        # Set for current session
+        os.environ[name] = value
+
+        # Method 1: Save to ~/.cortex/.env (for api_key_detector compatibility)
+        if save_key_to_env_file(name, value):
+            print(f"✓ API key saved to {get_env_file_path()}")
+        else:
+            # Fallback to shell config
+            self._save_to_shell_config(name, value)
+
+        # Method 2: Save to encrypted storage (main branch approach)
+        try:
+            env_mgr = get_env_manager()
+            provider_name_raw = name.replace("_API_KEY", "")
+            if provider_name_raw == "OPENAI":
+                provider_name_display = "OpenAI"
+            elif provider_name_raw == "ANTHROPIC":
+                provider_name_display = "Anthropic"
+            else:
+                provider_name_display = provider_name_raw.replace("_", " ").title()
+
+            env_mgr.set_variable(
+                app=CORTEX_APP_NAME,
+                key=name,
+                value=value,
+                encrypt=True,
+                description=f"API key for {provider_name_display}",
+            )
+            logger.info(f"Saved {name} to encrypted storage")
+        except ImportError:
+            logger.warning(f"cryptography package not installed. {name} saved to .env only.")
+        except Exception as e:
+            logger.warning(f"Could not save to encrypted storage: {e}")
+
+    def _save_to_shell_config(self, name: str, value: str) -> None:
+        """Fallback: Save environment variable to shell config."""
         shell = os.environ.get("SHELL", "/bin/bash")
         shell_name = os.path.basename(shell)
         config_file = self._get_shell_config(shell_name)
@@ -639,12 +701,12 @@ class FirstRunWizard:
         try:
             with open(config_file, "a") as f:
                 f.write(export_line)
-            os.environ[name] = value
             print(f"✓ API key saved to {config_file}")
         except Exception as e:
             logger.warning(f"Could not save env var: {e}")
 
     def _get_shell_config(self, shell: str) -> Path:
+        """Get the shell config file path."""
         home = Path.home()
         configs = {
             "bash": home / ".bashrc",
@@ -653,7 +715,10 @@ class FirstRunWizard:
         }
         return configs.get(shell, home / ".profile")
 
-    # Legacy methods for backward compatibility with tests
+    # ========================================================================
+    # LEGACY METHODS (for backward compatibility with tests)
+    # ========================================================================
+
     def _step_welcome(self) -> StepResult:
         """Welcome step - legacy method for tests."""
         self._print_banner()
@@ -664,27 +729,22 @@ class FirstRunWizard:
         self._clear_screen()
         self._print_header("Step 1: API Configuration")
 
-        # Check for existing API keys
         existing_claude = os.environ.get("ANTHROPIC_API_KEY")
         existing_openai = os.environ.get("OPENAI_API_KEY")
 
-        # Build menu with indicators for existing keys
         claude_status = " ✓ (key found)" if existing_claude else ""
         openai_status = " ✓ (key found)" if existing_openai else ""
 
-        print(
-            f"""
+        print(f"""
 Cortex uses AI to understand your commands. You can use:
 
   1. Claude API (Anthropic){claude_status} - Recommended
   2. OpenAI API{openai_status}
   3. Local LLM (Ollama) - Free, runs on your machine
   4. Skip for now (limited functionality)
-"""
-        )
+""")
 
         if not self.interactive:
-            # In non-interactive mode, auto-select if key exists
             if existing_claude:
                 self.config["api_provider"] = "anthropic"
                 self.config["api_key_configured"] = True
@@ -699,7 +759,6 @@ Cortex uses AI to understand your commands. You can use:
                 data={"api_provider": "none"},
             )
 
-        # Always let user choose
         choice = self._prompt("Choose an option [1-4]: ", default="1")
 
         if choice == "1":
@@ -731,11 +790,10 @@ Cortex uses AI to understand your commands. You can use:
 
         api_key = self._prompt("Enter your Claude API key: ")
 
-        if not api_key or not api_key.startswith("sk-"):
+        if not api_key or not api_key.startswith("sk-ant-"):
             print("\n⚠ Invalid API key format")
             return StepResult(success=True, data={"api_provider": "none"})
 
-        # Save to shell profile
         self._save_env_var("ANTHROPIC_API_KEY", api_key)
 
         self.config["api_provider"] = "anthropic"
@@ -769,7 +827,6 @@ Cortex uses AI to understand your commands. You can use:
         """Set up Ollama for local LLM."""
         print("\nChecking for Ollama...")
 
-        # Check if Ollama is installed
         ollama_path = shutil.which("ollama")
 
         if not ollama_path:
@@ -788,28 +845,31 @@ Cortex uses AI to understand your commands. You can use:
                     print("\n✗ Failed to install Ollama")
                     return StepResult(success=True, data={"api_provider": "none"})
 
+        self.config["api_provider"] = "ollama"
+        return StepResult(success=True, data={"api_provider": "ollama"})
+
     def _step_hardware_detection(self) -> StepResult:
-        """Hardware detection step - legacy method for tests."""
+        """Hardware detection step."""
         hardware_info = self._detect_hardware()
         self.config["hardware"] = hardware_info
         return StepResult(success=True, data={"hardware": hardware_info})
 
     def _step_preferences(self) -> StepResult:
-        """Preferences step - legacy method for tests."""
+        """Preferences step."""
         preferences = {"auto_confirm": False, "verbosity": "normal", "enable_cache": True}
         self.config["preferences"] = preferences
         return StepResult(success=True, data={"preferences": preferences})
 
     def _step_shell_integration(self) -> StepResult:
-        """Shell integration step - legacy method for tests."""
+        """Shell integration step."""
         return StepResult(success=True, data={"shell_integration": False})
 
     def _step_test_command(self) -> StepResult:
-        """Test command step - legacy method for tests."""
+        """Test command step."""
         return StepResult(success=True, data={"test_completed": False})
 
     def _step_complete(self) -> StepResult:
-        """Completion step - legacy method for tests."""
+        """Completion step."""
         self.save_config()
         return StepResult(success=True)
 
@@ -819,7 +879,6 @@ Cortex uses AI to understand your commands. You can use:
             from dataclasses import asdict
 
             from cortex.hardware_detection import detect_hardware
-
             info = detect_hardware()
             return asdict(info)
         except Exception as e:
@@ -875,7 +934,10 @@ complete -c cortex -n "__fish_use_subcommand" -a "history" -d "Show history"
         return "# No completion available for this shell"
 
 
-# Convenience functions
+# ============================================================================
+# CONVENIENCE FUNCTIONS
+# ============================================================================
+
 def needs_first_run() -> bool:
     """Check if first-run wizard is needed."""
     return FirstRunWizard(interactive=False).needs_setup()
@@ -896,7 +958,6 @@ def get_config() -> dict[str, Any]:
     return {}
 
 
-# Keep these imports for backward compatibility
 __all__ = [
     "FirstRunWizard",
     "WizardState",

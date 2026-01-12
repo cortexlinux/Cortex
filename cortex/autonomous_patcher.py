@@ -279,7 +279,10 @@ class AutonomousPatcher:
                 # Parse output to find candidate version
                 for line in stdout.split("\n"):
                     if "Candidate:" in line:
-                        parts = line.split(":")
+                        # Use split(":", 1) to handle epoch versions like "1:2.3.4-5"
+                        # Without the limit, "Candidate: 1:2.3.4-5" splits to
+                        # ["Candidate", " 1", "2.3.4-5"] instead of ["Candidate", " 1:2.3.4-5"]
+                        parts = line.split(":", 1)
                         if len(parts) >= 2:
                             version = parts[1].strip()
                             if version and version != "(none)":

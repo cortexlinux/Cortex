@@ -5,7 +5,9 @@ Comprehensive tests for command-line interface.
 """
 
 import os
+import tempfile
 from io import StringIO
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -232,7 +234,7 @@ class TestCmdListPackages:
     def test_no_packages(self, mock_config_class, mock_store_class):
         """Test list with no packages."""
         mock_config = Mock()
-        mock_config.get_db_path.return_value = "/tmp/test.db"
+        mock_config.get_db_path.return_value = Path(tempfile.gettempdir()) / "test.db"
         mock_config_class.from_env.return_value = mock_config
 
         mock_store = Mock()
@@ -248,7 +250,7 @@ class TestCmdListPackages:
     def test_with_packages(self, mock_config_class, mock_store_class):
         """Test list with packages."""
         mock_config = Mock()
-        mock_config.get_db_path.return_value = "/tmp/test.db"
+        mock_config.get_db_path.return_value = Path(tempfile.gettempdir()) / "test.db"
         mock_config_class.from_env.return_value = mock_config
 
         mock_store = Mock()
@@ -277,7 +279,7 @@ class TestCmdProgress:
     def test_progress_for_package(self, mock_config_class, mock_store_class):
         """Test progress for specific package."""
         mock_config = Mock()
-        mock_config.get_db_path.return_value = "/tmp/test.db"
+        mock_config.get_db_path.return_value = Path(tempfile.gettempdir()) / "test.db"
         mock_config_class.from_env.return_value = mock_config
 
         mock_store = Mock()
@@ -299,7 +301,7 @@ class TestCmdProgress:
     def test_progress_no_package_found(self, mock_config_class, mock_store_class):
         """Test progress when no progress found."""
         mock_config = Mock()
-        mock_config.get_db_path.return_value = "/tmp/test.db"
+        mock_config.get_db_path.return_value = Path(tempfile.gettempdir()) / "test.db"
         mock_config_class.from_env.return_value = mock_config
 
         mock_store = Mock()
@@ -315,7 +317,7 @@ class TestCmdProgress:
     def test_progress_all(self, mock_config_class, mock_store_class):
         """Test progress for all packages."""
         mock_config = Mock()
-        mock_config.get_db_path.return_value = "/tmp/test.db"
+        mock_config.get_db_path.return_value = Path(tempfile.gettempdir()) / "test.db"
         mock_config_class.from_env.return_value = mock_config
 
         # Create mock progress objects with attributes
@@ -335,7 +337,7 @@ class TestCmdProgress:
     def test_progress_empty(self, mock_config_class, mock_store_class):
         """Test progress when empty."""
         mock_config = Mock()
-        mock_config.get_db_path.return_value = "/tmp/test.db"
+        mock_config.get_db_path.return_value = Path(tempfile.gettempdir()) / "test.db"
         mock_config_class.from_env.return_value = mock_config
 
         mock_store = Mock()
@@ -367,7 +369,7 @@ class TestCmdReset:
         mock_input.return_value = "y"
 
         mock_config = Mock()
-        mock_config.get_db_path.return_value = "/tmp/test.db"
+        mock_config.get_db_path.return_value = Path(tempfile.gettempdir()) / "test.db"
         mock_config_class.from_env.return_value = mock_config
 
         mock_store = Mock()
@@ -386,7 +388,7 @@ class TestCmdReset:
         mock_input.return_value = "y"
 
         mock_config = Mock()
-        mock_config.get_db_path.return_value = "/tmp/test.db"
+        mock_config.get_db_path.return_value = Path(tempfile.gettempdir()) / "test.db"
         mock_config_class.from_env.return_value = mock_config
 
         mock_store = Mock()

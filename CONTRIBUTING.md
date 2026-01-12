@@ -44,11 +44,10 @@ The CLA protects you, the project, and all users by clarifying intellectual prop
 
 ### How to Sign
 
-1. Read the [CLA document](CLA.md)
-2. [Open a CLA Signature Request](https://github.com/cortexlinux/cortex/issues/new?template=cla-signature.yml)
-3. Fill out the form and submit
-4. A maintainer will add you to the signers list
-5. Comment `recheck` on your PR to re-verify
+1. Open a Pull Request
+2. The CLA Assistant bot will comment asking you to sign
+3. Reply with this exact comment: **"I have read the CLA Document and I hereby sign the CLA"**
+4. Done! Your signature is recorded automatically
 
 Once signed, all your future PRs will pass CLA verification automatically.
 
@@ -60,24 +59,6 @@ If contributing on behalf of your employer:
 1. Have an authorized representative complete the [Corporate CLA](CLA-CORPORATE.md)
 2. Email to legal@aiventureholdings.com
 3. Include GitHub usernames and email domains to be covered
-
-### For Maintainers
-
-To add a new signer, edit [`.github/cla-signers.json`](.github/cla-signers.json):
-
-```json
-{
-  "individuals": [
-    {
-      "name": "Jane Doe",
-      "github_username": "janedoe",
-      "emails": ["jane@example.com"],
-      "signed_date": "2024-12-29",
-      "cla_version": "1.0"
-    }
-  ]
-}
-```
 
 ---
 

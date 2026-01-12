@@ -3,19 +3,28 @@ System Health Check for Cortex Linux
 Performs diagnostic checks and provides fix suggestions.
 """
 
+from __future__ import annotations
+
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
-from rich import box
-from rich.panel import Panel
-from rich.status import Status
-from rich.table import Table
-
-from cortex.branding import console, cx_header
+from cortex.ui import (
+    console,
+    section,
+    spinner,
+    success,
+    warning,
+    error,
+    summary_box,
+    info,
+)
 from cortex.validators import validate_api_key
+from cortex.branding import show_banner
+import time
 
 
 class SystemDoctor:
@@ -55,23 +64,16 @@ class SystemDoctor:
             2: Critical failures found, system may not work properly
 
         Returns:
-        int: Exit code reflecting system health status (0, 1, or 2)
+            int: Exit code reflecting system health status (0, 1, or 2)
         """
-        # Show banner once
-        # show_banner()
+        console.print()
+        show_banner()
+        console.print()
+        success("Cortex System Health Check")
         console.print()
 
-        # Option 2: Stylized CX header with SYSTEM HEALTH CHECK
-        console.print("[bold cyan]   ██████╗██╗  ██╗    SYSTEM HEALTH CHECK[/bold cyan]")
-        console.print("[bold cyan]  ██╔════╝╚██╗██╔╝   ─────────────────────[/bold cyan]")
-        console.print("[bold cyan]  ██║      ╚███╔╝          Running...[/bold cyan]")
-        console.print("[bold cyan]  ██║      ██╔██╗ [/bold cyan]")
-        console.print("[bold cyan]  ╚██████╗██╔╝ ██╗[/bold cyan]")
-        console.print("[bold cyan]   ╚═════╝╚═╝  ╚═╝[/bold cyan]")
-        console.print()
-
-        # Run checks with spinner
-        with console.status("[bold cyan][CX] Scanning system...[/bold cyan]", spinner="dots"):
+        with spinner("[CX] Scanning system..."):
+            time.sleep(0.5)
             # System Info (includes API provider and security features)
             self._print_section("System Configuration")
             self._check_api_keys()
@@ -81,15 +83,16 @@ class SystemDoctor:
             self._print_section("Python & Dependencies")
             self._check_python()
             self._check_dependencies()
-
+   
+            time.sleep(0.5)
             self._print_section("GPU & Acceleration")
             self._check_gpu_driver()
             self._check_cuda()
-
+            time.sleep(0.5)
             self._print_section("AI & Services")
             self._check_ollama()
 
-            # System Resources
+            time.sleep(0.5)
             self._print_section("System Resources")
             self._check_disk_space()
             self._check_memory()
@@ -103,50 +106,39 @@ class SystemDoctor:
         return 0  # All good
 
     def _print_section(self, title: str) -> None:
-        """Print a section header using CX branding."""
-        cx_header(title)
+        """Print a section header using UI's section helper."""
+        section(title)
 
     def _print_check(
         self,
         status: str,
         message: str,
-        suggestion: str | None = None,
+        suggestion: Optional[str] = None,
     ) -> None:
         """
-        Print a check result with appropriate formatting and colors.
+        Print a check result using UI helpers and track statuses.
 
         Args:
             status: One of "PASS", "WARN", "FAIL", or "INFO"
             message: Description of the check result
             suggestion: Optional fix command or suggestion
         """
-        # Define symbols and colors
         if status == "PASS":
-            symbol = "✓"
-            color = "bold green"
-            prefix = "[PASS]"
+            success(message, details=(suggestion or ""))
             self.passes.append(message)
         elif status == "WARN":
-            symbol = "⚠"
-            color = "bold yellow"
-            prefix = "[WARN]"
+            warning(message, details=(suggestion or ""))
             self.warnings.append(message)
             if suggestion:
                 self.suggestions.append(suggestion)
         elif status == "FAIL":
-            symbol = "✗"
-            color = "bold red"
-            prefix = "[FAIL]"
+            error(message, details=(suggestion or ""))
             self.failures.append(message)
             if suggestion:
                 self.suggestions.append(suggestion)
         else:
-            symbol = "?"
-            color = "dim"
-            prefix = "[INFO]"
-
-        # Print with icon prefix and coloring
-        console.print(f" [cyan]CX[/cyan]  [{color}]{symbol} {prefix}[/{color}] {message}")
+            info(message)
+            # INFO neither pass nor fail; don't add to pass/warn/fail lists.
 
     def _check_python(self) -> None:
         """Check Python version compatibility."""
@@ -248,7 +240,7 @@ class SystemDoctor:
 
     def _check_cuda(self) -> None:
         """Check CUDA/ROCm availability for GPU acceleration."""
-        # Check CUDA
+        # Check CUDA (nvcc)
         if shutil.which("nvcc"):
             try:
                 result = subprocess.run(
@@ -275,14 +267,18 @@ class SystemDoctor:
             self._print_check("PASS", "ROCm installed")
             return
 
-        # Check if PyTorch has CUDA available (software level)
+        # Check if PyTorch reports CUDA available (software level)
         try:
-            import torch
+            import torch  # type: ignore
 
             if torch.cuda.is_available():
                 self._print_check("PASS", "CUDA available (PyTorch)")
                 return
         except ImportError:
+            # torch not installed; just continue
+            pass
+        except Exception:
+            # any other torch-related issue, ignore here
             pass
 
         self._print_check(
@@ -293,7 +289,6 @@ class SystemDoctor:
 
     def _check_ollama(self) -> None:
         """Check if Ollama is installed and running."""
-        # Check if installed
         if not shutil.which("ollama"):
             self._print_check(
                 "WARN",
@@ -302,9 +297,9 @@ class SystemDoctor:
             )
             return
 
-        # Check if running by testing the API
+        # If requests present, query localhost
         try:
-            import requests
+            import requests  # type: ignore
 
             response = requests.get("http://localhost:11434/api/tags", timeout=2)
             if response.status_code == 200:
@@ -313,28 +308,31 @@ class SystemDoctor:
         except Exception:
             pass
 
-        # Ollama installed but not running
+        # Ollama installed but likely not running
         self._print_check(
             "WARN", "Ollama installed but not running", "Start Ollama: ollama serve &"
         )
 
     def _check_api_keys(self) -> None:
         """Check if API keys are configured for cloud models."""
-        is_valid, provider, error = validate_api_key()
+        is_valid, provider, error_msg = validate_api_key()
 
         if is_valid:
             self._print_check("PASS", f"{provider} API key configured")
-        else:
-            # Check for Ollama
-            ollama_provider = os.environ.get("CORTEX_PROVIDER", "").lower()
-            if ollama_provider == "ollama":
-                self._print_check("PASS", "API Provider: Ollama (local)")
-            else:
-                self._print_check(
-                    "WARN",
-                    "No API keys configured (required for cloud models)",
-                    "Configure API key: export ANTHROPIC_API_KEY=sk-... or run 'cortex wizard'",
-                )
+            return
+
+        # If provider is explicitly set to Ollama (local), treat as pass
+        ollama_provider = os.environ.get("CORTEX_PROVIDER", "").lower()
+        if ollama_provider == "ollama":
+            self._print_check("PASS", "API Provider: Ollama (local)")
+            return
+
+        # Otherwise warn
+        self._print_check(
+            "WARN",
+            "No API keys configured (required for cloud models)",
+            "Configure API key: export ANTHROPIC_API_KEY=sk-... or run 'cortex wizard'",
+        )
 
     def _check_security_tools(self) -> None:
         """Check security features like Firejail availability."""
@@ -394,10 +392,10 @@ class SystemDoctor:
             self._print_check(
                 "FAIL",
                 f"Only {mem_gb:.1f}GB RAM (8GB minimum required)",
-                "Upgrade RAM to at least 8GB",
+                 "Upgrade RAM to at least 8GB",
             )
 
-    def _get_system_memory(self) -> float | None:
+    def _get_system_memory(self) -> Optional[float]:
         """
         Get system memory in GB.
 
@@ -414,62 +412,36 @@ class SystemDoctor:
         except (OSError, ValueError, IndexError):
             pass
 
-        # Try psutil (macOS/BSD/Windows)
+        # Try psutil (cross-platform)
         try:
-            import psutil
+            import psutil  # type: ignore
 
             return psutil.virtual_memory().total / (1024**3)
         except ImportError:
+            pass
+        except Exception:
             pass
 
         return None
 
     def _print_summary(self) -> None:
-        """Print summary table and overall health status with suggestions."""
+        """Print summary and suggested fixes using UI helpers."""
         console.print()
 
-        # Create summary table
-        table = Table(show_header=False, box=box.SIMPLE, padding=(0, 1))
-        table.add_column("Status", style="bold")
-        table.add_column("Count", justify="right")
-
+        # Build counts and short summary items
+        summary_items: list[str] = []
         if self.passes:
-            table.add_row("[green]✓ Passed[/green]", f"[green]{len(self.passes)}[/green]")
+            summary_items.append(f"Passed: {len(self.passes)} checks")
         if self.warnings:
-            table.add_row("[yellow]⚠ Warnings[/yellow]", f"[yellow]{len(self.warnings)}[/yellow]")
+            summary_items.append(f"Warnings: {len(self.warnings)}")
         if self.failures:
-            table.add_row("[red]✗ Failures[/red]", f"[red]{len(self.failures)}[/red]")
+            summary_items.append(f"Failures: {len(self.failures)}")
 
-        console.print(table)
-        console.print()
+        # Use summary_box for a human-friendly block
+        success_state = not (self.failures or self.warnings)
+        summary_box("SYSTEM HEALTH SUMMARY", summary_items, success=success_state)
 
-        # Overall status panel
-        if self.failures:
-            console.print(
-                Panel(
-                    f"[bold red]❌ {len(self.failures)} critical failure(s) found[/bold red]",
-                    border_style="red",
-                    padding=(0, 2),
-                )
-            )
-        elif self.warnings:
-            console.print(
-                Panel(
-                    f"[bold yellow]⚠️  {len(self.warnings)} warning(s) found[/bold yellow]",
-                    border_style="yellow",
-                    padding=(0, 2),
-                )
-            )
-        else:
-            console.print(
-                Panel(
-                    "[bold green]✅ All checks passed! System is healthy.[/bold green]",
-                    border_style="green",
-                    padding=(0, 2),
-                )
-            )
-
-        # Show fix suggestions if any
+        # Detailed panels for suggestions if present
         if self.suggestions:
             console.print()
             console.print("[bold cyan]💡 Suggested fixes:[/bold cyan]")
@@ -477,6 +449,16 @@ class SystemDoctor:
                 console.print(f"   [dim]{i}.[/dim] {suggestion}")
             console.print()
 
+        if self.failures:
+            error(f"{len(self.failures)} critical failure(s) found")
+            for fmsg in self.failures:
+                console.print(f"  - [red]✗[/red] {fmsg}")
+        elif self.warnings:
+            warning(f"{len(self.warnings)} warning(s) found")
+            for wmsg in self.warnings:
+                console.print(f"    [yellow]⚠[/yellow] {wmsg}")
+        else:
+            success("All checks passed! System is healthy.")
 
 def run_doctor() -> int:
     """

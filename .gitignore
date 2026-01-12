@@ -30,6 +30,7 @@ venv312/
 ENV/
 env.bak/
 venv.bak/
+.venv/
 
 # ==============================
 # Distribution / Packaging

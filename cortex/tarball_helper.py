@@ -371,19 +371,27 @@ class TarballHelper:
                 dep.found = shutil.which(dep.name) is not None
             elif dep.dep_type == "pkg-config" and dep.apt_package:
                 # Check via pkg-config
-                result = subprocess.run(
-                    ["pkg-config", "--exists", dep.name],
-                    capture_output=True,
-                )
-                dep.found = result.returncode == 0
+                try:
+                    result = subprocess.run(
+                        ["pkg-config", "--exists", dep.name],
+                        capture_output=True,
+                        timeout=5,
+                    )
+                    dep.found = result.returncode == 0
+                except subprocess.TimeoutExpired:
+                    dep.found = False
             elif dep.apt_package:
                 # Check if apt package is installed
-                result = subprocess.run(
-                    ["dpkg-query", "-W", "-f=${Status}", dep.apt_package],
-                    capture_output=True,
-                    text=True,
-                )
-                dep.found = "install ok installed" in result.stdout
+                try:
+                    result = subprocess.run(
+                        ["dpkg-query", "-W", "-f=${Status}", dep.apt_package],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    dep.found = "install ok installed" in result.stdout
+                except subprocess.TimeoutExpired:
+                    dep.found = False
 
     def _generate_build_commands(self, build_system: BuildSystem, source_dir: Path) -> list[str]:
         """Generate suggested build commands for the build system."""
@@ -448,7 +456,12 @@ class TarballHelper:
         cmd = ["sudo", "apt-get", "install", "-y"] + packages
 
         result = subprocess.run(cmd)
-        return result.returncode == 0
+        if result.returncode != 0:
+            console.print(
+                "[red]Package installation failed. Check the output above for details.[/red]"
+            )
+            return False
+        return True
 
     def find_alternative(self, name: str) -> Optional[str]:
         """Check if there's a packaged alternative to building from source.
@@ -549,12 +562,7 @@ class TarballHelper:
                     console.print(f"  - {pkg}")
             return True
 
-        # Remove from history
-        del history[name]
-        self._save_history(history)
-
-        console.print(f"[green]Removed '{name}' from tracking.[/green]")
-
+        # Handle package removal first (before removing from history)
         if packages:
             remove_pkgs = Confirm.ask(
                 f"Remove {len(packages)} packages that were installed for this build?"
@@ -563,6 +571,12 @@ class TarballHelper:
                 cmd = ["sudo", "apt-get", "remove", "-y"] + packages
                 subprocess.run(cmd)
 
+        # Remove from history after all user interactions
+        del history[name]
+        self._save_history(history)
+
+        console.print(f"[green]Removed '{name}' from tracking.[/green]")
+
         return True
 
     def _load_history(self) -> dict:
@@ -570,13 +584,13 @@ class TarballHelper:
         if not self.history_file.exists():
             return {}
         try:
-            return json.loads(self.history_file.read_text())
+            return json.loads(self.history_file.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             return {}
 
     def _save_history(self, history: dict) -> None:
         """Save installation history to file."""
-        self.history_file.write_text(json.dumps(history, indent=2))
+        self.history_file.write_text(json.dumps(history, indent=2), encoding="utf-8")
 
 
 def run_analyze_command(source_dir: str) -> None:

@@ -383,8 +383,7 @@ class CortexCLI:
 
         if suggested_name != original_name:
             cx_print(
-                f"💡 No GPU detected, using '{suggested_name}' instead of '{original_name}'",
-                "info",
+                f"💡 No GPU detected, using '{suggested_name}' instead of '{original_name}'", "info"
             )
 
         stack = manager.find_stack(suggested_name)
@@ -789,12 +788,7 @@ class CortexCLI:
                         success, parallel_tasks = asyncio.run(
                             run_parallel_install(
                                 commands=commands,
-                                descriptions=[
-                                    f"Step {
-                                        i +
-                                        1}"
-                                    for i in range(len(commands))
-                                ],
+                                descriptions=[f"Step {i +1}" for i in range(len(commands))],
                                 timeout=300,
                                 stop_on_error=True,
                                 log_callback=parallel_log_callback,
@@ -850,20 +844,14 @@ class CortexCLI:
                             history.update_installation(
                                 install_id, InstallationStatus.FAILED, str(e)
                             )
-                        self._print_error(
-                            f"Parallel execution failed: {
-                                str(e)}"
-                        )
+                        self._print_error(f"Parallel execution failed: {str(e)}")
                         return 1
                     except Exception as e:
                         if install_id:
                             history.update_installation(
                                 install_id, InstallationStatus.FAILED, str(e)
                             )
-                        self._print_error(
-                            f"Unexpected parallel execution error: {
-                                str(e)}"
-                        )
+                        self._print_error(f"Unexpected parallel execution error: {str(e)}")
                         if self.verbose:
                             import traceback
 
@@ -872,12 +860,7 @@ class CortexCLI:
 
                 coordinator = InstallationCoordinator(
                     commands=commands,
-                    descriptions=[
-                        f"Step {
-                            i +
-                            1}"
-                        for i in range(len(commands))
-                    ],
+                    descriptions=[f"Step {i +1}" for i in range(len(commands))],
                     timeout=300,
                     stop_on_error=True,
                     progress_callback=progress_callback,
@@ -905,18 +888,11 @@ class CortexCLI:
                         )
 
                     if result.failed_step is not None:
-                        self._print_error(
-                            f"Installation failed at step {
-                                result.failed_step + 1}"
-                        )
+                        self._print_error(f"Installation failed at step {result.failed_step + 1}")
                     else:
                         self._print_error("Installation failed")
                     if result.error_message:
-                        print(
-                            f"  Error: {
-                                result.error_message}",
-                            file=sys.stderr,
-                        )
+                        print(f"  Error: {result.error_message}", file=sys.stderr)
                     if install_id:
                         print(f"\n📝 Installation recorded (ID: {install_id})")
                         print(f"   View details: cortex history {install_id}")
@@ -958,12 +934,7 @@ class CortexCLI:
 
             cache = SemanticCache()
             stats = cache.stats()
-            hit_rate = (
-                f"{
-                stats.hit_rate * 100:.1f}%"
-                if stats.total
-                else "0.0%"
-            )
+            hit_rate = f"{stats.hit_rate * 100:.1f}%" if stats.total else "0.0%"
 
             cx_header("Cache Stats")
             cx_print(f"Hits: {stats.hits}", "info")
@@ -1037,12 +1008,7 @@ class CortexCLI:
                         packages += f" +{len(r.packages) - 2}"
 
                     print(
-                        f"{
-                            r.id:<18} {
-                            date:<20} {
-                            r.operation_type.value:<12} {
-                            packages:<30} {
-                            r.status.value:<15}"
+                        f"{r.id:<18} {date:<20} {r.operation_type.value:<12} {packages:<30} {r.status.value:<15}"
                     )
 
                 return 0
@@ -1233,15 +1199,9 @@ class CortexCLI:
                 if show_encrypted:
                     try:
                         value = env_mgr.get_variable(app, var.key, decrypt=True)
-                        console.print(
-                            f"  {
-                                var.key}: {value} [dim](decrypted)[/dim]"
-                        )
+                        console.print(f"  {var.key}: {value} [dim](decrypted)[/dim]")
                     except ValueError:
-                        console.print(
-                            f"  {
-                                var.key}: [red][decryption failed][/red]"
-                        )
+                        console.print(f"  {var.key}: [red][decryption failed][/red]")
                 else:
                     console.print(f"  {var.key}: [yellow][encrypted][/yellow]")
             else:

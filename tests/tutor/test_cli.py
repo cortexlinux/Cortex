@@ -21,6 +21,7 @@ from cortex.tutor.cli import (
     create_parser,
     main,
 )
+from cortex.tutor.config import reset_config
 
 
 class TestCreateParser:
@@ -107,8 +108,6 @@ class TestCmdTeach:
     @patch("cortex.tutor.agents.tutor_agent.InteractiveTutor")
     def test_successful_teach(self, mock_tutor_class):
         """Test successful teach session."""
-        from cortex.tutor.config import reset_config
-
         reset_config()  # Reset config singleton
 
         mock_tutor = Mock()
@@ -122,8 +121,6 @@ class TestCmdTeach:
     @patch("cortex.tutor.agents.tutor_agent.InteractiveTutor")
     def test_teach_with_value_error(self, mock_tutor_class):
         """Test teach handles ValueError."""
-        from cortex.tutor.config import reset_config
-
         reset_config()
 
         mock_tutor_class.side_effect = ValueError("Test error")
@@ -136,8 +133,6 @@ class TestCmdTeach:
     @patch("cortex.tutor.agents.tutor_agent.InteractiveTutor")
     def test_teach_with_keyboard_interrupt(self, mock_tutor_class):
         """Test teach handles KeyboardInterrupt."""
-        from cortex.tutor.config import reset_config
-
         reset_config()
 
         mock_tutor = Mock()
@@ -163,8 +158,6 @@ class TestCmdQuestion:
     @patch("cortex.tutor.agents.tutor_agent.TutorAgent")
     def test_successful_question(self, mock_agent_class):
         """Test successful question."""
-        from cortex.tutor.config import reset_config
-
         reset_config()
 
         mock_agent = Mock()
@@ -186,8 +179,6 @@ class TestCmdQuestion:
     @patch("cortex.tutor.agents.tutor_agent.TutorAgent")
     def test_question_with_code_example(self, mock_agent_class):
         """Test question with code example in response."""
-        from cortex.tutor.config import reset_config
-
         reset_config()
 
         mock_agent = Mock()
@@ -213,8 +204,6 @@ class TestCmdQuestion:
     @patch("cortex.tutor.agents.tutor_agent.TutorAgent")
     def test_question_validation_failed(self, mock_agent_class):
         """Test question when validation fails."""
-        from cortex.tutor.config import reset_config
-
         reset_config()
 
         mock_agent = Mock()

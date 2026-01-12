@@ -169,7 +169,9 @@ class QuizContext(BaseModel):
         feedback: str = "",
     ) -> "QuizContext":
         """Create QuizContext from raw results."""
-        score = (correct / total * 100) if total > 0 else 0
+        if total < 1:
+            raise ValueError("total must be at least 1")
+        score = (correct / total) * 100
         return cls(
             package_name=package_name,
             questions_total=total,

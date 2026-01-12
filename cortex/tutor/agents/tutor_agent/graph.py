@@ -107,6 +107,18 @@ def load_cache_node(state: TutorAgentState) -> TutorAgentState:
     return state
 
 
+def _infer_student_level(profile: dict) -> str:
+    """Infer student level from profile based on mastered concepts."""
+    mastered = profile.get("mastered_concepts", [])
+    mastered_count = len(mastered)
+
+    if mastered_count >= 10:
+        return "advanced"
+    elif mastered_count >= 5:
+        return "intermediate"
+    return "beginner"
+
+
 def generate_lesson_node(state: TutorAgentState) -> TutorAgentState:
     """
     ACT Phase - Generation Path: Generate new lesson content.
@@ -118,11 +130,14 @@ def generate_lesson_node(state: TutorAgentState) -> TutorAgentState:
 
     add_checkpoint(state, "generate_start", "ok", f"Generating lesson for {package_name}")
 
+    # Determine student level dynamically from profile
+    student_level = profile.get("student_level") or _infer_student_level(profile)
+
     try:
         generator = LessonGeneratorTool()
         result = generator._run(
             package_name=package_name,
-            student_level="beginner",  # Could be dynamic based on profile
+            student_level=student_level,
             learning_style=profile.get("learning_style", "reading"),
             skip_areas=profile.get("mastered_concepts", []),
         )

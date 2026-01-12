@@ -4,7 +4,7 @@ Progress Context - Pydantic contract for learning progress output.
 Defines the structured output schema for progress tracking.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
@@ -96,7 +96,8 @@ class ProgressContext(BaseModel):
 
     # Metadata
     last_updated: datetime = Field(
-        default_factory=datetime.utcnow, description="Last update timestamp"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Last update timestamp",
     )
 
     def get_package_progress(self, package_name: str) -> PackageProgress | None:
@@ -154,7 +155,10 @@ class QuizContext(BaseModel):
     feedback: str = Field(..., description="Feedback on quiz performance")
     weak_areas: list[str] = Field(default_factory=list, description="Areas that need improvement")
     strong_areas: list[str] = Field(default_factory=list, description="Areas of strength")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Quiz completion time")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Quiz completion time",
+    )
 
     @classmethod
     def from_results(

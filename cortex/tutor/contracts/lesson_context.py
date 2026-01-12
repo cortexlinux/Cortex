@@ -4,7 +4,7 @@ Lesson Context - Pydantic contract for lesson generation output.
 Defines the structured output schema for lesson content.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -95,7 +95,8 @@ class LessonContext(BaseModel):
     cached: bool = Field(default=False, description="Whether result came from cache")
     cost_gbp: float = Field(default=0.0, description="Cost for LLM calls", ge=0.0)
     generated_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Timestamp of generation (UTC)"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Timestamp of generation (UTC)",
     )
 
     def to_json(self) -> str:

@@ -236,6 +236,14 @@ class SQLiteStore:
                 ),
             )
             conn.commit()
+            # lastrowid returns 0 on UPDATE, so fetch the actual ID
+            if cursor.lastrowid == 0:
+                id_cursor = conn.execute(
+                    "SELECT id FROM learning_progress WHERE package_name = ? AND topic = ?",
+                    (progress.package_name, progress.topic),
+                )
+                row = id_cursor.fetchone()
+                return row["id"] if row else 0
             return cursor.lastrowid
 
     def mark_topic_completed(self, package_name: str, topic: str, score: float = 1.0) -> None:
@@ -418,30 +426,70 @@ class SQLiteStore:
 
     def add_mastered_concept(self, concept: str) -> None:
         """
-        Add a mastered concept to the student profile.
+        Add a mastered concept to the student profile (atomic operation).
 
         Args:
             concept: Concept that was mastered.
         """
-        profile = self.get_student_profile()
-        if concept not in profile.mastered_concepts:
-            profile.mastered_concepts.append(concept)
-            # Remove from weak concepts if present
-            if concept in profile.weak_concepts:
-                profile.weak_concepts.remove(concept)
-            self.update_student_profile(profile)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            # Atomic read-modify-write within single connection
+            cursor = conn.execute("SELECT * FROM student_profile LIMIT 1")
+            row = cursor.fetchone()
+            if not row:
+                self._create_default_profile()
+                cursor = conn.execute("SELECT * FROM student_profile LIMIT 1")
+                row = cursor.fetchone()
+
+            mastered = json.loads(row["mastered_concepts"])
+            weak = json.loads(row["weak_concepts"])
+
+            if concept not in mastered:
+                mastered.append(concept)
+                # Remove from weak concepts if present
+                if concept in weak:
+                    weak.remove(concept)
+
+                conn.execute(
+                    """UPDATE student_profile SET
+                        mastered_concepts = ?,
+                        weak_concepts = ?,
+                        last_session = ?
+                    WHERE id = ?""",
+                    (json.dumps(mastered), json.dumps(weak), now, row["id"]),
+                )
+                conn.commit()
 
     def add_weak_concept(self, concept: str) -> None:
         """
-        Add a weak concept to the student profile.
+        Add a weak concept to the student profile (atomic operation).
 
         Args:
             concept: Concept the student struggles with.
         """
-        profile = self.get_student_profile()
-        if concept not in profile.weak_concepts and concept not in profile.mastered_concepts:
-            profile.weak_concepts.append(concept)
-            self.update_student_profile(profile)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            # Atomic read-modify-write within single connection
+            cursor = conn.execute("SELECT * FROM student_profile LIMIT 1")
+            row = cursor.fetchone()
+            if not row:
+                self._create_default_profile()
+                cursor = conn.execute("SELECT * FROM student_profile LIMIT 1")
+                row = cursor.fetchone()
+
+            mastered = json.loads(row["mastered_concepts"])
+            weak = json.loads(row["weak_concepts"])
+
+            if concept not in weak and concept not in mastered:
+                weak.append(concept)
+                conn.execute(
+                    """UPDATE student_profile SET
+                        weak_concepts = ?,
+                        last_session = ?
+                    WHERE id = ?""",
+                    (json.dumps(weak), now, row["id"]),
+                )
+                conn.commit()
 
     # ==================== Lesson Cache Methods ====================
 

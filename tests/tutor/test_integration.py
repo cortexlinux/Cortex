@@ -4,10 +4,9 @@ Integration tests for Intelligent Tutor.
 End-to-end tests for the complete tutoring workflow.
 """
 
-import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 

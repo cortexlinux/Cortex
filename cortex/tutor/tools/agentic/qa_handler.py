@@ -4,7 +4,6 @@ Q&A Handler Tool - Agentic tool for handling user questions.
 This tool uses LLM (Claude via LangChain) to answer questions about packages.
 """
 
-from pathlib import Path
 from typing import Any
 
 from langchain.tools import BaseTool

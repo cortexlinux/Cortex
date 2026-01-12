@@ -4,7 +4,6 @@ Tests for progress tracker and SQLite store.
 Tests learning progress persistence and retrieval.
 """
 
-import os
 import tempfile
 from pathlib import Path
 

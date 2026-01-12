@@ -4,7 +4,7 @@ Tests for agentic tools structure methods.
 Tests the _structure_response methods with mocked responses.
 """
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 

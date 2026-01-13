@@ -3,7 +3,7 @@
 > **Interactive package education system powered by Claude AI**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Test Coverage](https://img.shields.io/badge/coverage-85.6%25-brightgreen.svg)](https://github.com/cortexlinux/cortex)
+[![Test Coverage](https://img.shields.io/badge/coverage-74%25-brightgreen.svg)](https://github.com/cortexlinux/cortex)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ---
@@ -268,20 +268,20 @@ cortex tutor --reset docker
 │                      TutorAgent                                  │
 │              (cortex/tutor/agents/tutor_agent/)                  │
 │                                                                  │
-│   • Orchestrates the Plan→Act→Reflect workflow                   │
-│   • Manages state across phases                                  │
-│   • Coordinates tools and LLM calls                              │
+│   • Orchestrates lesson generation and Q&A                       │
+│   • Uses cortex.llm_router for LLM calls                         │
+│   • Coordinates tools and caching                                │
 └─────────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
 ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  Deterministic  │ │    Agentic      │ │    Memory       │
-│     Tools       │ │     Tools       │ │    Layer        │
+│  Deterministic  │ │   LLM Layer     │ │    Memory       │
+│     Tools       │ │  (llm.py)       │ │    Layer        │
 │                 │ │                 │ │                 │
-│ • validators    │ │ • lesson_gen    │ │ • SQLite store  │
-│ • lesson_loader │ │ • examples      │ │ • Cache mgmt    │
-│ • progress_trk  │ │ • qa_handler    │ │ • Progress DB   │
+│ • validators    │ │ • llm_router    │ │ • SQLite store  │
+│ • lesson_loader │ │ • generate_lesson│ │ • Cache mgmt    │
+│ • progress_trk  │ │ • answer_question│ │ • Progress DB   │
 └─────────────────┘ └─────────────────┘ └─────────────────┘
         │                   │                   │
         │                   ▼                   │
@@ -303,13 +303,13 @@ cortex tutor --reset docker
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Plan→Act→Reflect Pattern
+### Cache-First Pattern
 
-The tutor uses **LangGraph** to implement a robust 3-phase workflow:
+The tutor uses a simple cache-first pattern to minimize API costs:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        PLAN PHASE                                │
+│                      CHECK CACHE                                 │
 │                                                                  │
 │   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
 │   │ Check Cache  │───▶│  Has Cache?  │───▶│ Use Cached   │      │
@@ -317,47 +317,34 @@ The tutor uses **LangGraph** to implement a robust 3-phase workflow:
 │   └──────────────┘    └──────────────┘    └──────────────┘      │
 │                              │ N                                 │
 │                              ▼                                   │
-│                       ┌──────────────┐                          │
-│                       │ LLM Planner  │                          │
-│                       │  (~$0.01)    │                          │
-│                       └──────────────┘                          │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         ACT PHASE                                │
+│                      GENERATE CONTENT                            │
 │                                                                  │
 │   ┌────────────────────────┐    ┌────────────────────────┐      │
-│   │  Deterministic Tools   │    │    Agentic Tools       │      │
-│   │       (FREE)           │    │   (LLM-Powered)        │      │
+│   │  cortex.llm_router     │───▶│    Claude API          │      │
 │   │                        │    │                        │      │
-│   │  • Load user progress  │    │  • Generate lesson     │      │
-│   │  • Validate inputs     │    │  • Create examples     │      │
-│   │  • Check cache         │    │  • Answer questions    │      │
-│   │  • Track time          │    │  • Build tutorials     │      │
+│   │  • generate_lesson()   │    │  • Lesson content      │      │
+│   │  • answer_question()   │    │  • Q&A responses       │      │
 │   └────────────────────────┘    └────────────────────────┘      │
+│                                                                  │
+│  Cost: ~$0.01-0.02 per request                                  │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                       REFLECT PHASE                              │
+│                      CACHE & RETURN                              │
 │                                                                  │
 │   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
-│   │  Validate    │───▶│   Passed?    │───▶│   Cache &    │      │
-│   │   Output     │    │              │ Y  │   Return     │      │
-│   │   (FREE)     │    └──────────────┘    └──────────────┘      │
-│                              │ N                                 │
-│                              ▼                                   │
-│                       ┌──────────────┐                          │
-│                       │   Retry or   │                          │
-│                       │   Fallback   │                          │
-│                       └──────────────┘                          │
+│   │ Parse JSON   │───▶│ Cache Result │───▶│   Return     │      │
+│   │   Response   │    │  (24h TTL)   │    │   to User    │      │
+│   └──────────────┘    └──────────────┘    └──────────────┘      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Tool Classification
-
-Tools are classified by whether they require LLM calls:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -379,19 +366,21 @@ Tools are classified by whether they require LLM calls:
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│                      AGENTIC TOOLS                               │
-│                   (LLM-Powered - Smart)                          │
+│                      LLM FUNCTIONS                               │
+│                   (cortex/tutor/llm.py)                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │lesson_generator │  │examples_provider│  │   qa_handler    │  │
-│  │                 │  │                 │  │                 │  │
-│  │ • Explanations  │  │ • Code samples  │  │ • Q&A responses │  │
-│  │ • Concepts      │  │ • Use cases     │  │ • Follow-ups    │  │
-│  │ • Theory        │  │ • Best practice │  │ • Clarifications│  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
+│  ┌─────────────────────────────┐  ┌─────────────────────────┐   │
+│  │    generate_lesson()        │  │   answer_question()     │   │
+│  │                             │  │                         │   │
+│  │ • Summary & explanation     │  │ • Q&A responses         │   │
+│  │ • Code examples             │  │ • Code examples         │   │
+│  │ • Tutorial steps            │  │ • Related topics        │   │
+│  │ • Best practices            │  │ • Confidence score      │   │
+│  └─────────────────────────────┘  └─────────────────────────┘   │
 │                                                                  │
-│  Speed: 2-5s | Cost: ~$0.02 | Reliability: 95%+ (with fallback) │
+│  Uses cortex.llm_router for task-aware routing                  │
+│  Speed: 2-5s | Cost: ~$0.01-0.02 | Reliability: 95%+            │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -417,8 +406,8 @@ User Input                Processing                    Output
         │ Cache Miss                                        │
         ▼                                                   │
 ┌───────────────┐     ┌───────────────┐                    │
-│   LangGraph   │────▶│  Claude API   │                    │
-│   Workflow    │     └───────────────┘                    │
+│  llm_router   │────▶│  Claude API   │                    │
+│               │     └───────────────┘                    │
 └───────────────┘                                          │
         │                                                   │
         │ Generated Content                                 │
@@ -446,45 +435,33 @@ cortex/tutor/
 ├── cli.py                      # CLI commands and argument parsing
 ├── config.py                   # Configuration management
 ├── branding.py                 # Rich console UI utilities
+├── llm.py                      # LLM functions (uses cortex.llm_router)
 │
-├── agents/                     # LangGraph Agents
+├── agents/                     # Agent implementations
 │   └── tutor_agent/
 │       ├── __init__.py
-│       ├── tutor_agent.py      # Main TutorAgent class
-│       ├── graph.py            # LangGraph workflow definition
-│       └── state.py            # TypedDict state management
+│       └── tutor_agent.py      # TutorAgent & InteractiveTutor
 │
 ├── tools/                      # Tool implementations
-│   ├── deterministic/          # No LLM required (fast, free)
-│   │   ├── progress_tracker.py # SQLite progress operations
-│   │   ├── lesson_loader.py    # Cache and fallback loading
-│   │   └── validators.py       # Input validation
-│   │
-│   └── agentic/                # LLM-powered (smart, costs $)
-│       ├── lesson_generator.py # Generate lesson content
-│       ├── examples_provider.py# Generate code examples
-│       └── qa_handler.py       # Handle Q&A interactions
+│   └── deterministic/          # No LLM required (fast, free)
+│       ├── progress_tracker.py # SQLite progress operations
+│       ├── lesson_loader.py    # Cache and fallback loading
+│       └── validators.py       # Input validation
 │
-├── contracts/                  # Pydantic output schemas
+├── contracts/                  # Data structures
 │   ├── lesson_context.py       # Lesson data structure
 │   └── progress_context.py     # Progress data structure
-│
-├── prompts/                    # 7-Layer prompt templates
-│   ├── agents/tutor/system.md  # TutorAgent system prompt
-│   └── tools/
-│       ├── lesson_generator.md
-│       ├── examples_provider.md
-│       └── qa_handler.md
 │
 ├── memory/                     # Persistence layer
 │   └── sqlite_store.py         # SQLite operations
 │
-└── tests/                      # Test suite (87% coverage)
-    ├── test_tutor_agent.py
+└── tests/                      # Test suite (74% coverage)
+    ├── test_cli.py
     ├── test_tools.py
     ├── test_progress_tracker.py
     ├── test_integration.py
-    └── ...
+    ├── test_interactive_tutor.py
+    └── test_validators.py
 ```
 
 ### Database Schema
@@ -529,76 +506,6 @@ CREATE TABLE lesson_cache (
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL
 );
-```
-
-### State Management
-
-The TutorAgent uses TypedDict for type-safe state:
-
-```python
-class TutorAgentState(TypedDict):
-    """State passed through the LangGraph workflow."""
-
-    # Input
-    input: Dict[str, Any]          # package_name, question, etc.
-    force_fresh: bool              # Skip cache flag
-
-    # Planning
-    plan: Dict[str, Any]           # Plan phase output
-    cache_hit: bool                # Whether cache was used
-
-    # Context
-    student_profile: Dict          # User's learning history
-    lesson_content: Dict           # Current lesson data
-
-    # Execution
-    results: Dict[str, Any]        # Tool execution results
-    errors: List[Dict]             # Any errors encountered
-
-    # Metadata
-    cost_gbp: float                # Accumulated API cost
-    checkpoints: List[str]         # Workflow checkpoints
-```
-
-### 7-Layer Prompt Architecture
-
-Each prompt follows a structured format:
-
-```markdown
-# Layer 1: IDENTITY
-You are an expert Linux package tutor...
-
-# Layer 2: ROLE & BOUNDARIES
-You can explain packages, provide examples...
-You cannot execute commands, access the filesystem...
-
-# Layer 3: ANTI-HALLUCINATION RULES
-- NEVER invent package features
-- NEVER claim capabilities that don't exist
-- If unsure, say "I don't have information about..."
-
-# Layer 4: CONTEXT & INPUTS
-Package: {package_name}
-User Level: {skill_level}
-Previous Topics: {completed_topics}
-
-# Layer 5: TOOLS & USAGE
-Available: lesson_generator, examples_provider
-When to use each tool...
-
-# Layer 6: WORKFLOW & REASONING
-1. First, assess user's current knowledge
-2. Then, generate appropriate content
-3. Finally, validate and structure output
-
-# Layer 7: OUTPUT FORMAT
-Return JSON matching LessonContext schema:
-{
-  "summary": "...",
-  "explanation": "...",
-  "code_examples": [...],
-  "best_practices": [...]
-}
 ```
 
 ---
@@ -750,17 +657,16 @@ pytest cortex/tutor/tests/test_tutor_agent.py -v
 
 ### Test Coverage
 
-Current coverage: **85.6%** (266 tests)
+Current coverage: **74%** (158 tests)
 
 | Module | Coverage |
 |--------|----------|
-| `agents/tutor_agent/graph.py` | 99% |
-| `agents/tutor_agent/state.py` | 97% |
-| `agents/tutor_agent/tutor_agent.py` | 88% |
-| `memory/sqlite_store.py` | 95% |
-| `tools/deterministic/validators.py` | 95% |
-| `branding.py` | 92% |
-| `cli.py` | 89% |
+| `agents/tutor_agent/tutor_agent.py` | 59% |
+| `memory/sqlite_store.py` | 92% |
+| `tools/deterministic/validators.py` | 92% |
+| `tools/deterministic/progress_tracker.py` | 84% |
+| `tools/deterministic/lesson_loader.py` | 75% |
+| `cli.py` | 91% |
 
 ---
 

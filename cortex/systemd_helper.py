@@ -5,7 +5,6 @@ failure diagnostics, and dependency visualization.
 """
 
 import re
-import shlex
 import subprocess
 from dataclasses import dataclass
 from enum import Enum
@@ -15,6 +14,14 @@ from rich.prompt import Confirm, Prompt
 from rich.tree import Tree
 
 from cortex.branding import console
+
+# Timeout constants (in seconds)
+SYSTEMCTL_TIMEOUT = 10
+JOURNALCTL_TIMEOUT = 30
+VERSION_CHECK_TIMEOUT = 5
+
+# Valid service name pattern
+SERVICE_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_@.-]+$')
 
 
 class ServiceState(Enum):
@@ -62,6 +69,36 @@ class ServiceStatus:
     main_pid_code: str = ""
 
 
+def _validate_service_name(service_name: str) -> str:
+    """Validate and normalize a service name.
+
+    Args:
+        service_name: The service name to validate.
+
+    Returns:
+        Normalized service name with .service suffix.
+
+    Raises:
+        ValueError: If the service name is invalid.
+    """
+    if not service_name:
+        raise ValueError("Service name cannot be empty")
+
+    # Remove .service suffix for validation
+    base_name = service_name.replace(".service", "")
+
+    if not SERVICE_NAME_PATTERN.match(base_name):
+        raise ValueError(
+            f"Invalid service name: {service_name}. "
+            "Service names can only contain letters, numbers, underscores, @, dots, and hyphens."
+        )
+
+    # Normalize with .service suffix
+    if not service_name.endswith(".service"):
+        return f"{service_name}.service"
+    return service_name
+
+
 class SystemdHelper:
     """
     Helper for managing and understanding systemd services.
@@ -86,7 +123,7 @@ class SystemdHelper:
                 ["systemctl", "--version"],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=VERSION_CHECK_TIMEOUT,
             )
             if result.returncode != 0:
                 raise RuntimeError("systemd is not available on this system")
@@ -105,26 +142,24 @@ class SystemdHelper:
             ServiceStatus object with parsed information.
 
         Raises:
-            ValueError: If the service name is empty.
+            ValueError: If the service name is invalid.
+            RuntimeError: If the status cannot be retrieved.
         """
-        if not service_name:
-            raise ValueError("Service name cannot be empty")
-
-        # Normalize service name
-        if not service_name.endswith(".service"):
-            service_name = f"{service_name}.service"
+        service_name = _validate_service_name(service_name)
 
         try:
             result = subprocess.run(
                 ["systemctl", "show", service_name, "--no-pager"],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=SYSTEMCTL_TIMEOUT,
             )
             if result.returncode != 0:
                 raise RuntimeError(
                     f"Failed to get service status for {service_name}: {result.stderr.strip()}"
                 )
+        except FileNotFoundError:
+            raise RuntimeError("systemctl command not found - is systemd installed?")
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"Timeout getting service status for {service_name}")
 
@@ -227,32 +262,45 @@ class SystemdHelper:
         Returns:
             Human-readable explanation of the exit code.
         """
+        # Common exit codes
         common_codes = {
             1: "  Likely cause: General error or misconfiguration",
-            2: "  Likely cause: Misuse of command or invalid arguments",
+            2: "  Likely cause: Misuse of command, invalid arguments, or bad configuration",
             126: "  Likely cause: Command found but not executable (permission issue)",
             127: "  Likely cause: Command not found (check if binary exists)",
             128: "  Likely cause: Invalid exit argument",
-            130: "  Likely cause: Script terminated by Ctrl+C",
+            130: "  Likely cause: Script terminated by Ctrl+C (SIGINT)",
             137: "  Likely cause: Process killed (SIGKILL) - possibly out of memory",
             139: "  Likely cause: Segmentation fault (SIGSEGV) - program crash",
+            141: "  Likely cause: Broken pipe (SIGPIPE) - write to closed connection",
+            142: "  Likely cause: Alarm timeout (SIGALRM)",
             143: "  Likely cause: Process terminated (SIGTERM) - graceful shutdown requested",
             255: "  Likely cause: Exit status out of range or SSH error",
         }
-        return common_codes.get(
-            exit_code, f"  Exit code {exit_code} - check service logs for details"
-        )
+
+        if exit_code in common_codes:
+            return common_codes[exit_code]
+
+        # Exit codes 128+N mean killed by signal N
+        if exit_code > 128:
+            signal_num = exit_code - 128
+            return f"  Likely cause: Process killed by signal {signal_num}"
+
+        return f"  Exit code {exit_code} - check service logs for details"
 
     def diagnose_failure(self, service_name: str, lines: int = 50) -> str:
         """Diagnose why a service failed using journal logs.
 
         Args:
             service_name: Name of the service to diagnose.
-            lines: Number of log lines to analyze.
+            lines: Number of log lines to analyze (1-1000).
 
         Returns:
             Diagnostic report with actionable advice.
         """
+        # Validate lines parameter
+        lines = max(1, min(1000, lines))
+
         status = self.get_service_status(service_name)
 
         report = []
@@ -262,15 +310,33 @@ class SystemdHelper:
         report.append(self.explain_status(service_name))
         report.append("")
 
-        # Get recent logs
-        result = subprocess.run(
-            ["journalctl", "-u", service_name, "-n", str(lines), "--no-pager"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-
-        logs = result.stdout
+        # Get recent logs with proper error handling
+        try:
+            result = subprocess.run(
+                [
+                    "journalctl",
+                    "-u",
+                    service_name,
+                    "-n",
+                    str(lines),
+                    "--no-pager",
+                    "--since",
+                    "1 hour ago",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=JOURNALCTL_TIMEOUT,
+            )
+            if result.returncode != 0:
+                report.append(f"[red]Failed to read logs: {result.stderr.strip()}[/red]")
+                return "\n".join(report)
+            logs = result.stdout
+        except FileNotFoundError:
+            report.append("[red]journalctl command not found - cannot read logs[/red]")
+            return "\n".join(report)
+        except subprocess.TimeoutExpired:
+            report.append("[yellow]Timeout reading logs - journal may be very large[/yellow]")
+            logs = ""
 
         # Analyze logs for common issues
         report.append("[bold]Log Analysis:[/bold]")
@@ -331,14 +397,17 @@ class SystemdHelper:
         report.append("")
         report.append("[bold]Recent Logs:[/bold]")
         # Show last 20 lines of logs
-        log_lines = logs.strip().split("\n")[-20:]
-        for line in log_lines:
-            if "error" in line.lower() or "fail" in line.lower():
-                report.append(f"  [red]{line}[/red]")
-            elif "warn" in line.lower():
-                report.append(f"  [yellow]{line}[/yellow]")
-            else:
-                report.append(f"  {line}")
+        log_lines = logs.strip().split("\n")[-20:] if logs else []
+        if not log_lines or (len(log_lines) == 1 and not log_lines[0]):
+            report.append("  [dim]No logs found for this service[/dim]")
+        else:
+            for line in log_lines:
+                if "error" in line.lower() or "fail" in line.lower():
+                    report.append(f"  [red]{line}[/red]")
+                elif "warn" in line.lower():
+                    report.append(f"  [yellow]{line}[/yellow]")
+                else:
+                    report.append(f"  {line}")
 
         return "\n".join(report)
 
@@ -351,8 +420,7 @@ class SystemdHelper:
         Returns:
             Rich Tree object showing dependencies.
         """
-        if not service_name.endswith(".service"):
-            service_name = f"{service_name}.service"
+        service_name = _validate_service_name(service_name)
 
         tree = Tree(f"[bold cyan]{service_name}[/bold cyan]")
 
@@ -361,52 +429,69 @@ class SystemdHelper:
                 ["systemctl", "list-dependencies", service_name, "--no-pager"],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=SYSTEMCTL_TIMEOUT,
             )
+        except FileNotFoundError:
+            tree.add("[red]systemctl command not found[/red]")
+            return tree
         except subprocess.TimeoutExpired:
             tree.add("[yellow]Timed out fetching dependencies[/yellow]")
             return tree
 
+        if result.returncode != 0:
+            tree.add(f"[red]Error: {result.stderr.strip()}[/red]")
+            return tree
+
         lines = result.stdout.strip().split("\n")[1:]  # Skip header
 
-        # Parse the tree structure
+        # Parse the tree structure with error recovery
         current_nodes = {0: tree}
 
         for line in lines:
             if not line.strip():
                 continue
 
-            # Count indentation (each level is 2 spaces or tree chars)
-            indent = 0
-            clean_line = line
-            for char in line:
-                if char in " │├└─":
-                    indent += 1
+            try:
+                # Count indentation (handle various tree characters)
+                indent = 0
+                for char in line:
+                    if char in " │├└─●○":
+                        indent += 1
+                    else:
+                        break
+
+                # Get the service name - remove tree drawing characters
+                clean_line = re.sub(r"[│├└─●○\s]+", "", line).strip()
+                if not clean_line:
+                    continue
+
+                # Calculate tree level (approximately 2 chars per level)
+                level = indent // 2
+
+                # Color based on unit type
+                if ".target" in clean_line:
+                    styled = f"[blue]{clean_line}[/blue]"
+                elif ".socket" in clean_line:
+                    styled = f"[magenta]{clean_line}[/magenta]"
+                elif ".service" in clean_line:
+                    styled = f"[green]{clean_line}[/green]"
+                elif ".slice" in clean_line:
+                    styled = f"[cyan]{clean_line}[/cyan]"
                 else:
-                    break
+                    styled = clean_line
 
-            # Get the service name
-            clean_line = re.sub(r"[│├└─\s]+", "", line).strip()
-            if not clean_line:
+                # Add to tree with fallback to root
+                parent_level = max(0, level - 1)
+                if parent_level in current_nodes:
+                    new_node = current_nodes[parent_level].add(styled)
+                    current_nodes[level] = new_node
+                else:
+                    # Fallback to root if parent not found
+                    new_node = tree.add(styled)
+                    current_nodes[level] = new_node
+            except Exception:
+                # Skip malformed lines
                 continue
-
-            level = indent // 2
-
-            # Color based on state
-            if ".target" in clean_line:
-                styled = f"[blue]{clean_line}[/blue]"
-            elif ".socket" in clean_line:
-                styled = f"[magenta]{clean_line}[/magenta]"
-            elif ".service" in clean_line:
-                styled = f"[green]{clean_line}[/green]"
-            else:
-                styled = clean_line
-
-            # Add to tree
-            parent_level = max(0, level - 1)
-            if parent_level in current_nodes:
-                new_node = current_nodes[parent_level].add(styled)
-                current_nodes[level] = new_node
 
         return tree
 
@@ -462,10 +547,18 @@ class SystemdHelper:
 
         if environment:
             for key, value in environment.items():
-                # Quote values that contain spaces or special characters
-                if " " in value or '"' in value or "'" in value or "\\" in value:
-                    # Escape existing double quotes and backslashes
-                    escaped_value = value.replace("\\", "\\\\").replace('"', '\\"')
+                # Escape special characters for systemd Environment=
+                # Must escape: backslash, double quote, dollar sign, backtick
+                # Must remove: newlines (not supported in Environment=)
+                needs_quoting = any(c in value for c in ' "$`\n\\')
+                if needs_quoting:
+                    # Remove newlines (not supported)
+                    escaped_value = value.replace("\n", " ")
+                    # Escape in correct order: backslash first, then others
+                    escaped_value = escaped_value.replace("\\", "\\\\")
+                    escaped_value = escaped_value.replace("$", "\\$")
+                    escaped_value = escaped_value.replace("`", "\\`")
+                    escaped_value = escaped_value.replace('"', '\\"')
                     lines.append(f'Environment={key}="{escaped_value}"')
                 else:
                     lines.append(f"Environment={key}={value}")
@@ -541,7 +634,9 @@ class SystemdHelper:
 
         # Installation instructions
         console.print("\n[bold]Installation Instructions:[/bold]")
-        console.print(f"1. Save to: /etc/systemd/system/{service_name}.service")
+        console.print(
+            f"1. Save to: sudo tee /etc/systemd/system/{service_name}.service"
+        )
         console.print("2. Reload systemd: sudo systemctl daemon-reload")
         if start_on_boot:
             console.print(f"3. Enable service: sudo systemctl enable {service_name}")

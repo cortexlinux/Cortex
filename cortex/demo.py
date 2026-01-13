@@ -13,7 +13,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from cortex.branding import show_banner
-from cortex.hardware_detection import detect_hardware
+from cortex.hardware_detection import SystemInfo, detect_hardware
 
 
 class CortexDemo:
@@ -21,7 +21,7 @@ class CortexDemo:
 
     def __init__(self) -> None:
         self.console = Console()
-        self.hw: object | None = None  # Type from hardware_detection.detect_hardware()
+        self.hw: SystemInfo | None = None
         self.is_interactive = sys.stdin.isatty()
         self.installation_id = self._generate_id()
 
@@ -395,7 +395,7 @@ Install a complete stack with: [cyan]cortex stack webdev[/cyan]
         if not self._prompt_command("cortex stack --list"):
             return False
 
-        self.console.print(" [cyan]CX[/cyan]  │ \n")
+        self.console.print()  # Visual spacing before stacks table
 
         # Show stacks table
         stacks_table = Table(title="📦 Available Stacks", show_header=True)

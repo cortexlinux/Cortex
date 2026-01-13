@@ -24,12 +24,9 @@ from cortex.tutor.branding import (
     print_table,
     tutor_print,
 )
-from cortex.tutor.config import Config
+from cortex.tutor.config import Config, DEFAULT_TUTOR_TOPICS
 from cortex.tutor.memory.sqlite_store import SQLiteStore
 from cortex.tutor.tools.deterministic.validators import validate_package_name
-
-# Default number of topics per package for progress tracking
-DEFAULT_TUTOR_TOPICS = 5
 
 
 def create_parser() -> argparse.ArgumentParser:

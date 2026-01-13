@@ -57,7 +57,7 @@ class LessonGeneratorTool(BaseTool):
     )
 
     llm: ChatAnthropic | None = Field(default=None, exclude=True)
-    model_name: str = Field(default="claude-sonnet-4-20250514")
+    model_name: str | None = Field(default=None, description="Model name, defaults to config.model")
 
     class Config:
         arbitrary_types_allowed = True

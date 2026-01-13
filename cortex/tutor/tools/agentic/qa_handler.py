@@ -41,7 +41,7 @@ class QAHandlerTool(BaseTool):
     # Use Any type for llm field to avoid Pydantic forward reference issues
     # The actual type is ChatAnthropic, but it's lazily initialized
     llm: Any = Field(default=None, exclude=True)
-    model_name: str = Field(default="claude-sonnet-4-20250514")
+    model_name: str | None = Field(default=None, description="Model name, defaults to config.model")
 
     # Constants for default values
     _NONE_SPECIFIED: str = "none specified"
@@ -51,8 +51,8 @@ class QAHandlerTool(BaseTool):
 
     def model_post_init(self, __context: Any) -> None:
         """Post-init hook (Pydantic v2 pattern)."""
-        config = get_config()
-        if self.model_name == "claude-sonnet-4-20250514":
+        if self.model_name is None:
+            config = get_config()
             self.model_name = config.model
 
     def _get_llm(self) -> "ChatAnthropic":

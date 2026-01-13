@@ -9,15 +9,13 @@ from typing import Any
 from cortex.tutor.agents.tutor_agent.graph import get_tutor_graph
 from cortex.tutor.agents.tutor_agent.state import TutorAgentState, create_initial_state
 from cortex.tutor.branding import console, tutor_print
+from cortex.tutor.config import DEFAULT_TUTOR_TOPICS
 from cortex.tutor.contracts.lesson_context import LessonContext
 from cortex.tutor.tools.deterministic.progress_tracker import ProgressTrackerTool
 from cortex.tutor.tools.deterministic.validators import (
     validate_package_name,
     validate_question,
 )
-
-# Default number of topics per package for progress tracking
-DEFAULT_TUTOR_TOPICS = 5
 
 
 class TutorAgent:

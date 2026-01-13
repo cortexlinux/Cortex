@@ -14,6 +14,9 @@ from pydantic import BaseModel, Field, field_validator
 # Load environment variables from .env file
 load_dotenv()
 
+# Default number of topics for progress tracking
+DEFAULT_TUTOR_TOPICS = 5
+
 
 class Config(BaseModel):
     """

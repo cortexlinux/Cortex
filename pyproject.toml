@@ -42,23 +42,41 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    # LLM Provider APIs
     "anthropic>=0.18.0",
     "openai>=1.0.0",
-    "rich>=13.0.0",
+    # HTTP requests (for GitHub API, network operations)
+    "requests>=2.32.4",
+    # Configuration file parsing
     "pyyaml>=6.0.0",
+    # Environment variable loading from .env files
     "python-dotenv>=1.0.0",
+    # Encryption for environment variable secrets
+    "cryptography>=42.0.0",
+    # Terminal UI and formatting
+    "rich>=13.0.0",
+    # Type hints for older Python versions
+    "typing-extensions>=4.0.0",
+    # AI Tutor Dependencies (Issue #131)
+    "langchain>=0.3.0,<2.0.0",
+    "langchain-anthropic>=0.3.0,<2.0.0",
+    "langgraph>=0.2.0,<2.0.0",
+    "pydantic>=2.0.0,<3.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "pytest-timeout>=2.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "pytest-timeout>=2.3.0",
+    "black>=24.0.0",
+    "ruff>=0.8.0",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
     "isort>=5.0.0",
+    "build>=0.10.0",
 ]
 security = [
     "bandit>=1.7.0",
@@ -75,6 +93,7 @@ all = [
 
 [project.scripts]
 cortex = "cortex.cli:main"
+tutor = "cortex.tutor.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/cortexlinux/cortex"
@@ -85,7 +104,7 @@ Discussions = "https://github.com/cortexlinux/cortex/discussions"
 Changelog = "https://github.com/cortexlinux/cortex/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
-packages = ["cortex", "cortex.sandbox", "cortex.utils", "cortex.llm", "cortex.kernel_features", "cortex.kernel_features.ebpf"]
+packages = ["cortex", "cortex.sandbox", "cortex.utils", "cortex.llm", "cortex.kernel_features", "cortex.kernel_features.ebpf", "cortex.tutor", "cortex.tutor.agents", "cortex.tutor.agents.tutor_agent", "cortex.tutor.contracts", "cortex.tutor.memory", "cortex.tutor.tools", "cortex.tutor.tools.agentic", "cortex.tutor.tools.deterministic"]
 include-package-data = true
 
 [tool.setuptools.package-data]

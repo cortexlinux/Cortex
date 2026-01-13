@@ -15,11 +15,31 @@ from pathlib import Path
 
 from rich import box
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.tree import Tree
 
 from cortex.branding import console, cx_header
+
+# Timeout constants (in seconds)
+APT_CACHE_TIMEOUT = 10
+DPKG_QUERY_TIMEOUT = 5
+PKG_CONFIG_TIMEOUT = 5
+
+# File size limit for parsing (5MB)
+MAX_FILE_SIZE = 5 * 1024 * 1024
+
+# History schema version
+HISTORY_SCHEMA_VERSION = "1.0"
+
+# Valid prefix paths for installation tracking
+VALID_PREFIX_PATTERNS = [
+    r"^/usr/local(/.*)?$",
+    r"^/opt(/.*)?$",
+    r"^/home/[^/]+(/.*)?$",
+    r"^~(/.*)?$",
+]
 
 
 class BuildSystem(Enum):
@@ -71,6 +91,30 @@ class BuildAnalysis:
     build_commands: list[str] = field(default_factory=list)
 
 
+def _validate_prefix(prefix: str) -> bool:
+    """Validate that a prefix path is reasonable for installation tracking.
+
+    Args:
+        prefix: The prefix path to validate.
+
+    Returns:
+        True if the prefix is valid, False otherwise.
+    """
+    # Expand ~ to home directory
+    expanded = os.path.expanduser(prefix)
+
+    # Must be absolute path
+    if not os.path.isabs(expanded):
+        return False
+
+    # Check against valid patterns
+    for pattern in VALID_PREFIX_PATTERNS:
+        if re.match(pattern, prefix):
+            return True
+
+    return False
+
+
 @dataclass
 class ManualInstall:
     """Record of a manual installation.
@@ -80,7 +124,7 @@ class ManualInstall:
         source_dir: Original source directory.
         installed_at: When the installation occurred.
         packages_installed: Apt packages installed for this build.
-        files_installed: Files installed to the system.
+        files_installed: Files installed to the system (reserved for future use).
         prefix: Installation prefix used.
     """
 
@@ -90,6 +134,14 @@ class ManualInstall:
     packages_installed: list[str] = field(default_factory=list)
     files_installed: list[str] = field(default_factory=list)
     prefix: str = "/usr/local"
+
+    def __post_init__(self) -> None:
+        """Validate the installation record."""
+        if self.prefix and not _validate_prefix(self.prefix):
+            console.print(
+                f"[yellow]Warning: Unusual prefix path '{self.prefix}'. "
+                "Typical prefixes are /usr/local, /opt, or ~/.[/yellow]"
+            )
 
 
 class TarballHelper:
@@ -163,6 +215,9 @@ class TarballHelper:
         "gettext": "gettext",
     }
 
+    # dpkg status string constant
+    DPKG_INSTALLED_STATUS = "install ok installed"
+
     def __init__(self) -> None:
         """Initialize the TarballHelper."""
         self.history_file = Path.home() / ".cortex" / "manual_builds.json"
@@ -176,6 +231,10 @@ class TarballHelper:
 
         Returns:
             The detected BuildSystem type.
+
+        Raises:
+            ValueError: If the path is not a directory.
+            PermissionError: If the directory cannot be accessed.
         """
         if not source_dir.is_dir():
             raise ValueError(f"Not a directory: {source_dir}")
@@ -204,9 +263,17 @@ class TarballHelper:
 
         Returns:
             BuildAnalysis with detected dependencies and suggestions.
+
+        Raises:
+            PermissionError: If the directory cannot be accessed.
+            ValueError: If the path is not a directory.
         """
         source_dir = Path(source_dir).resolve()
-        build_system = self.detect_build_system(source_dir)
+
+        try:
+            build_system = self.detect_build_system(source_dir)
+        except PermissionError:
+            raise PermissionError(f"Permission denied accessing: {source_dir}")
 
         analysis = BuildAnalysis(
             build_system=build_system,
@@ -226,19 +293,43 @@ class TarballHelper:
         # Check what's already installed
         self._check_installed(analysis)
 
-        # Generate missing packages list
+        # Generate missing packages list (deduplicated)
+        seen_packages = set()
         for dep in analysis.dependencies:
             if (
                 not dep.found
                 and dep.apt_package
-                and dep.apt_package not in analysis.missing_packages
+                and dep.apt_package not in seen_packages
             ):
                 analysis.missing_packages.append(dep.apt_package)
+                seen_packages.add(dep.apt_package)
 
         # Generate build commands
         analysis.build_commands = self._generate_build_commands(build_system, source_dir)
 
         return analysis
+
+    def _read_file_safe(self, file_path: Path) -> str | None:
+        """Read a file with size and encoding safety checks.
+
+        Args:
+            file_path: Path to the file to read.
+
+        Returns:
+            File contents as string, or None if file cannot be read.
+        """
+        try:
+            if file_path.stat().st_size > MAX_FILE_SIZE:
+                console.print(
+                    f"[yellow]Warning: {file_path.name} is very large "
+                    f"({file_path.stat().st_size // 1024 // 1024}MB), skipping...[/yellow]"
+                )
+                return None
+            # Use errors="replace" to handle non-UTF8 characters visibly
+            return file_path.read_text(encoding="utf-8", errors="replace")
+        except (OSError, PermissionError) as e:
+            console.print(f"[yellow]Warning: Cannot read {file_path}: {e}[/yellow]")
+            return None
 
     def _analyze_cmake(self, source_dir: Path, analysis: BuildAnalysis) -> None:
         """Analyze CMakeLists.txt for dependencies."""
@@ -246,7 +337,9 @@ class TarballHelper:
         if not cmake_file.exists():
             return
 
-        content = cmake_file.read_text(encoding="utf-8", errors="ignore")
+        content = self._read_file_safe(cmake_file)
+        if content is None:
+            return
 
         # Find find_package() calls
         for match in re.finditer(r"find_package\s*\(\s*(\w+)", content, re.IGNORECASE):
@@ -256,9 +349,9 @@ class TarballHelper:
                 Dependency(name=pkg_name, dep_type="package", apt_package=apt_pkg)
             )
 
-        # Find pkg_check_modules() calls
+        # Find pkg_check_modules() calls - safer regex with length limit
         for match in re.finditer(
-            r"pkg_check_modules\s*\([^)]*\s+([^\s)]+)", content, re.IGNORECASE
+            r"pkg_check_modules\s*\([^)]{0,200}\s+([^\s)]+)", content, re.IGNORECASE
         ):
             pkg_name = match.group(1).lower()
             apt_pkg = self.PKGCONFIG_PACKAGES.get(pkg_name)
@@ -291,10 +384,12 @@ class TarballHelper:
         if not config_file.exists():
             return
 
-        content = config_file.read_text(encoding="utf-8", errors="ignore")
+        content = self._read_file_safe(config_file)
+        if content is None:
+            return
 
-        # Find AC_CHECK_HEADERS
-        for match in re.finditer(r"AC_CHECK_HEADER[S]?\s*\(\s*\[?([^\],\)]+)", content):
+        # Find AC_CHECK_HEADERS - safer regex with length limit
+        for match in re.finditer(r"AC_CHECK_HEADER[S]?\s*\(\s*\[?([^\],\)]{1,100})", content):
             headers = match.group(1).strip("[]").split()
             for header in headers:
                 header = header.strip()
@@ -303,8 +398,8 @@ class TarballHelper:
                     Dependency(name=header, dep_type="header", apt_package=apt_pkg)
                 )
 
-        # Find PKG_CHECK_MODULES
-        for match in re.finditer(r"PKG_CHECK_MODULES\s*\([^,]+,\s*\[?([^\],\)]+)", content):
+        # Find PKG_CHECK_MODULES - safer regex with length limit
+        for match in re.finditer(r"PKG_CHECK_MODULES\s*\([^,]{0,50},\s*\[?([^\],\)]{1,100})", content):
             pkg_spec = match.group(1).strip("[]")
             # Extract package name (before any version specifier)
             pkg_name = re.split(r"[<>=\s]", pkg_spec)[0].strip()
@@ -336,7 +431,9 @@ class TarballHelper:
         if not meson_file.exists():
             return
 
-        content = meson_file.read_text(encoding="utf-8", errors="ignore")
+        content = self._read_file_safe(meson_file)
+        if content is None:
+            return
 
         # Find dependency() calls
         for match in re.finditer(r"dependency\s*\(\s*['\"]([^'\"]+)['\"]", content):
@@ -374,10 +471,10 @@ class TarballHelper:
                     result = subprocess.run(
                         ["pkg-config", "--exists", dep.name],
                         capture_output=True,
-                        timeout=5,
+                        timeout=PKG_CONFIG_TIMEOUT,
                     )
                     dep.found = result.returncode == 0
-                except subprocess.TimeoutExpired:
+                except (subprocess.TimeoutExpired, FileNotFoundError):
                     dep.found = False
             elif dep.apt_package:
                 # Check if apt package is installed
@@ -386,10 +483,10 @@ class TarballHelper:
                         ["dpkg-query", "-W", "-f=${Status}", dep.apt_package],
                         capture_output=True,
                         text=True,
-                        timeout=5,
+                        timeout=DPKG_QUERY_TIMEOUT,
                     )
-                    dep.found = "install ok installed" in result.stdout
-                except subprocess.TimeoutExpired:
+                    dep.found = self.DPKG_INSTALLED_STATUS in result.stdout
+                except (subprocess.TimeoutExpired, FileNotFoundError):
                     dep.found = False
 
     def _generate_build_commands(self, build_system: BuildSystem, source_dir: Path) -> list[str]:
@@ -397,9 +494,9 @@ class TarballHelper:
         if build_system == BuildSystem.CMAKE:
             return [
                 "mkdir -p build && cd build",
-                "cmake ..",
+                "cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local",
                 "make -j$(nproc)",
-                "sudo make install",
+                "sudo make install  # Or: sudo checkinstall for easier removal",
             ]
         elif build_system == BuildSystem.AUTOTOOLS:
             commands = []
@@ -407,26 +504,29 @@ class TarballHelper:
                 commands.append("autoreconf -fi")
             commands.extend(
                 [
-                    "./configure",
+                    "./configure --prefix=/usr/local",
                     "make -j$(nproc)",
-                    "sudo make install",
+                    "sudo make install  # Or: sudo checkinstall for easier removal",
                 ]
             )
             return commands
         elif build_system == BuildSystem.MESON:
             return [
-                "meson setup build",
+                "meson setup build --prefix=/usr/local",
                 "ninja -C build",
                 "sudo ninja -C build install",
             ]
         elif build_system == BuildSystem.PYTHON:
             return [
-                "pip install .",
+                "# Option 1: Install in user directory (recommended)",
+                "pip install --user .",
+                "# Option 2: Install in virtual environment",
+                "python3 -m venv venv && source venv/bin/activate && pip install .",
             ]
         elif build_system == BuildSystem.MAKE:
             return [
                 "make -j$(nproc)",
-                "sudo make install",
+                "sudo make install PREFIX=/usr/local  # Or: sudo checkinstall",
             ]
         else:
             return ["# Unable to determine build commands"]
@@ -444,6 +544,14 @@ class TarballHelper:
         if not packages:
             console.print("[green]No packages to install.[/green]")
             return True
+
+        # Check if apt-get is available
+        if not shutil.which("apt-get"):
+            console.print(
+                "[red]Error: apt-get not found. "
+                "This tool requires Debian/Ubuntu or a compatible distribution.[/red]"
+            )
+            return False
 
         if dry_run:
             console.print("[bold]Would install:[/bold]")
@@ -471,22 +579,37 @@ class TarballHelper:
         Returns:
             Package name if available, None otherwise.
         """
-        # Search apt cache
-        result = subprocess.run(
-            ["apt-cache", "search", f"^{name}$"],
-            capture_output=True,
-            text=True,
-        )
+        # Check if apt-cache is available
+        if not shutil.which("apt-cache"):
+            return None
+
+        # Escape regex metacharacters in the name for apt-cache search
+        escaped_name = re.escape(name)
+
+        # Search apt cache with timeout
+        try:
+            result = subprocess.run(
+                ["apt-cache", "search", f"^{escaped_name}$"],
+                capture_output=True,
+                text=True,
+                timeout=APT_CACHE_TIMEOUT,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return None
 
         if result.stdout.strip():
             return result.stdout.strip().split()[0]
 
         # Try with lib prefix
-        result = subprocess.run(
-            ["apt-cache", "search", f"^lib{name}"],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["apt-cache", "search", f"^lib{escaped_name}"],
+                capture_output=True,
+                text=True,
+                timeout=APT_CACHE_TIMEOUT,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return None
 
         if result.stdout.strip():
             lines = result.stdout.strip().split("\n")
@@ -505,7 +628,12 @@ class TarballHelper:
             install: ManualInstall record to save.
         """
         history = self._load_history()
-        history[install.name] = {
+
+        # Ensure installations dict exists
+        if "installations" not in history:
+            history["installations"] = {}
+
+        history["installations"][install.name] = {
             "source_dir": install.source_dir,
             "installed_at": install.installed_at,
             "packages_installed": install.packages_installed,
@@ -521,8 +649,16 @@ class TarballHelper:
             List of ManualInstall records.
         """
         history = self._load_history()
+        installations_data = history.get("installations", history)
+
+        # Handle old format (no wrapper) for backwards compatibility
+        if "_version" in installations_data:
+            installations_data = history.get("installations", {})
+
         installations = []
-        for name, data in history.items():
+        for name, data in installations_data.items():
+            if name.startswith("_"):  # Skip metadata keys
+                continue
             installations.append(
                 ManualInstall(
                     name=name,
@@ -546,11 +682,17 @@ class TarballHelper:
             True if cleanup succeeded, False otherwise.
         """
         history = self._load_history()
-        if name not in history:
+        installations = history.get("installations", history)
+
+        # Handle old format
+        if "_version" in installations:
+            installations = history.get("installations", {})
+
+        if name not in installations:
             console.print(f"[red]Installation '{name}' not found in history.[/red]")
             return False
 
-        data = history[name]
+        data = installations[name]
         packages = data.get("packages_installed", [])
 
         if dry_run:
@@ -567,12 +709,23 @@ class TarballHelper:
                 f"Remove {len(packages)} packages that were installed for this build?"
             )
             if remove_pkgs:
-                cmd = ["sudo", "apt-get", "remove", "-y"] + packages
-                subprocess.run(cmd)
+                if shutil.which("apt-get"):
+                    cmd = ["sudo", "apt-get", "remove", "-y"] + packages
+                    subprocess.run(cmd)
+                else:
+                    console.print("[yellow]apt-get not found, skipping package removal[/yellow]")
 
-        # Remove from history after all user interactions
-        del history[name]
-        self._save_history(history)
+        # Reload history to avoid race condition, then remove
+        history = self._load_history()
+        installations = history.get("installations", history)
+        if "_version" in installations:
+            installations = history.get("installations", {})
+
+        if name in installations:
+            del installations[name]
+            if "installations" in history:
+                history["installations"] = installations
+            self._save_history(history)
 
         console.print(f"[green]Removed '{name}' from tracking.[/green]")
 
@@ -581,14 +734,23 @@ class TarballHelper:
     def _load_history(self) -> dict:
         """Load installation history from file."""
         if not self.history_file.exists():
-            return {}
+            return {"_version": HISTORY_SCHEMA_VERSION, "installations": {}}
         try:
-            return json.loads(self.history_file.read_text(encoding="utf-8"))
+            data = json.loads(self.history_file.read_text(encoding="utf-8"))
+            # Migrate old format if needed
+            if "_version" not in data:
+                return {
+                    "_version": HISTORY_SCHEMA_VERSION,
+                    "installations": data,
+                }
+            return data
         except (json.JSONDecodeError, OSError):
-            return {}
+            return {"_version": HISTORY_SCHEMA_VERSION, "installations": {}}
 
     def _save_history(self, history: dict) -> None:
         """Save installation history to file."""
+        # Ensure version is set
+        history["_version"] = HISTORY_SCHEMA_VERSION
         self.history_file.write_text(json.dumps(history, indent=2), encoding="utf-8")
 
 
@@ -601,13 +763,36 @@ def run_analyze_command(source_dir: str) -> None:
     helper = TarballHelper()
     path = Path(source_dir).resolve()
 
+    # Check if it's a file (tarball) instead of directory
+    if path.is_file():
+        if path.suffix in (".gz", ".xz", ".bz2", ".tar", ".tgz", ".tbz2"):
+            console.print(
+                f"[yellow]'{path.name}' appears to be a tarball.[/yellow]\n"
+                "Please extract it first:\n"
+                f"  tar xf {path.name}\n"
+                f"Then run: cortex tarball analyze <extracted-directory>"
+            )
+            return
+        console.print(f"[red]'{path}' is a file, not a directory.[/red]")
+        return
+
     if not path.exists():
         console.print(f"[red]Directory not found: {path}[/red]")
         return
 
     console.print(f"\n[bold]Analyzing: {path}[/bold]\n")
 
-    analysis = helper.analyze(path)
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            progress.add_task(description="Analyzing build files...", total=None)
+            analysis = helper.analyze(path)
+    except PermissionError as e:
+        console.print(f"[red]Permission denied: {e}[/red]")
+        return
 
     # Show build system
     console.print(f"[cyan]Build System:[/cyan] {analysis.build_system.value}")
@@ -627,7 +812,7 @@ def run_analyze_command(source_dir: str) -> None:
         )
         console.print()
 
-    # Show dependencies
+    # Show dependencies (deduplicated by name)
     if analysis.dependencies:
         table = Table(title="Dependencies", box=box.SIMPLE)
         table.add_column("Name", style="cyan")
@@ -635,7 +820,13 @@ def run_analyze_command(source_dir: str) -> None:
         table.add_column("Apt Package")
         table.add_column("Status")
 
+        seen_deps = set()
         for dep in analysis.dependencies:
+            dep_key = (dep.name, dep.dep_type)
+            if dep_key in seen_deps:
+                continue
+            seen_deps.add(dep_key)
+
             status = "[green]✓ Found[/green]" if dep.found else "[red]✗ Missing[/red]"
             table.add_row(
                 dep.name,
@@ -674,7 +865,15 @@ def run_install_deps_command(source_dir: str, dry_run: bool = False) -> None:
         console.print(f"[red]Directory not found: {path}[/red]")
         return
 
-    analysis = helper.analyze(path)
+    if not path.is_dir():
+        console.print(f"[red]Not a directory: {path}[/red]")
+        return
+
+    try:
+        analysis = helper.analyze(path)
+    except PermissionError as e:
+        console.print(f"[red]Permission denied: {e}[/red]")
+        return
 
     if not analysis.missing_packages:
         console.print("[green]All dependencies are already installed![/green]")

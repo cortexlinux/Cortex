@@ -643,7 +643,8 @@ class CortexCLI:
             try:
                 packages = []
                 if hasattr(args, "packages") and args.packages:
-                    packages = args.packages.split(",")
+                    # Strip whitespace from each package name
+                    packages = [p.strip() for p in args.packages.split(",") if p.strip()]
                 run_track_command(args.name, args.source_dir, packages)
                 return 0
             except Exception as e:

@@ -226,7 +226,11 @@ class TestGenerateBuildCommands:
         with patch.object(helper, "_check_installed"):
             analysis = helper.analyze(tmp_path)
 
-        assert "cmake .." in analysis.build_commands
+        # Updated: safer build commands with explicit build type and install prefix
+        cmake_cmd = [c for c in analysis.build_commands if c.startswith("cmake")]
+        assert len(cmake_cmd) == 1
+        assert "-DCMAKE_BUILD_TYPE=Release" in cmake_cmd[0]
+        assert "-DCMAKE_INSTALL_PREFIX=/usr/local" in cmake_cmd[0]
         assert "make -j$(nproc)" in analysis.build_commands
 
     def test_autotools_commands(self, tmp_path):
@@ -235,7 +239,10 @@ class TestGenerateBuildCommands:
         with patch.object(helper, "_check_installed"):
             analysis = helper.analyze(tmp_path)
 
-        assert "./configure" in analysis.build_commands
+        # Updated: safer configure with explicit prefix
+        configure_cmd = [c for c in analysis.build_commands if c.startswith("./configure")]
+        assert len(configure_cmd) == 1
+        assert "--prefix=/usr/local" in configure_cmd[0]
         assert "make -j$(nproc)" in analysis.build_commands
 
     def test_meson_commands(self, tmp_path):
@@ -244,7 +251,10 @@ class TestGenerateBuildCommands:
         with patch.object(helper, "_check_installed"):
             analysis = helper.analyze(tmp_path)
 
-        assert "meson setup build" in analysis.build_commands
+        # Updated: safer meson with explicit prefix
+        meson_cmd = [c for c in analysis.build_commands if c.startswith("meson setup")]
+        assert len(meson_cmd) == 1
+        assert "--prefix=/usr/local" in meson_cmd[0]
         assert "ninja -C build" in analysis.build_commands
 
 
@@ -445,7 +455,9 @@ class TestAnalyzePython:
             analysis = helper.analyze(tmp_path)
 
         assert analysis.build_system == BuildSystem.PYTHON
-        assert "pip install ." in analysis.build_commands
+        # Updated: safer pip install with venv recommendation
+        pip_cmds = [c for c in analysis.build_commands if "pip install" in c]
+        assert len(pip_cmds) > 0  # At least one pip install command
 
 
 class TestAnalyzeCMakeAdvanced:
@@ -541,7 +553,9 @@ class TestGenerateBuildCommandsAdvanced:
         with patch.object(helper, "_check_installed"):
             analysis = helper.analyze(tmp_path)
 
-        assert "pip install ." in analysis.build_commands
+        # Updated: safer pip install with venv recommendation
+        pip_cmds = [c for c in analysis.build_commands if "pip install" in c]
+        assert len(pip_cmds) > 0  # At least one pip install command
 
     def test_make_commands(self, tmp_path):
         (tmp_path / "Makefile").touch()
@@ -550,7 +564,10 @@ class TestGenerateBuildCommandsAdvanced:
             analysis = helper.analyze(tmp_path)
 
         assert "make -j$(nproc)" in analysis.build_commands
-        assert "sudo make install" in analysis.build_commands
+        # Updated: safer make install with explicit prefix
+        install_cmd = [c for c in analysis.build_commands if "make install" in c]
+        assert len(install_cmd) == 1
+        assert "PREFIX=/usr/local" in install_cmd[0]
 
     def test_unknown_commands(self, tmp_path):
         helper = TarballHelper()
@@ -687,16 +704,19 @@ class TestLoadHistoryErrors:
             helper = TarballHelper()
             # Write corrupt JSON
             helper.history_file.write_text("{invalid json}")
-            # Should return empty dict
+            # Should return fresh history with version and empty installations
             result = helper._load_history()
-            assert result == {}
+            assert "_version" in result
+            assert "installations" in result
+            assert result["installations"] == {}
 
     def test_load_history_valid_json(self, tmp_path):
         with patch.object(Path, "home", return_value=tmp_path):
             helper = TarballHelper()
-            helper.history_file.write_text('{"app": {"source_dir": "/tmp"}}')
+            # Updated: new history format with version and installations
+            helper.history_file.write_text('{"_version": "1.0", "installations": {"app": {"source_dir": "/tmp"}}}')
             result = helper._load_history()
-            assert "app" in result
+            assert "app" in result["installations"]
 
 
 class TestRunCommandsAdvanced:

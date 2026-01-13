@@ -39,6 +39,11 @@ class CortexDemo:
         past = past.replace(hour=hours, minute=minutes, second=51)
         return past.strftime("%Y-%m-%d %H:%M:%S")
 
+    def _is_gpu_vendor(self, model: str, keywords: list[str]) -> bool:
+        """Check if GPU model matches any vendor keywords."""
+        model_upper = str(model).upper()
+        return any(kw in model_upper for kw in keywords)
+
     def run(self) -> int:
         """Main demo entry point"""
         try:
@@ -276,28 +281,16 @@ Install a complete stack with: [cyan]cortex stack webdev[/cyan]
         )
 
         # Detect GPU (check both dedicated and integrated)
-        gpu = self.hw.gpu if self.hw else None
+        gpu = getattr(self.hw, "gpu", None) if self.hw else None
         gpu_info = gpu[0] if (gpu and len(gpu) > 0) else None
 
         # Check for NVIDIA
-        has_nvidia = gpu_info and (
-            "NVIDIA" in str(gpu_info.model).upper()
-            or "GTX" in str(gpu_info.model).upper()
-            or "RTX" in str(gpu_info.model).upper()
-            or "GEFORCE" in str(gpu_info.model).upper()
-            or "QUADRO" in str(gpu_info.model).upper()
-            or "TESLA" in str(gpu_info.model).upper()
-        )
+        nvidia_keywords = ["NVIDIA", "GTX", "RTX", "GEFORCE", "QUADRO", "TESLA"]
+        has_nvidia = gpu_info and self._is_gpu_vendor(gpu_info.model, nvidia_keywords)
 
         # Check for AMD (dedicated or integrated Radeon)
-        has_amd = gpu_info and (
-            "AMD" in str(gpu_info.model).upper()
-            or "RADEON" in str(gpu_info.model).upper()
-            or "RENOIR" in str(gpu_info.model).upper()
-            or "VEGA" in str(gpu_info.model).upper()
-            or "NAVI" in str(gpu_info.model).upper()
-            or "RX " in str(gpu_info.model).upper()
-        )
+        amd_keywords = ["AMD", "RADEON", "RENOIR", "VEGA", "NAVI", "RX "]
+        has_amd = gpu_info and self._is_gpu_vendor(gpu_info.model, amd_keywords)
 
         if has_nvidia:
             # NVIDIA GPU - show successful CUDA install

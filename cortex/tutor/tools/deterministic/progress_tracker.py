@@ -2,60 +2,25 @@
 Progress Tracker Tool - Deterministic tool for learning progress management.
 
 This tool does NOT use LLM calls - it is fast, free, and predictable.
-Used for tracking learning progress via SQLite operations.
 """
 
-from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-from langchain.tools import BaseTool
-from pydantic import Field
 
 from cortex.tutor.config import get_config
 from cortex.tutor.memory.sqlite_store import (
     LearningProgress,
     SQLiteStore,
-    StudentProfile,
 )
 
 
-class ProgressTrackerTool(BaseTool):
-    """
-    Deterministic tool for tracking learning progress.
+class ProgressTrackerTool:
+    """Deterministic tool for tracking learning progress."""
 
-    This tool manages SQLite-based progress tracking including:
-    - Recording topic completions
-    - Tracking time spent
-    - Managing student profiles
-    - Retrieving progress statistics
-
-    No LLM calls are made - pure database operations.
-    """
-
-    name: str = "progress_tracker"
-    description: str = (
-        "Track learning progress for packages and topics. "
-        "Use this to record completions, get progress stats, and manage student profiles. "
-        "This is a fast, deterministic tool with no LLM cost."
-    )
-
-    store: SQLiteStore | None = Field(default=None, exclude=True)
-
-    # Error message constants
     _ERR_PKG_TOPIC_REQUIRED: str = "package_name and topic required"
 
-    class Config:
-        arbitrary_types_allowed = True
-
     def __init__(self, db_path: Path | None = None) -> None:
-        """
-        Initialize the progress tracker tool.
-
-        Args:
-            db_path: Path to SQLite database. Uses config default if not provided.
-        """
-        super().__init__()
+        """Initialize the progress tracker tool."""
         if db_path is None:
             config = get_config()
             db_path = config.get_db_path()
@@ -70,20 +35,7 @@ class ProgressTrackerTool(BaseTool):
         time_seconds: int | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """
-        Execute a progress tracking action.
-
-        Args:
-            action: Action to perform (get_progress, mark_completed, get_stats, etc.)
-            package_name: Name of the package (required for most actions)
-            topic: Topic within the package
-            score: Score achieved (0.0 to 1.0)
-            time_seconds: Time spent in seconds
-            **kwargs: Additional arguments for specific actions
-
-        Returns:
-            Dict containing action results
-        """
+        """Execute a progress tracking action."""
         actions = {
             "get_progress": self._get_progress,
             "get_all_progress": self._get_all_progress,
@@ -114,10 +66,6 @@ class ProgressTrackerTool(BaseTool):
             )
         except Exception as e:
             return {"success": False, "error": str(e)}
-
-    async def _arun(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Async version - delegates to sync implementation."""
-        return self._run(*args, **kwargs)
 
     def _get_progress(
         self,
@@ -197,7 +145,6 @@ class ProgressTrackerTool(BaseTool):
         if not package_name or not topic:
             return {"success": False, "error": self._ERR_PKG_TOPIC_REQUIRED}
 
-        # Get existing progress to preserve values
         existing = self.store.get_progress(package_name, topic)
         total_time = (existing.total_time_seconds if existing else 0) + (time_seconds or 0)
 
@@ -290,7 +237,7 @@ class ProgressTrackerTool(BaseTool):
         """Reset learning progress."""
         count = self.store.reset_progress(package_name)
         scope = f"for {package_name}" if package_name else "all"
-        return {"success": True, "message": f"Reset {count} progress records {scope}"}
+        return {"success": True, "count": count, "message": f"Reset {count} progress records {scope}"}
 
     def _get_packages_studied(self, **kwargs: Any) -> dict[str, Any]:
         """Get list of packages that have been studied."""
@@ -302,48 +249,21 @@ class ProgressTrackerTool(BaseTool):
 
 
 def get_learning_progress(package_name: str, topic: str) -> dict[str, Any] | None:
-    """
-    Get learning progress for a specific topic.
-
-    Args:
-        package_name: Name of the package.
-        topic: Topic within the package.
-
-    Returns:
-        Progress dictionary or None.
-    """
+    """Get learning progress for a specific topic."""
     tool = ProgressTrackerTool()
     result = tool._run("get_progress", package_name=package_name, topic=topic)
     return result.get("progress")
 
 
 def mark_topic_completed(package_name: str, topic: str, score: float = 1.0) -> bool:
-    """
-    Mark a topic as completed.
-
-    Args:
-        package_name: Name of the package.
-        topic: Topic to mark as completed.
-        score: Score achieved (0.0 to 1.0).
-
-    Returns:
-        True if successful.
-    """
+    """Mark a topic as completed."""
     tool = ProgressTrackerTool()
     result = tool._run("mark_completed", package_name=package_name, topic=topic, score=score)
     return result.get("success", False)
 
 
 def get_package_stats(package_name: str) -> dict[str, Any]:
-    """
-    Get completion statistics for a package.
-
-    Args:
-        package_name: Name of the package.
-
-    Returns:
-        Statistics dictionary.
-    """
+    """Get completion statistics for a package."""
     tool = ProgressTrackerTool()
     result = tool._run("get_stats", package_name=package_name)
     return result.get("stats", {})

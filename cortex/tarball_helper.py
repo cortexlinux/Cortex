@@ -296,11 +296,7 @@ class TarballHelper:
         # Generate missing packages list (deduplicated)
         seen_packages = set()
         for dep in analysis.dependencies:
-            if (
-                not dep.found
-                and dep.apt_package
-                and dep.apt_package not in seen_packages
-            ):
+            if not dep.found and dep.apt_package and dep.apt_package not in seen_packages:
                 analysis.missing_packages.append(dep.apt_package)
                 seen_packages.add(dep.apt_package)
 
@@ -399,7 +395,9 @@ class TarballHelper:
                 )
 
         # Find PKG_CHECK_MODULES - safer regex with length limit
-        for match in re.finditer(r"PKG_CHECK_MODULES\s*\([^,]{0,50},\s*\[?([^\],\)]{1,100})", content):
+        for match in re.finditer(
+            r"PKG_CHECK_MODULES\s*\([^,]{0,50},\s*\[?([^\],\)]{1,100})", content
+        ):
             pkg_spec = match.group(1).strip("[]")
             # Extract package name (before any version specifier)
             pkg_name = re.split(r"[<>=\s]", pkg_spec)[0].strip()

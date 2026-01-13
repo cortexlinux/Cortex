@@ -714,7 +714,9 @@ class TestLoadHistoryErrors:
         with patch.object(Path, "home", return_value=tmp_path):
             helper = TarballHelper()
             # Updated: new history format with version and installations
-            helper.history_file.write_text('{"_version": "1.0", "installations": {"app": {"source_dir": "/tmp"}}}')
+            helper.history_file.write_text(
+                '{"_version": "1.0", "installations": {"app": {"source_dir": "/tmp"}}}'
+            )
             result = helper._load_history()
             assert "app" in result["installations"]
 

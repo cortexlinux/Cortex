@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from cortex.branding import show_banner
@@ -26,7 +25,7 @@ class CortexDemo:
         self.is_interactive = sys.stdin.isatty()
         self.installation_id = self._generate_id()
 
-    def clear_screen(self):
+    def clear_screen(self) -> None:
         """Clears the terminal screen"""
         self.console.clear()
 
@@ -133,7 +132,7 @@ Cortex is an AI-powered universal package manager that:
 
     def _simulate_cortex_output(
         self, command: str, packages: list[str], show_execution: bool = False
-    ):
+    ) -> None:
         """Simulate real Cortex output with CX branding"""
 
         # Understanding phase
@@ -285,7 +284,7 @@ Install a complete stack with: [cyan]cortex stack webdev[/cyan]
 
         if has_nvidia:
             # NVIDIA GPU - show successful CUDA install
-            self.console.print(f"[cyan]Detected GPU:[/cyan] {gpu[0].model}")
+            self.console.print(f"[cyan]Detected GPU:[/cyan] {gpu_info.model}")
             self.console.print("Let's install CUDA for GPU acceleration:")
 
             if not self._prompt_command("cortex install cuda"):
@@ -313,7 +312,7 @@ Install a complete stack with: [cyan]cortex stack webdev[/cyan]
 
         elif has_amd:
             # AMD GPU - show Cortex catching the mistake
-            self.console.print(f"[cyan]Detected GPU:[/cyan] {gpu[0].model}")
+            self.console.print(f"[cyan]Detected GPU:[/cyan] {gpu_info.model}")
             self.console.print("Let's try to install CUDA...")
 
             if not self._prompt_command("cortex install cuda"):
@@ -328,7 +327,7 @@ Install a complete stack with: [cyan]cortex stack webdev[/cyan]
 
             self.console.print("\n[yellow]⚠️  Hardware Compatibility Warning:[/yellow]")
             time.sleep(0.8)
-            self.console.print(f"[cyan]Your GPU:[/cyan] {gpu[0].model}")
+            self.console.print(f"[cyan]Your GPU:[/cyan] {gpu_info.model}")
             self.console.print("[red]NVIDIA CUDA will not work on AMD hardware![/red]\n")
             time.sleep(1.0)
 
@@ -467,7 +466,7 @@ Install a complete stack with: [cyan]cortex stack webdev[/cyan]
         )
         history_table.add_row(
             self._generate_id(),
-            self._generate_past_date(1, 13, 13),
+            self._generate_past_date(1, 14, 25),
             "install",
             "python3-dev",
             "success",

@@ -3,7 +3,7 @@ Cortex Interactive Demo - Production Version
 Interactive 5-minute tutorial showcasing all major Cortex features
 """
 
-import random
+import secrets
 import sys
 import time
 from typing import Optional
@@ -32,7 +32,7 @@ class CortexDemo:
 
     def _generate_id(self) -> str:
         """Generate a fake installation ID for demo"""
-        return "".join(random.choices("0123456789abcdef", k=16))
+        return secrets.token_hex(8)
 
     def run(self) -> int:
         """Main demo entry point"""

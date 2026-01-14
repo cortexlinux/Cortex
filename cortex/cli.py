@@ -1360,9 +1360,11 @@ class CortexCLI:
                                 history.update_installation(
                                     autoremove_id,
                                     InstallationStatus.FAILED,
-                                    error_message=autoremove_result.stderr[:500]
-                                    if autoremove_result.stderr
-                                    else "Autoremove returned non-zero exit code",
+                                    error_message=(
+                                        autoremove_result.stderr[:500]
+                                        if autoremove_result.stderr
+                                        else "Autoremove returned non-zero exit code"
+                                    ),
                                 )
                             except Exception as e:
                                 self._debug(f"Failed to update autoremove record: {e}")

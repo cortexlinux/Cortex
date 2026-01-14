@@ -39,7 +39,8 @@ def init_audit_db() -> bool:
         cursor = conn.cursor()
 
         # Create events table if it doesn't exist
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
@@ -47,7 +48,8 @@ def init_audit_db() -> bool:
                 details TEXT,
                 success INTEGER DEFAULT 1
             )
-        """)
+        """
+        )
 
         conn.commit()
         conn.close()
@@ -89,6 +91,7 @@ def log_audit_event(event_type: str, details: str, success: bool = True) -> None
     except (sqlite3.Error, OSError) as e:
         # Log to console but don't crash the installer
         console.print(f"[dim]Warning: Could not log audit event: {e}[/dim]")
+
 
 DAEMON_DIR = Path(__file__).parent.parent
 BUILD_SCRIPT = DAEMON_DIR / "scripts" / "build.sh"
@@ -1264,9 +1267,7 @@ def configure_auto_load(model_path: Path | str) -> None:
             check=False,
         )
         if restart_result.returncode != 0:
-            console.print(
-                f"[red]Failed to restart cortexd service: {restart_result.stderr}[/red]"
-            )
+            console.print(f"[red]Failed to restart cortexd service: {restart_result.stderr}[/red]")
             sys.exit(1)
 
         console.print("[green]Daemon restarted with model loaded![/green]")

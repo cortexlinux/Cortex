@@ -258,7 +258,7 @@ class DaemonManager:
             console.print(f"[red]✗ Installation failed: {e}[/red]")
             return 1
 
-    def uninstall(self) -> int:
+    def uninstall(self, skip_confirm: bool = False) -> int:
         """Uninstall and stop the daemon"""
         if not self.check_daemon_installed():
             console.print("[red]✗ Daemon is not installed[/red]")
@@ -267,8 +267,11 @@ class DaemonManager:
 
         console.print("[yellow]Uninstalling cortexd daemon...[/yellow]")
 
-        if not self.confirm("Continue with uninstallation?"):
-            return 1
+        # SAFETY GUARD: Require explicit confirmation unless --yes flag provided
+        if not skip_confirm:
+            if not self.confirm("Continue with uninstallation?"):
+                console.print("[yellow]Uninstallation cancelled.[/yellow]")
+                return 0
 
         script_path = Path(__file__).parent.parent / "daemon" / "scripts" / "uninstall.sh"
 

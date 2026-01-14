@@ -373,12 +373,12 @@ def save_cloud_api_config(config: dict) -> None:
     console.print(f"[green]✓ Provider set to: {provider}[/green]")
 
 
-def check_llama_server() -> bool:
+def check_llama_server() -> str | None:
     """
     Check if llama-server is installed.
 
     Returns:
-        bool: True if llama-server is available, False otherwise.
+        str | None: Path to llama-server if found, None otherwise.
     """
     result = subprocess.run(
         ["which", "llama-server"],
@@ -387,8 +387,9 @@ def check_llama_server() -> bool:
         check=False,
     )
     if result.returncode == 0:
-        console.print(f"[green]✓ llama-server found: {result.stdout.strip()}[/green]")
-        return True
+        path = result.stdout.strip()
+        console.print(f"[green]✓ llama-server found: {path}[/green]")
+        return path
 
     # Check common locations
     common_paths = [
@@ -399,11 +400,348 @@ def check_llama_server() -> bool:
     for path in common_paths:
         if Path(path).exists():
             console.print(f"[green]✓ llama-server found: {path}[/green]")
-            return True
+            return path
 
     console.print("[yellow]⚠ llama-server not found[/yellow]")
-    console.print("[dim]Install from: https://github.com/ggerganov/llama.cpp[/dim]")
-    return False
+    return None
+
+
+# System dependencies required to build llama.cpp from source
+LLAMA_CPP_BUILD_DEPENDENCIES = [
+    "cmake",
+    "build-essential",
+    "git",
+]
+
+
+def check_llama_cpp_build_dependencies() -> tuple[list[str], list[str]]:
+    """
+    Check which dependencies for building llama.cpp are installed.
+
+    Returns:
+        tuple: (installed_packages, missing_packages)
+    """
+    installed = []
+    missing = []
+
+    for package in LLAMA_CPP_BUILD_DEPENDENCIES:
+        if check_package_installed(package):
+            installed.append(package)
+        else:
+            missing.append(package)
+
+    return installed, missing
+
+
+def get_system_architecture() -> str:
+    """
+    Get the system architecture for downloading pre-built binaries.
+
+    Returns:
+        str: Architecture string (e.g., "x86_64", "aarch64")
+    """
+    import platform
+
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        return "x86_64"
+    elif machine in ("aarch64", "arm64"):
+        return "aarch64"
+    else:
+        return machine
+
+
+def install_llama_cpp_from_source() -> bool:
+    """
+    Build and install llama.cpp from source.
+
+    Returns:
+        bool: True if installation succeeded, False otherwise.
+    """
+    console.print("\n[bold cyan]Building llama.cpp from source[/bold cyan]\n")
+
+    # Check build dependencies
+    installed, missing = check_llama_cpp_build_dependencies()
+
+    if missing:
+        console.print(f"[yellow]Missing build dependencies: {', '.join(missing)}[/yellow]")
+        if Confirm.ask("Install missing dependencies?", default=True):
+            if not install_system_dependencies(missing):
+                console.print("[red]Failed to install build dependencies.[/red]")
+                return False
+        else:
+            console.print("[red]Cannot build without dependencies.[/red]")
+            return False
+
+    # Clone llama.cpp
+    llama_cpp_dir = Path.home() / ".local" / "src" / "llama.cpp"
+    llama_cpp_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    if llama_cpp_dir.exists():
+        console.print(f"[cyan]llama.cpp source found at {llama_cpp_dir}[/cyan]")
+        if Confirm.ask("Update existing source?", default=True):
+            console.print("[cyan]Pulling latest changes...[/cyan]")
+            result = subprocess.run(
+                ["git", "pull"],
+                cwd=llama_cpp_dir,
+                check=False,
+            )
+            if result.returncode != 0:
+                console.print(
+                    "[yellow]Warning: git pull failed, continuing with existing source[/yellow]"
+                )
+    else:
+        console.print("[cyan]Cloning llama.cpp repository...[/cyan]")
+        result = subprocess.run(
+            ["git", "clone", "https://github.com/ggerganov/llama.cpp.git", str(llama_cpp_dir)],
+            check=False,
+        )
+        if result.returncode != 0:
+            console.print("[red]Failed to clone llama.cpp repository.[/red]")
+            return False
+
+    # Build llama.cpp
+    build_dir = llama_cpp_dir / "build"
+    build_dir.mkdir(exist_ok=True)
+
+    console.print("[cyan]Configuring build with CMake...[/cyan]")
+    result = subprocess.run(
+        ["cmake", "..", "-DCMAKE_BUILD_TYPE=Release", "-DLLAMA_SERVER=ON"],
+        cwd=build_dir,
+        check=False,
+    )
+    if result.returncode != 0:
+        console.print("[red]CMake configuration failed.[/red]")
+        return False
+
+    # Get CPU count for parallel build
+    import multiprocessing
+
+    cpu_count = multiprocessing.cpu_count()
+
+    console.print(f"[cyan]Building llama.cpp (using {cpu_count} cores)...[/cyan]")
+    console.print("[dim]This may take several minutes...[/dim]")
+    result = subprocess.run(
+        ["cmake", "--build", ".", "--config", "Release", "-j", str(cpu_count)],
+        cwd=build_dir,
+        check=False,
+    )
+    if result.returncode != 0:
+        console.print("[red]Build failed.[/red]")
+        return False
+
+    # Install llama-server to /usr/local/bin
+    llama_server_binary = build_dir / "bin" / "llama-server"
+    if not llama_server_binary.exists():
+        # Try alternative location
+        llama_server_binary = build_dir / "llama-server"
+
+    if not llama_server_binary.exists():
+        console.print("[red]llama-server binary not found after build.[/red]")
+        console.print("[dim]Looking for binary...[/dim]")
+        # Search for it
+        for f in build_dir.rglob("llama-server"):
+            if f.is_file():
+                llama_server_binary = f
+                console.print(f"[green]Found: {f}[/green]")
+                break
+
+    if not llama_server_binary.exists():
+        console.print("[red]Could not locate llama-server binary.[/red]")
+        return False
+
+    console.print("[cyan]Installing llama-server to /usr/local/bin...[/cyan]")
+    result = subprocess.run(
+        ["sudo", "cp", str(llama_server_binary), "/usr/local/bin/llama-server"],
+        check=False,
+    )
+    if result.returncode != 0:
+        console.print("[red]Failed to install llama-server.[/red]")
+        return False
+
+    result = subprocess.run(
+        ["sudo", "chmod", "+x", "/usr/local/bin/llama-server"],
+        check=False,
+    )
+
+    console.print("[green]✓ llama-server installed successfully![/green]")
+    return True
+
+
+def install_llama_cpp_prebuilt() -> bool:
+    """
+    Download and install pre-built llama.cpp binaries.
+
+    Returns:
+        bool: True if installation succeeded, False otherwise.
+    """
+    console.print("\n[bold cyan]Installing pre-built llama.cpp[/bold cyan]\n")
+
+    arch = get_system_architecture()
+    console.print(f"[cyan]Detected architecture: {arch}[/cyan]")
+
+    # Determine the appropriate release URL
+    # llama.cpp releases use format like: llama-<version>-bin-ubuntu-x64.zip
+    if arch == "x86_64":
+        arch_suffix = "x64"
+    elif arch == "aarch64":
+        arch_suffix = "arm64"
+    else:
+        console.print(f"[red]Unsupported architecture: {arch}[/red]")
+        console.print("[yellow]Please build from source instead.[/yellow]")
+        return False
+
+    # Get latest release info from GitHub API
+    console.print("[cyan]Fetching latest release information...[/cyan]")
+
+    try:
+        import json
+        import urllib.request
+
+        with urllib.request.urlopen(
+            "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest",
+            timeout=30,
+        ) as response:
+            release_info = json.loads(response.read().decode())
+
+        # Find the appropriate asset
+        asset_url = None
+        asset_name = None
+        for asset in release_info.get("assets", []):
+            name = asset["name"].lower()
+            # Look for ubuntu/linux binary with matching architecture
+            if (
+                ("ubuntu" in name or "linux" in name)
+                and arch_suffix in name
+                and name.endswith(".zip")
+            ):
+                asset_url = asset["browser_download_url"]
+                asset_name = asset["name"]
+                break
+
+        if not asset_url:
+            console.print("[yellow]No pre-built binary found for your system.[/yellow]")
+            console.print("[cyan]Falling back to building from source...[/cyan]")
+            return install_llama_cpp_from_source()
+
+        console.print(f"[cyan]Downloading: {asset_name}[/cyan]")
+
+        # Download to temp directory
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = Path(tmpdir) / asset_name
+            extract_dir = Path(tmpdir) / "extracted"
+            extract_dir.mkdir()
+
+            # Download
+            result = subprocess.run(
+                ["wget", "-q", "--show-progress", asset_url, "-O", str(zip_path)],
+                check=False,
+            )
+            if result.returncode != 0:
+                console.print("[red]Download failed.[/red]")
+                return False
+
+            # Extract
+            console.print("[cyan]Extracting...[/cyan]")
+            result = subprocess.run(
+                ["unzip", "-q", str(zip_path), "-d", str(extract_dir)],
+                check=False,
+            )
+            if result.returncode != 0:
+                console.print("[red]Extraction failed. Is 'unzip' installed?[/red]")
+                return False
+
+            # Find llama-server binary
+            llama_server_binary = None
+            for f in extract_dir.rglob("llama-server"):
+                if f.is_file():
+                    llama_server_binary = f
+                    break
+
+            if not llama_server_binary:
+                console.print("[red]llama-server not found in archive.[/red]")
+                return False
+
+            # Install
+            console.print("[cyan]Installing llama-server to /usr/local/bin...[/cyan]")
+            result = subprocess.run(
+                ["sudo", "cp", str(llama_server_binary), "/usr/local/bin/llama-server"],
+                check=False,
+            )
+            if result.returncode != 0:
+                console.print("[red]Failed to install llama-server.[/red]")
+                return False
+
+            result = subprocess.run(
+                ["sudo", "chmod", "+x", "/usr/local/bin/llama-server"],
+                check=False,
+            )
+
+        console.print("[green]✓ llama-server installed successfully![/green]")
+        return True
+
+    except Exception as e:
+        console.print(f"[red]Failed to fetch release info: {e}[/red]")
+        console.print("[cyan]Falling back to building from source...[/cyan]")
+        return install_llama_cpp_from_source()
+
+
+def install_llama_cpp() -> bool:
+    """
+    Install llama.cpp (llama-server) with user choice of method.
+
+    Returns:
+        bool: True if installation succeeded, False otherwise.
+    """
+    console.print("\n[bold cyan]llama.cpp Installation[/bold cyan]\n")
+    console.print("Choose installation method:\n")
+
+    table = Table(title="Installation Options")
+    table.add_column("Option", style="cyan", width=8)
+    table.add_column("Method", style="green", width=20)
+    table.add_column("Time", width=15)
+    table.add_column("Description", width=40)
+
+    table.add_row(
+        "1",
+        "Pre-built binary",
+        "~1-2 minutes",
+        "Download from GitHub releases (recommended)",
+    )
+    table.add_row(
+        "2",
+        "Build from source",
+        "~5-15 minutes",
+        "Clone and compile (more customizable)",
+    )
+    table.add_row(
+        "3",
+        "Skip",
+        "-",
+        "Install llama-server manually later",
+    )
+
+    console.print(table)
+    console.print()
+
+    choice = Prompt.ask(
+        "Select installation method",
+        choices=["1", "2", "3"],
+        default="1",
+    )
+
+    if choice == "1":
+        return install_llama_cpp_prebuilt()
+    elif choice == "2":
+        return install_llama_cpp_from_source()
+    else:
+        console.print("[yellow]Skipping llama-server installation.[/yellow]")
+        console.print(
+            "[dim]You'll need to install it manually before the LLM service can work.[/dim]"
+        )
+        return False
 
 
 def install_llm_service(model_path: Path, threads: int = 4, ctx_size: int = 2048) -> bool:
@@ -451,17 +789,33 @@ def setup_local_llm() -> Path | None:
     console.print("\n[bold cyan]Local llama.cpp Setup[/bold cyan]\n")
 
     # Check for llama-server
-    if not check_llama_server():
-        console.print("\n[yellow]llama-server is required for local LLM.[/yellow]")
-        console.print("[cyan]Install it first, then run this setup again.[/cyan]")
-        console.print("\n[dim]Installation options:[/dim]")
-        console.print("[dim]  1. Build from source: https://github.com/ggerganov/llama.cpp[/dim]")
-        console.print("[dim]  2. Package manager (if available)[/dim]")
+    llama_server_path = check_llama_server()
+    if not llama_server_path:
+        console.print("\n[yellow]llama-server is required for local LLM inference.[/yellow]")
 
-        if not Confirm.ask(
-            "\nContinue anyway (you can install llama-server later)?", default=False
-        ):
-            return None
+        if Confirm.ask("Would you like to install llama.cpp now?", default=True):
+            if not install_llama_cpp():
+                console.print("\n[yellow]llama-server installation was skipped or failed.[/yellow]")
+                if not Confirm.ask(
+                    "Continue anyway (you can install llama-server later)?", default=False
+                ):
+                    return None
+            else:
+                # Verify installation
+                llama_server_path = check_llama_server()
+                if not llama_server_path:
+                    console.print("[yellow]Warning: llama-server still not found in PATH.[/yellow]")
+        else:
+            console.print("\n[dim]Manual installation options:[/dim]")
+            console.print(
+                "[dim]  1. Build from source: https://github.com/ggerganov/llama.cpp[/dim]"
+            )
+            console.print("[dim]  2. Package manager (if available)[/dim]")
+
+            if not Confirm.ask(
+                "\nContinue anyway (you can install llama-server later)?", default=False
+            ):
+                return None
 
     # Download or select model
     model_path = download_model()

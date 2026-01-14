@@ -295,7 +295,8 @@ class CortexCLI:
             return mgr.install(dry_run=not execute, skip_confirm=skip_confirm)
 
         elif args.daemon_action == "uninstall":
-            return mgr.uninstall()
+            skip_confirm = getattr(args, "yes", False)
+            return mgr.uninstall(skip_confirm=skip_confirm)
 
         elif args.daemon_action == "alerts":
             severity = getattr(args, "severity", None)
@@ -2381,7 +2382,10 @@ def main():
     install_daemon_parser.add_argument(
         "--yes", "-y", action="store_true", help="Skip confirmation prompt (requires --execute)"
     )
-    daemon_subs.add_parser("uninstall", help="Uninstall daemon service")
+    uninstall_daemon_parser = daemon_subs.add_parser("uninstall", help="Uninstall daemon service")
+    uninstall_daemon_parser.add_argument(
+        "--yes", "-y", action="store_true", help="Skip confirmation prompt"
+    )
 
     alerts_parser = daemon_subs.add_parser("alerts", help="Show daemon alerts")
     alerts_parser.add_argument(

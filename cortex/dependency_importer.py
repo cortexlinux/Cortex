@@ -429,7 +429,9 @@ class DependencyImporter:
             for dep_str in deps:
                 # Handle self-references like "cortex-linux[dev,security,docs]"
                 # Only skip if we have a valid (non-empty) project name
-                if project_name and dep_str.startswith(project_name):
+                # Extract canonical package name (strip extras and version specifiers)
+                dep_name = self._extract_package_name(dep_str)
+                if project_name and dep_name == self._normalize_package_name(project_name):
                     # Skip self-references, they're just grouping
                     continue
                 pkg = self._parse_python_requirement(dep_str, is_dev=is_dev_group)
@@ -455,6 +457,30 @@ class DependencyImporter:
         """Extract project name from pyproject.toml content."""
         match = re.search(r'^\s*name\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
         return match.group(1) if match else ""
+
+    def _normalize_package_name(self, name: str) -> str:
+        """Normalize package name per PEP 503 (lowercase, replace - and . with _)."""
+        return re.sub(r"[-_.]+", "_", name.lower())
+
+    def _extract_package_name(self, dep_str: str) -> str:
+        """Extract canonical package name from a dependency string.
+
+        Strips extras (e.g., [dev]) and version specifiers (e.g., >=1.0).
+        Returns normalized package name for comparison.
+
+        Examples:
+            "requests>=2.0" -> "requests"
+            "cortex-linux[dev,docs]" -> "cortex_linux"
+            "foo-bar [extra] >= 1.0" -> "foo_bar"
+        """
+        # Find the first delimiter that marks end of package name
+        # Delimiters: '[' (extras), '<', '>', '=', '!', '~', ';' (markers), space
+        name = dep_str.strip()
+        for i, char in enumerate(name):
+            if char in "[<>=!~; ":
+                name = name[:i]
+                break
+        return self._normalize_package_name(name.strip())
 
     def _extract_toml_string_list(self, content: str, key: str) -> list[str]:
         """Extract a string list value from TOML content.

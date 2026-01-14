@@ -3,7 +3,7 @@
 > **Interactive package education system powered by Claude AI**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Test Coverage](https://img.shields.io/badge/coverage-74%25-brightgreen.svg)](https://github.com/cortexlinux/cortex)
+[![Test Coverage](https://img.shields.io/badge/coverage->80%25-brightgreen.svg)](https://github.com/cortexlinux/cortex)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ---
@@ -657,16 +657,16 @@ pytest cortex/tutor/tests/test_tutor_agent.py -v
 
 ### Test Coverage
 
-Current coverage: **74%** (158 tests)
+Current coverage: **>80%** (172 tests)
 
 | Module | Coverage |
 |--------|----------|
-| `agents/tutor_agent/tutor_agent.py` | 59% |
+| `llm.py` | 100% |
 | `memory/sqlite_store.py` | 92% |
 | `tools/deterministic/validators.py` | 92% |
-| `tools/deterministic/progress_tracker.py` | 84% |
-| `tools/deterministic/lesson_loader.py` | 75% |
 | `cli.py` | 91% |
+| `tools/deterministic/progress_tracker.py` | 81% |
+| `tools/deterministic/lesson_loader.py` | 72% |
 
 ---
 

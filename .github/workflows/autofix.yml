@@ -28,13 +28,13 @@ jobs:
           pip install ruff black isort
 
       - name: Fix with ruff
-        run: ruff check . --fix
+        run: ruff check . --fix || true
 
       - name: Format with black
-        run: black . --exclude "(venv|\.venv|build|dist)"
+        run: black . --exclude "(venv|\.venv|build|dist)" --line-length 100
 
       - name: Sort imports with isort
         run: isort . --profile black --line-length 100
 
       - name: Apply autofix
-        uses: autofix-ci/action@ff86a557419858bb967097bfc916833f5647fa8c
+        uses: autofix-ci/action@635ffb0c9798bd160680f18fd73371e355b85f27

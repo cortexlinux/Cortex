@@ -2827,6 +2827,11 @@ def main():
             return cli.env(args)
         elif args.command == "pkg":
             return cli.pkg(args)
+        elif args.command == "upgrade":
+            from cortex.licensing import open_upgrade_page
+
+            open_upgrade_page()
+            return 0
         else:
             parser.print_help()
             return 1

@@ -117,8 +117,8 @@ class VersionConstraint:
 
     raw: str
     constraint_type: ConstraintType
-    version: Optional[SemVer] = None
-    max_version: Optional[SemVer] = None  # For range constraints
+    version: SemVer | None = None
+    max_version: SemVer | None = None  # For range constraints
 
     def satisfies(self, version: SemVer) -> bool:
         """Check if a version satisfies this constraint."""
@@ -144,10 +144,7 @@ class VersionConstraint:
             # ~1.2.3 means >=1.2.3 <1.3.0
             if version < self.version:
                 return False
-            return (
-                version.major == self.version.major
-                and version.minor == self.version.minor
-            )
+            return version.major == self.version.major and version.minor == self.version.minor
 
         elif self.constraint_type == ConstraintType.GREATER:
             return version > self.version
@@ -184,7 +181,7 @@ class VersionConflict:
 
     package: str
     dependencies: list[Dependency] = field(default_factory=list)
-    resolved_version: Optional[SemVer] = None
+    resolved_version: SemVer | None = None
 
     @property
     def is_conflicting(self) -> bool:
@@ -203,9 +200,7 @@ class VersionConflict:
                     return True
         return False
 
-    def _constraints_compatible(
-        self, c1: VersionConstraint, c2: VersionConstraint
-    ) -> bool:
+    def _constraints_compatible(self, c1: VersionConstraint, c2: VersionConstraint) -> bool:
         """Check if two constraints can be satisfied simultaneously."""
         if c1.constraint_type == ConstraintType.ANY:
             return True
@@ -261,7 +256,7 @@ class SemVerResolver:
         self.dependencies: dict[str, list[Dependency]] = {}
         self.conflicts: list[VersionConflict] = []
 
-    def parse_version(self, version_str: str) -> Optional[SemVer]:
+    def parse_version(self, version_str: str) -> SemVer | None:
         """Parse a semantic version string.
 
         Args:
@@ -283,7 +278,7 @@ class SemVerResolver:
             build=match.group("build") or "",
         )
 
-    def parse_constraint(self, constraint_str: str) -> Optional[VersionConstraint]:
+    def parse_constraint(self, constraint_str: str) -> VersionConstraint | None:
         """Parse a version constraint string.
 
         Args:
@@ -403,9 +398,7 @@ class SemVerResolver:
 
         return None
 
-    def add_dependency(
-        self, package: str, constraint_str: str, source: str = ""
-    ) -> bool:
+    def add_dependency(self, package: str, constraint_str: str, source: str = "") -> bool:
         """Add a dependency constraint.
 
         Args:
@@ -446,9 +439,7 @@ class SemVerResolver:
 
         return self.conflicts
 
-    def suggest_resolutions(
-        self, conflict: VersionConflict
-    ) -> list[ResolutionStrategy]:
+    def suggest_resolutions(self, conflict: VersionConflict) -> list[ResolutionStrategy]:
         """Suggest resolution strategies for a conflict.
 
         Args:
@@ -512,9 +503,7 @@ class SemVerResolver:
 
         return strategies
 
-    def _find_common_version_strategy(
-        self, conflict: VersionConflict
-    ) -> Optional[ResolutionStrategy]:
+    def _find_common_version_strategy(self, conflict: VersionConflict) -> ResolutionStrategy | None:
         """Try to find a common version that satisfies all constraints."""
         constraints = [d.constraint for d in conflict.dependencies]
 
@@ -615,7 +604,7 @@ class SemVerResolver:
 
 def run_semver_resolver(
     action: str = "analyze",
-    packages: Optional[list[str]] = None,
+    packages: list[str] | None = None,
     verbose: bool = False,
 ) -> int:
     """Run the semantic version resolver.
@@ -707,9 +696,7 @@ def run_semver_resolver(
             return 1
 
         if constraint.satisfies(version):
-            console.print(
-                f"[green]Version {version} satisfies constraint {constraint_str}[/green]"
-            )
+            console.print(f"[green]Version {version} satisfies constraint {constraint_str}[/green]")
             return 0
         else:
             console.print(

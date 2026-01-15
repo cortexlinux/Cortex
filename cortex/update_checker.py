@@ -16,12 +16,7 @@ from typing import Optional
 
 import requests
 
-from cortex.version_manager import (
-    SemanticVersion,
-    UpdateChannel,
-    get_current_version,
-    is_newer,
-)
+from cortex.version_manager import SemanticVersion, UpdateChannel, get_current_version, is_newer
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +41,7 @@ class ReleaseInfo:
     body: str  # Release notes (markdown)
     published_at: str
     html_url: str
-    download_url: Optional[str] = None
+    download_url: str | None = None
     assets: list[dict] = field(default_factory=list)
 
     @classmethod
@@ -104,10 +99,10 @@ class UpdateCheckResult:
 
     update_available: bool
     current_version: SemanticVersion
-    latest_version: Optional[SemanticVersion] = None
-    latest_release: Optional[ReleaseInfo] = None
-    error: Optional[str] = None
-    checked_at: Optional[str] = None
+    latest_version: SemanticVersion | None = None
+    latest_release: ReleaseInfo | None = None
+    error: str | None = None
+    checked_at: str | None = None
     from_cache: bool = False
 
 
@@ -129,7 +124,7 @@ class UpdateChecker:
         """Ensure cache directory exists."""
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-    def _get_cached_result(self) -> Optional[UpdateCheckResult]:
+    def _get_cached_result(self) -> UpdateCheckResult | None:
         """Get cached update check result if valid."""
         if not self.cache_enabled or not UPDATE_CACHE_FILE.exists():
             return None
@@ -228,8 +223,8 @@ class UpdateChecker:
             if cached:
                 # Update current version in case we've upgraded
                 cached.current_version = current
-                cached.update_available = (
-                    cached.latest_version is not None and is_newer(cached.latest_version, current)
+                cached.update_available = cached.latest_version is not None and is_newer(
+                    cached.latest_version, current
                 )
                 return cached
 
@@ -327,7 +322,11 @@ class UpdateChecker:
 
         if self.channel == UpdateChannel.BETA:
             # Stable + beta releases
-            return [r for r in releases if r.version.channel in (UpdateChannel.STABLE, UpdateChannel.BETA)]
+            return [
+                r
+                for r in releases
+                if r.version.channel in (UpdateChannel.STABLE, UpdateChannel.BETA)
+            ]
 
         # DEV channel - all releases
         return releases
@@ -368,7 +367,7 @@ def check_for_updates(
     return checker.check(force=force)
 
 
-def should_notify_update() -> Optional[ReleaseInfo]:
+def should_notify_update() -> ReleaseInfo | None:
     """Check if we should notify user about an update.
 
     This is called on CLI startup. Uses cache to avoid

@@ -11,7 +11,7 @@ Enhanced with rich output formatting (Issue #242):
 - Consistent visual language
 """
 
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from rich import box
 from rich.console import Console
@@ -141,8 +141,8 @@ def show_goodbye():
 
 def cx_box(
     content: str,
-    title: Optional[str] = None,
-    subtitle: Optional[str] = None,
+    title: str | None = None,
+    subtitle: str | None = None,
     status: str = "info",
 ) -> None:
     """
@@ -175,7 +175,7 @@ def cx_box(
 
 def cx_status_box(
     title: str,
-    items: List[Tuple[str, str, str]],
+    items: list[tuple[str, str, str]],
 ) -> None:
     """
     Print a status box with aligned key-value pairs.
@@ -221,10 +221,10 @@ def cx_status_box(
 
 
 def cx_table(
-    headers: List[str],
-    rows: List[List[str]],
-    title: Optional[str] = None,
-    row_styles: Optional[List[str]] = None,
+    headers: list[str],
+    rows: list[list[str]],
+    title: str | None = None,
+    row_styles: list[str] | None = None,
 ) -> None:
     """
     Print a formatted table with Cortex styling.
@@ -255,7 +255,7 @@ def cx_table(
 
 
 def cx_package_table(
-    packages: List[Tuple[str, str, str]],
+    packages: list[tuple[str, str, str]],
     title: str = "Packages",
 ) -> None:
     """
@@ -293,7 +293,7 @@ def cx_package_table(
     console.print(table)
 
 
-def cx_divider(title: Optional[str] = None) -> None:
+def cx_divider(title: str | None = None) -> None:
     """
     Print a horizontal divider with optional title.
 
@@ -318,7 +318,9 @@ def cx_error(message: str) -> None:
 
 def cx_warning(message: str) -> None:
     """Print a warning message with warning icon."""
-    console.print(f"[{CORTEX_WARNING}]⚠[/{CORTEX_WARNING}] [{CORTEX_WARNING}]{message}[/{CORTEX_WARNING}]")
+    console.print(
+        f"[{CORTEX_WARNING}]⚠[/{CORTEX_WARNING}] [{CORTEX_WARNING}]{message}[/{CORTEX_WARNING}]"
+    )
 
 
 def cx_info(message: str) -> None:

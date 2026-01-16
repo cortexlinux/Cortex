@@ -2088,27 +2088,25 @@ class CortexCLI:
         cx_print(f"Building {package_name} from source...", "info")
         if version:
             cx_print(f"Version: {version}", "info")
-
-        # Prepare commands list for history recording
-        # Include source URL in the commands list to track it
-        commands = []
         if source_url:
-            commands.append(f"Source URL: {source_url}")
-        commands.append(f"Build from source: {package_name}")
-        if version:
-            commands.append(f"Version: {version}")
+            cx_print(f"Source URL: {source_url}", "info")
 
-        # Record installation start
+        # Prepare install_id for history recording
+        install_id = None
+
+        # Record installation start with just the package name
+        # (actual commands will be determined after build)
         if execute or dry_run:
             try:
                 install_id = history.record_installation(
                     InstallationType.INSTALL,
                     [package_name],
-                    commands,
+                    [],  # Commands will be recorded with the actual build commands
                     start_time,
                 )
             except Exception as e:
                 logger.warning(f"Failed to record installation start: {e}")
+                cx_print(f"⚠️  Warning: Could not record installation start: {e}", "warning")
 
         result = builder.build_from_source(
             package_name=package_name,
@@ -2129,13 +2127,14 @@ class CortexCLI:
                     )
                 except Exception as e:
                     logger.warning(f"Failed to update installation record: {e}")
+                    cx_print(f"⚠️  Warning: Could not update installation record: {e}", "warning")
             return 1
 
         if result.cached:
             cx_print(f"Using cached build for {package_name}", "info")
 
-        # Add install commands to the commands list for history
-        commands.extend(result.install_commands)
+        # Use only actual install commands for history and execution
+        commands = result.install_commands
 
         if dry_run:
             cx_print("\nBuild commands (dry run):", "info")
@@ -2147,6 +2146,7 @@ class CortexCLI:
                     history.update_installation(install_id, InstallationStatus.SUCCESS)
                 except Exception as e:
                     logger.warning(f"Failed to update installation record: {e}")
+                    cx_print(f"⚠️  Warning: Could not record installation success: {e}", "warning")
             return 0
 
         if not execute:
@@ -2160,6 +2160,7 @@ class CortexCLI:
                     history.update_installation(install_id, InstallationStatus.SUCCESS)
                 except Exception as e:
                     logger.warning(f"Failed to update installation record: {e}")
+                    cx_print(f"⚠️  Warning: Could not record installation success: {e}", "warning")
             return 0
 
         # Execute install commands
@@ -2191,6 +2192,7 @@ class CortexCLI:
                     console.print(f"   To rollback: cortex rollback {install_id}")
                 except Exception as e:
                     logger.warning(f"Failed to update installation record: {e}")
+                    cx_print(f"⚠️  Warning: Could not record installation success: {e}", "warning")
             return 0
         else:
             self._print_error("Installation failed")
@@ -2205,6 +2207,7 @@ class CortexCLI:
                     )
                 except Exception as e:
                     logger.warning(f"Failed to update installation record: {e}")
+                    cx_print(f"⚠️  Warning: Could not record installation failure: {e}", "warning")
             return 1
 
     # --------------------------

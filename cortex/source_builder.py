@@ -124,23 +124,34 @@ class SourceBuilder:
         return None
 
     def _save_to_cache(self, cache_key: str, build_dir: Path, install_commands: list[str]) -> None:
-        """Save build artifacts to cache."""
+        """Save build artifacts to cache.
+
+        Args:
+            cache_key: Cache key for the build.
+            build_dir: Path to build directory.
+            install_commands: List of install commands.
+        """
         if self.cache_dir is None:
             return  # Caching disabled
-        cache_path = self.cache_dir / cache_key
-        cache_path.mkdir(parents=True, exist_ok=True)
 
-        # Save metadata
-        metadata = {
-            "build_dir": str(build_dir),
-            "install_commands": install_commands,
-            "timestamp": str(Path(build_dir).stat().st_mtime),
-        }
-        with open(cache_path / "metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
+        try:
+            cache_path = self.cache_dir / cache_key
+            cache_path.mkdir(parents=True, exist_ok=True)
 
-        # Mark as installed
-        (cache_path / "installed").touch()
+            # Save metadata
+            metadata = {
+                "build_dir": str(build_dir),
+                "install_commands": install_commands,
+                "timestamp": str(Path(build_dir).stat().st_mtime),
+            }
+            with open(cache_path / "metadata.json", "w") as f:
+                json.dump(metadata, f, indent=2)
+
+            # Mark as installed
+            (cache_path / "installed").touch()
+        except Exception as e:
+            # Log error but don't fail the entire operation
+            logger.warning(f"Failed to save cache for {cache_key}: {e}")
 
     def detect_build_dependencies(self, package_name: str, build_system: str) -> list[str]:
         """Detect required build dependencies for a package.
@@ -537,14 +548,15 @@ class SourceBuilder:
         Returns:
             List of install commands to execute (requires sudo).
         """
-        commands = []
+        commands: list[str] = []
 
         if config.build_system == "autotools" or config.build_system == "make":
             commands.append("sudo make install")
 
         elif config.build_system == "cmake":
             build_dir = source_dir / "build"
-            commands.append(f"cd {build_dir} && sudo make install")
+            # Use full path to avoid needing cd command
+            commands.append(f"sudo make -C {shlex.quote(str(build_dir))} install")
 
         elif config.build_system == "python":
             commands.append("sudo python3 setup.py install")
@@ -691,6 +703,22 @@ class SourceBuilder:
             if use_cache and cache_key:
                 self._save_to_cache(cache_key, source_dir, install_commands)
 
+            # Clean up temporary directories after successful build
+            # Find and remove the parent temp directory if it's in /tmp
+            try:
+                source_path = source_dir.resolve()
+                if "/tmp" in str(source_path) or "/var/tmp" in str(source_path):
+                    # Find the top-level temp directory created by cortex
+                    temp_parent = source_path
+                    while temp_parent.parent != temp_parent:  # Stop at root
+                        if "cortex-build-" in temp_parent.name:
+                            # This is the main temp directory created by mkdtemp
+                            shutil.rmtree(temp_parent, ignore_errors=True)
+                            break
+                        temp_parent = temp_parent.parent
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary directory: {e}")
+
             return BuildResult(
                 success=True,
                 package_name=package_name,
@@ -701,6 +729,19 @@ class SourceBuilder:
 
         except Exception as e:
             logger.exception(f"Build failed for {package_name}")
+            # Clean up temporary directory on error
+            try:
+                source_path = source_dir.resolve() if source_dir else None
+                if source_path and ("/tmp" in str(source_path) or "/var/tmp" in str(source_path)):
+                    temp_parent = source_path
+                    while temp_parent.parent != temp_parent:
+                        if "cortex-build-" in temp_parent.name:
+                            shutil.rmtree(temp_parent, ignore_errors=True)
+                            break
+                        temp_parent = temp_parent.parent
+            except Exception:
+                pass  # Best effort cleanup
+
             return BuildResult(
                 success=False,
                 package_name=package_name,

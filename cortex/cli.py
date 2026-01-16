@@ -4202,7 +4202,8 @@ def main():
 
     # daemon run-tests - run daemon test suite
     daemon_run_tests_parser = daemon_subs.add_parser(
-        "run-tests", help="Run daemon test suite (runs all tests by default when no filters are provided)"
+        "run-tests",
+        help="Run daemon test suite (runs all tests by default when no filters are provided)",
     )
     daemon_run_tests_parser.add_argument("--unit", action="store_true", help="Run only unit tests")
     daemon_run_tests_parser.add_argument(

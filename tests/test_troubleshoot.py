@@ -368,6 +368,42 @@ class TestInteractiveLoop(unittest.TestCase):
 
     @patch("cortex.troubleshoot.console")
     @patch("cortex.troubleshoot.Prompt")
+    def test_help_command(self, mock_prompt, mock_console):
+        """Test that 'help' command creates log file and prints instructions."""
+        mock_prompt.ask.side_effect = ["help", "exit"]
+        
+        with patch("cortex.troubleshoot.auto_detect_api_key") as mock_detect:
+            mock_detect.return_value = (True, "test-key", "fake", "env")
+            with patch("cortex.troubleshoot.AskHandler"):
+                troubleshooter = Troubleshooter()
+                troubleshooter.messages = [{"role": "system", "content": "test"}]
+                
+                # Mock AI for summary generation
+                mock_ai = MagicMock()
+                mock_ai.ask.return_value = "Issue Summary: Test issue"
+                troubleshooter.ai = mock_ai
+
+                # Mock file opening to avoid actual file creation
+                with patch("builtins.open", unittest.mock.mock_open()) as mock_file:
+                    with patch("os.path.abspath", return_value="/abs/path/to/log"):
+                        troubleshooter._interactive_loop()
+                        
+                        # Verify file was opened for writing
+                        mock_file.assert_called_with("cortex_support_log.txt", "w")
+                        
+                        # Verify content was written
+                        handle = mock_file()
+                        handle.write.assert_any_call("Cortex Troubleshooting Log\n")
+                        handle.write.assert_any_call("Issue Summary:\n")
+                        handle.write.assert_any_call("Issue Summary: Test issue")
+
+                # Verify instructions were printed
+                mock_console.print.assert_any_call(
+                    f"Please open a new issue and attach the cortex_support_log.txt file."
+                )
+
+    @patch("cortex.troubleshoot.console")
+    @patch("cortex.troubleshoot.Prompt")
     @patch("cortex.troubleshoot.Markdown")
     def test_user_input_sent_to_ai(self, mock_md, mock_prompt, mock_console):
         """Test that user input is sent to AI."""

@@ -8,6 +8,7 @@ This module provides the Troubleshooter class which:
 """
 
 import re
+import os
 import shutil
 import subprocess
 import sys
@@ -83,7 +84,9 @@ class Troubleshooter:
     def start(self) -> int:
         """Start the troubleshooting session."""
         console.print("[bold cyan]🤖 Cortex Troubleshooter[/bold cyan]")
-        console.print("[dim]Describe your issue, or type 'doctor' to run health checks.[/dim]")
+        console.print(
+            "[dim]Describe your issue, type 'doctor' to run health checks, or 'help' to escalate to human support.[/dim]"
+        )
 
         if not self.ai:
             console.print("\n[red]❌ AI Assistant unavailable (check API key).[/red]")
@@ -168,6 +171,33 @@ class Troubleshooter:
 
                     doc = SystemDoctor()
                     doc.run_checks()
+                    continue
+
+                # Help command for escalation
+                if user_input.lower() == "help":
+                    with console.status("[cyan]Generating support summary...[/cyan]"):
+                        # Ask AI to summarize the issue
+                        history_text = "\n".join(
+                            [f"{m['role']}: {m['content']}" for m in self.messages]
+                        )
+                        summary = self.ai.ask(
+                            f"Summarize the following troubleshooting session for a support ticket. Include the user's issue, commands tried, and errors encountered:\n\n{history_text}",
+                            system_prompt="Create a concise summary of the issue with user's POV",
+                        )
+
+                    log_file = "cortex_support_log.txt"
+                    log_path = os.path.abspath(log_file)
+                    
+                    with open(log_file, "w") as f:
+                        f.write("Cortex Troubleshooting Log\n")
+                        f.write("==========================\n\n")
+                        f.write("Issue Summary:\n")
+                        f.write(summary)
+
+                    console.print(
+                        f"\n[bold green]✓ Diagnostic log saved to {log_path}[/bold green]"
+                    )
+                    console.print(f"Please open a new issue and attach the {log_file} file.")
                     continue
 
                 self.messages.append({"role": "user", "content": user_input})

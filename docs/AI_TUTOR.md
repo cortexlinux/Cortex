@@ -716,7 +716,7 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 
 ```bash
 # Clone and setup
-git clone https://github.com/YOUR_USERNAME/cortex.git
+git clone https://github.com/cortexlinux/cortex.git
 cd cortex
 
 # Create venv and install dev dependencies

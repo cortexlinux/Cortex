@@ -118,10 +118,14 @@ config:
 # Cache statistics
 # =============================================================================
 cache:
-  stats_header: "Cache Stats"
-  hits: "Hits"
-  misses: "Misses"
-  hit_rate: "Hit rate"
+  stats_header: "LLM Cache Statistics"
+  hits: "Cache Hits"
+  misses: "Cache Misses"
+  # {rate} - hit rate percentage
+  hit_rate: "Hit Rate: {rate}%"
+  entries: "Total Entries"
+  size: "Cache Size"
+  cleared: "Cache cleared"
   saved_calls: "Saved calls (approx)"
   read_error: "Unable to read cache stats: {error}"
   unexpected_error: "Unexpected error reading cache stats: {error}"
@@ -426,23 +430,6 @@ notify:
   message_required: "Message required"
   
 # =============================================================================
-# Environment management
-# =============================================================================
-env:
-  audit_header: "Environment Audit"
-  config_files_scanned: "Config Files Scanned"
-  variables_found: "Environment Variables Found"
-  
-  # PATH operations
-  path_added: "Added '{path}' to PATH"
-  path_removed: "Removed '{path}' from PATH"
-  path_already_exists: "'{path}' is already in PATH"
-  path_not_found: "'{path}' not found in PATH"
-  
-  # {path} - config file path
-  persist_note: "To use in current shell: source {path}"
-  
-# =============================================================================
 # API Key messages
 # =============================================================================
 api_key:
@@ -452,19 +439,6 @@ api_key:
   # {provider} - provider name
   using_provider: "Using {provider} API key"
   using_ollama: "Using Ollama (no API key required)"
-  
-# =============================================================================
-# Cache
-# =============================================================================
-cache:
-  stats_header: "LLM Cache Statistics"
-  hits: "Cache Hits"
-  misses: "Cache Misses"
-  # {rate} - hit rate percentage
-  hit_rate: "Hit Rate: {rate}%"
-  entries: "Total Entries"
-  size: "Cache Size"
-  cleared: "Cache cleared"
   
 # =============================================================================
 # Error messages

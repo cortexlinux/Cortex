@@ -268,18 +268,25 @@ class LanguageConfig:
                 + ", ".join(sorted(supported_codes))
             )
 
+        old_language = self.get_language()
         preferences = self._load_preferences()
         preferences["language"] = language
         self._save_preferences(preferences)
+
+        # Audit log the language change
+        self._log_language_change("set", old_language, language)
 
     def clear_language(self) -> None:
         """
         Clear the saved language preference (use auto-detection instead).
         """
+        old_language = self.get_language()
         preferences = self._load_preferences()
         if "language" in preferences:
             del preferences["language"]
             self._save_preferences(preferences)
+            # Audit log the language clear
+            self._log_language_change("clear", old_language, None)
 
     def get_language_info(self) -> dict[str, Any]:
         """
@@ -326,3 +333,42 @@ class LanguageConfig:
             "saved_preference": saved_lang if saved_lang else None,
             "detected_language": detected_lang,
         }
+
+    def _log_language_change(
+        self, action: str, old_language: str | None, new_language: str | None
+    ) -> None:
+        """
+        Log language preference changes to the audit history database.
+
+        Args:
+            action: The action performed ("set" or "clear")
+            old_language: Previous language code
+            new_language: New language code (None for clear)
+        """
+        try:
+            import datetime
+
+            from cortex.installation_history import (
+                InstallationHistory,
+                InstallationType,
+            )
+
+            history = InstallationHistory()
+
+            # Build description for the config change
+            if action == "set":
+                description = f"language:{old_language}->{new_language}"
+            else:
+                description = f"language:{old_language}->auto"
+
+            # Record as CONFIG type operation
+            history.record_installation(
+                operation_type=InstallationType.CONFIG,
+                packages=[description],
+                commands=[f"cortex config language {new_language or 'auto'}"],
+                start_time=datetime.datetime.now(),
+            )
+            logger.debug(f"Audit logged language change: {description}")
+        except Exception as e:
+            # Don't fail the language change if audit logging fails
+            logger.warning(f"Failed to audit log language change: {e}")

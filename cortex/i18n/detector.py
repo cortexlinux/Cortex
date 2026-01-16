@@ -92,17 +92,21 @@ def _parse_locale(locale_string: str) -> str | None:
     if not locale_string:
         return None
 
-    # Normalize to lowercase
+    # Normalize to lowercase and strip whitespace
     locale_lower = locale_string.lower().strip()
 
     # Handle empty or C/POSIX locale
     if not locale_lower or locale_lower in ("c", "posix"):
         return "en"
 
-    # Remove encoding suffix (e.g., .UTF-8, .utf8)
-    locale_lower = re.sub(r"\.[a-z0-9-]+$", "", locale_lower)
+    # Normalize hyphens to underscores BEFORE any other processing
+    # This handles locales like "en-US", "zh-CN", "pt-BR"
+    locale_lower = locale_lower.replace("-", "_")
 
-    # Try direct mapping first
+    # Remove encoding suffix (e.g., .UTF-8, .utf8)
+    locale_lower = re.sub(r"\.[a-z0-9_-]+$", "", locale_lower)
+
+    # Try direct mapping first (e.g., "en_us", "zh_cn")
     if locale_lower in LANGUAGE_MAPPINGS:
         return LANGUAGE_MAPPINGS[locale_lower]
 
@@ -112,11 +116,9 @@ def _parse_locale(locale_string: str) -> str | None:
         if lang_part in LANGUAGE_MAPPINGS:
             return LANGUAGE_MAPPINGS[lang_part]
 
-    # Try with underscore for regional variants
-    if "_" in locale_lower:
-        full_locale = locale_lower.replace("-", "_")
-        if full_locale in LANGUAGE_MAPPINGS:
-            return LANGUAGE_MAPPINGS[full_locale]
+        # Try full locale for regional variants (already normalized)
+        if locale_lower in LANGUAGE_MAPPINGS:
+            return LANGUAGE_MAPPINGS[locale_lower]
 
     return None
 

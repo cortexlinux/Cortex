@@ -758,15 +758,30 @@ class TestSupportedLanguages(unittest.TestCase):
 
     def test_all_supported_languages_have_catalogs(self):
         """Test that all supported languages have message catalogs."""
-        from pathlib import Path
+        import importlib.resources
 
         from cortex.i18n.translator import SUPPORTED_LANGUAGES
 
-        locales_dir = Path(__file__).parent.parent / "cortex" / "i18n" / "locales"
+        # Use importlib.resources for robust path resolution that works
+        # regardless of how the package is installed or test is invoked
+        try:
+            # Python 3.9+ API
+            locales_pkg = importlib.resources.files("cortex.i18n") / "locales"
+            for lang_code in SUPPORTED_LANGUAGES:
+                catalog_file = locales_pkg / f"{lang_code}.yaml"
+                # Check if the resource exists using is_file() or traversable API
+                self.assertTrue(
+                    catalog_file.is_file(),
+                    f"Missing catalog for language: {lang_code}",
+                )
+        except (TypeError, AttributeError):
+            # Fallback for older Python versions
+            from pathlib import Path
 
-        for lang_code in SUPPORTED_LANGUAGES:
-            catalog_path = locales_dir / f"{lang_code}.yaml"
-            self.assertTrue(catalog_path.exists(), f"Missing catalog for language: {lang_code}")
+            locales_dir = Path(__file__).parent.parent / "cortex" / "i18n" / "locales"
+            for lang_code in SUPPORTED_LANGUAGES:
+                catalog_path = locales_dir / f"{lang_code}.yaml"
+                self.assertTrue(catalog_path.exists(), f"Missing catalog for language: {lang_code}")
 
     def test_all_languages_have_metadata(self):
         """Test that all supported languages have name and native fields."""
@@ -853,7 +868,6 @@ class TestCLIIntegration(unittest.TestCase):
 
     def test_cli_language_list(self):
         """Test CLI language list command."""
-        import sys
         from unittest.mock import patch
 
         with patch("pathlib.Path.home", return_value=self.temp_home):

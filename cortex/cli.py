@@ -1501,13 +1501,25 @@ class CortexCLI:
             info = lang_config.get_language_info()
             cx_header(t("language.current"))
             console.print(f"  [bold]{info['name']}[/bold] ({info['native_name']})")
-            console.print(f"  [dim]Code: {info['language']}[/dim]")
-            console.print(f"  [dim]Source: {info['source']}[/dim]")
+            console.print(f"  [dim]{t('config.code_label')}: {info['language']}[/dim]")
+            # Translate the source value using proper key mapping
+            source_translation_keys = {
+                "environment": "language.set_from_env",
+                "config": "language.set_from_config",
+                "auto-detected": "language.auto_detected",
+                "default": "language.default",
+            }
+            source = info.get("source", "")
+            source_key = source_translation_keys.get(source)
+            source_display = t(source_key) if source_key else source
+            console.print(f"  [dim]{t('config.source_label')}: {source_display}[/dim]")
 
             if info.get("env_override"):
-                console.print(f"  [dim]Environment override: {info['env_override']}[/dim]")
+                console.print(f"  [dim]{t('language.set_from_env')}: {info['env_override']}[/dim]")
             if info.get("detected_language"):
-                console.print(f"  [dim]OS detected: {info['detected_language']}[/dim]")
+                console.print(
+                    f"  [dim]{t('language.auto_detected')}: {info['detected_language']}[/dim]"
+                )
             return 0
 
         # Set language
@@ -1525,8 +1537,8 @@ class CortexCLI:
             console.print(
                 f"[dim]{t('language.supported_codes')}: {', '.join(SUPPORTED_LANGUAGES.keys())}[/dim]"
             )
-            console.print("[dim]Use: cortex config language <code> to change[/dim]")
-            console.print("[dim]Use: cortex config language --list for details[/dim]")
+            console.print(f"[dim]{t('config.use_command_hint')}[/dim]")
+            console.print(f"[dim]{t('config.list_hint')}[/dim]")
             return 0
 
         # Handle 'auto' to clear saved preference
@@ -2982,15 +2994,31 @@ def _normalize_for_lookup(s: str) -> str:
     """
     Normalize a string for lookup, handling Latin and non-Latin scripts differently.
 
-    For ASCII/Latin text: lowercase for case-insensitive matching
+    For ASCII/Latin text: casefold for case-insensitive matching (handles accented chars)
     For non-Latin text (e.g., 中文): keep unchanged to preserve meaning
+
+    Uses casefold() instead of lower() because:
+    - casefold() handles accented Latin characters better (e.g., "Español", "Français")
+    - casefold() is more aggressive and handles edge cases like German ß -> ss
 
     This prevents issues like:
     - "中文".lower() producing the same string but creating duplicate keys
     - Meaningless normalization of non-Latin scripts
     """
     if _is_ascii(s):
-        return s.lower()
+        return s.casefold()
+    # For non-ASCII Latin scripts (accented chars like é, ñ, ü), use casefold
+    # Only keep unchanged for truly non-Latin scripts (CJK, Arabic, etc.)
+    try:
+        # Check if string contains any Latin characters (a-z, A-Z, or accented)
+        # If it does, it's likely a Latin-based language name
+        import unicodedata
+
+        has_latin = any(unicodedata.category(c).startswith("L") and ord(c) < 0x3000 for c in s)
+        if has_latin:
+            return s.casefold()
+    except Exception:
+        pass
     return s
 
 
@@ -3029,11 +3057,12 @@ def _resolve_language_name(name: str) -> str | None:
         english_name = info["name"]
         native_name = info["native"]
 
-        # English names are always ASCII, safe to lowercase
-        name_to_code[english_name.lower()] = code
+        # English names are always ASCII, use casefold for case-insensitive matching
+        name_to_code[english_name.casefold()] = code
 
-        # Native names: normalize only if ASCII (Latin scripts like Español, Français)
-        # For non-Latin scripts (中文), store as-is only
+        # Native names: normalize using _normalize_for_lookup
+        # - Latin scripts (Español, Français): casefold for case-insensitive matching
+        # - Non-Latin scripts (中文): store as-is only
         native_normalized = _normalize_for_lookup(native_name)
         name_to_code[native_normalized] = code
 

@@ -10,8 +10,6 @@ import os
 from pathlib import Path
 from typing import TypedDict
 
-from cortex.logging_system import CortexLogger
-
 MAX_RESOLUTIONS = 50
 DEFAULT_SEARCH_LIMIT = 3
 
@@ -24,7 +22,6 @@ class Resolution(TypedDict):
 
 class ResolutionManager:
     def __init__(self, storage_path: str = "~/.cortex/resolutions.json"):
-        self.logger = CortexLogger("resolutions")
         self.storage_path = Path(os.path.expanduser(storage_path))
         self._ensure_storage()
 
@@ -81,7 +78,6 @@ class ResolutionManager:
 
         for res in resolutions:
             if "issue" not in res or "fix" not in res:
-                self.logger.warning(f"Skipping malformed resolution entry: {res}")
                 continue
             issue_words = set(res["issue"].lower().split())
             # Calculate overlap score

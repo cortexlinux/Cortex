@@ -274,8 +274,12 @@ class Troubleshooter:
                 self.messages.append({"role": "assistant", "content": response})
 
                 # Check for commands to execute
-                commands = self._extract_code_blocks(response)
-                if commands:
+                while True:
+                    commands = self._extract_code_blocks(response)
+                    if not commands:
+                        break
+
+                    last_analysis = None
                     for cmd in commands:
                         cmd = cmd.strip()
                         if not cmd:
@@ -324,6 +328,14 @@ class Troubleshooter:
 
                             console.print(Markdown(analysis))
                             self.messages.append({"role": "assistant", "content": analysis})
+                            last_analysis = analysis
+
+                    # If the last analysis contains new commands, loop back to execute them
+                    if last_analysis and self._extract_code_blocks(last_analysis):
+                        response = last_analysis
+                        continue
+                    else:
+                        break
 
         except KeyboardInterrupt:
             console.print("\n[dim]Session cancelled.[/dim]")

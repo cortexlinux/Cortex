@@ -26,6 +26,13 @@ from cortex.installation_history import InstallationHistory, InstallationStatus,
 from cortex.llm.interpreter import CommandInterpreter
 from cortex.network_config import NetworkConfig
 from cortex.notification_manager import NotificationManager
+from cortex.pin_manager import (
+    PackageSource,
+    PinManager,
+    PinType,
+    get_pin_manager,
+    parse_package_spec,
+)
 from cortex.role_manager import RoleManager
 from cortex.stack_manager import StackManager
 from cortex.uninstall_impact import (
@@ -38,13 +45,6 @@ from cortex.update_checker import UpdateChannel, should_notify_update
 from cortex.updater import Updater, UpdateStatus
 from cortex.validators import validate_api_key, validate_install_request
 from cortex.version_manager import get_version_string
-from cortex.pin_manager import (
-    PinManager,
-    PinType,
-    PackageSource,
-    parse_package_spec,
-    get_pin_manager,
-)
 
 # CLI Help Constants
 HELP_SKIP_CONFIRM = "Skip confirmation prompt"
@@ -913,7 +913,7 @@ class CortexCLI:
                 for pkg, pin in pinned_packages:
                     console.print(f"   • {pkg} (pinned to {pin.format_version_display()})")
                 console.print()
-                
+
                 if force and execute:
                     # Confirm override
                     try:
@@ -2912,6 +2912,7 @@ class CortexCLI:
             self._print_error(f"Pin operation failed: {e}")
             if self.verbose:
                 import traceback
+
                 traceback.print_exc()
             return 1
 
@@ -2927,7 +2928,9 @@ class CortexCLI:
         package, version = parse_package_spec(spec)
 
         if not version:
-            self._print_error("Version required. Use format: package@version (e.g., postgresql@14.10)")
+            self._print_error(
+                "Version required. Use format: package@version (e.g., postgresql@14.10)"
+            )
             return 1
 
         # Detect pin type if not specified
@@ -2935,7 +2938,9 @@ class CortexCLI:
             try:
                 pin_type = PinType(pin_type_str)
             except ValueError:
-                self._print_error(f"Invalid pin type: {pin_type_str}. Use: exact, minor, major, range")
+                self._print_error(
+                    f"Invalid pin type: {pin_type_str}. Use: exact, minor, major, range"
+                )
                 return 1
         else:
             # Auto-detect from version string
@@ -3002,6 +3007,7 @@ class CortexCLI:
         console.print()
 
         from rich.table import Table
+
         table = Table(show_header=True, header_style="bold cyan", box=None)
         table.add_column("Package", style="green")
         table.add_column("Version", style="cyan")
@@ -3011,7 +3017,9 @@ class CortexCLI:
 
         for pin in pins:
             age_days = pin.get_age_days()
-            age_str = f"{age_days} day{'s' if age_days != 1 else ''} ago" if age_days > 0 else "today"
+            age_str = (
+                f"{age_days} day{'s' if age_days != 1 else ''} ago" if age_days > 0 else "today"
+            )
             table.add_row(
                 pin.package,
                 pin.format_version_display(),
@@ -3686,19 +3694,30 @@ def main():
     # pin add <package@version> [--type TYPE] [--source SOURCE] [--reason REASON] [--sync-apt]
     pin_add_parser = pin_subs.add_parser("add", help="Pin a package version")
     pin_add_parser.add_argument("package_spec", help="Package and version (e.g., postgresql@14.10)")
-    pin_add_parser.add_argument("--type", "-t", choices=["exact", "minor", "major", "range"], help="Pin type (auto-detected if not specified)")
-    pin_add_parser.add_argument("--source", "-s", choices=["apt", "pip", "npm"], help="Package source (default: apt)")
+    pin_add_parser.add_argument(
+        "--type",
+        "-t",
+        choices=["exact", "minor", "major", "range"],
+        help="Pin type (auto-detected if not specified)",
+    )
+    pin_add_parser.add_argument(
+        "--source", "-s", choices=["apt", "pip", "npm"], help="Package source (default: apt)"
+    )
     pin_add_parser.add_argument("--reason", "-r", help="Reason for pinning")
     pin_add_parser.add_argument("--sync-apt", action="store_true", help="Also run apt-mark hold")
 
     # pin remove <package> [--sync-apt]
     pin_remove_parser = pin_subs.add_parser("remove", help="Remove a package pin")
     pin_remove_parser.add_argument("package", help="Package name")
-    pin_remove_parser.add_argument("--sync-apt", action="store_true", help="Also run apt-mark unhold")
+    pin_remove_parser.add_argument(
+        "--sync-apt", action="store_true", help="Also run apt-mark unhold"
+    )
 
     # pin list [--source SOURCE]
     pin_list_parser = pin_subs.add_parser("list", help="List all pinned packages")
-    pin_list_parser.add_argument("--source", "-s", choices=["apt", "pip", "npm"], help="Filter by source")
+    pin_list_parser.add_argument(
+        "--source", "-s", choices=["apt", "pip", "npm"], help="Filter by source"
+    )
 
     # pin export [--output FILE]
     pin_export_parser = pin_subs.add_parser("export", help="Export pins to file")
@@ -3707,7 +3726,9 @@ def main():
     # pin import <file> [--replace]
     pin_import_parser = pin_subs.add_parser("import", help="Import pins from file")
     pin_import_parser.add_argument("file", help="Input file")
-    pin_import_parser.add_argument("--replace", action="store_true", help="Replace all pins instead of merging")
+    pin_import_parser.add_argument(
+        "--replace", action="store_true", help="Replace all pins instead of merging"
+    )
 
     # pin clear [--force]
     pin_clear_parser = pin_subs.add_parser("clear", help="Clear all pins")

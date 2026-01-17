@@ -429,7 +429,7 @@ journalctl -u cortexd | grep "Startup completed"
 ```
 
 **Example output:**
-```
+```text
 [INFO] Daemon: Starting daemon
 [INFO] Daemon: Starting service: IPCServer
 [INFO] IPCServer: Started on /run/cortex/cortex.sock
@@ -439,7 +439,7 @@ journalctl -u cortexd | grep "Startup completed"
 ```
 
 **Note:** For very fast startups (< 1ms), the time is shown in microseconds (μs) for precision:
-```
+```text
 [INFO] Daemon: Startup completed in 456μs
 ```
 #### Method 2: Manual Timing with systemctl

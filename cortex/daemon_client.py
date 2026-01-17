@@ -50,11 +50,23 @@ class DaemonResponse:
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "DaemonResponse":
         """Parse a JSON response from the daemon."""
+        # Handle error field defensively - it may be a dict, string, or missing
+        error_obj = data.get("error")
+        if isinstance(error_obj, dict):
+            error = error_obj.get("message")
+            error_code = error_obj.get("code")
+        elif isinstance(error_obj, str):
+            error = error_obj
+            error_code = None
+        else:
+            error = None
+            error_code = None
+
         return cls(
             success=data.get("success", False),
             result=data.get("result"),
-            error=data.get("error", {}).get("message") if "error" in data else None,
-            error_code=data.get("error", {}).get("code") if "error" in data else None,
+            error=error,
+            error_code=error_code,
             timestamp=data.get("timestamp"),
         )
 
@@ -180,8 +192,6 @@ class DaemonClient:
             )
         except TimeoutError:
             raise DaemonConnectionError("Connection timed out. The daemon may be unresponsive.")
-        except json.JSONDecodeError as e:
-            raise DaemonProtocolError(f"Invalid JSON response: {e}")
 
     # =========================================================================
     # PR1 IPC Methods

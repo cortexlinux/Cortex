@@ -455,7 +455,7 @@ class TestInstallFlows(unittest.TestCase):
         """Confirmed install should mark completion when sandbox commands succeed."""
 
         class FakeSandbox:
-            def execute(self, cmd):
+            def execute(self, cmd, stdin=None):
                 return SimpleNamespace(success=True, stdout=f"ran {cmd}")
 
         # Set up pending commands as they would be stored from dry-run

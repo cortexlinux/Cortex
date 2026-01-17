@@ -1596,14 +1596,16 @@ class UIRenderer:
                         # Suppress CX prints that can contaminate JSON plan output
                         silent_prev = os.environ.get("CORTEX_SILENT_OUTPUT")
                         os.environ["CORTEX_SILENT_OUTPUT"] = "1"
-                        result = cli.install(
-                            package_name, dry_run=True, execute=False, json_output=True
-                        )
-                        # Restore previous state
-                        if silent_prev is None:
-                            os.environ.pop("CORTEX_SILENT_OUTPUT", None)
-                        else:
-                            os.environ["CORTEX_SILENT_OUTPUT"] = silent_prev
+                        try:
+                            result = cli.install(
+                                package_name, dry_run=True, execute=False, json_output=True
+                            )
+                        finally:
+                            # Restore previous state - always runs even on exception
+                            if silent_prev is None:
+                                os.environ.pop("CORTEX_SILENT_OUTPUT", None)
+                            else:
+                                os.environ["CORTEX_SILENT_OUTPUT"] = silent_prev
                 except Exception as e:
                     result = 1
                     stderr_capture.write(str(e))
@@ -1721,8 +1723,35 @@ class UIRenderer:
                     self.installation_progress.state = InstallationState.WAITING_PASSWORD
                     self.installation_progress.current_library = "Waiting for sudo password..."
                 # Wait for password to be entered by user via _submit_password
-                while not self._cached_sudo_password and self.running:
+                # Use a loop with timeout and check cancellation/state changes
+                timeout_end = time.time() + 300  # 5 minute timeout
+                while time.time() < timeout_end:
+                    if self._cached_sudo_password:
+                        break
+                    if self.stop_event.is_set():
+                        with self.state_lock:
+                            self.installation_progress.state = InstallationState.FAILED
+                            self.installation_progress.error_message = (
+                                "Installation canceled while waiting for password"
+                            )
+                        return
+                    if not self.running:
+                        with self.state_lock:
+                            self.installation_progress.state = InstallationState.FAILED
+                            self.installation_progress.error_message = (
+                                "Installation stopped while waiting for password"
+                            )
+                        return
                     time.sleep(0.1)
+
+                # Check if we timed out waiting for password
+                if not self._cached_sudo_password:
+                    with self.state_lock:
+                        self.installation_progress.state = InstallationState.FAILED
+                        self.installation_progress.error_message = (
+                            "Timeout waiting for sudo password"
+                        )
+                    return
 
             # Step 2: Execute installation
             with self.state_lock:
@@ -1760,12 +1789,15 @@ class UIRenderer:
 
                         # Prepare command - if sudo is needed, inject password via stdin
                         exec_cmd = cmd
+                        stdin_input = None
                         if cmd.strip().startswith("sudo") and self._cached_sudo_password:
-                            # Use sudo -S to read password from stdin
-                            exec_cmd = f"echo {repr(self._cached_sudo_password)} | sudo -S {cmd[4:].strip()}"
+                            # Use sudo -S -p "" to suppress prompts and read password from stdin
+                            # Remove 'sudo' from command and pass password via stdin
+                            exec_cmd = f'sudo -S -p "" {cmd[4:].strip()}'
+                            stdin_input = f"{self._cached_sudo_password}\n"
 
-                        # Execute the command
-                        exec_result = sandbox.execute(exec_cmd)
+                        # Execute the command with stdin if password is needed
+                        exec_result = sandbox.execute(exec_cmd, stdin=stdin_input)
                         output_text = exec_result.stdout or ""
                         outputs.append(output_text)
 

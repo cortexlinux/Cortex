@@ -135,10 +135,10 @@ class Troubleshooter:
         """
         # Log the command execution for audit
         redacted = re.sub(
-             r"(?i)(--?(?:token|api[-_]?key|password|secret)\s+)(\S+)",
-             r"\1***",
-             cmd,
-         )
+            r"(?i)(--?(?:token|api[-_]?key|password|secret)\s+)(\S+)",
+            r"\1***",
+            cmd,
+        )
         self.logger.info(f"Executing command: {redacted}")
 
         # Check if Firejail is available for sandboxing

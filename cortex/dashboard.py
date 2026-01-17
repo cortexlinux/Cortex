@@ -186,6 +186,7 @@ class InstallationState(Enum):
     IDLE = "idle"
     WAITING_INPUT = "waiting_input"
     WAITING_CONFIRMATION = "waiting_confirmation"
+    WAITING_PASSWORD = "waiting_password"
     PROCESSING = "processing"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -729,6 +730,7 @@ class UIRenderer:
         self.input_text = ""
         self.input_active = False
         self._pending_commands: list[str] = []  # Commands pending confirmation
+        self._cached_sudo_password = ""  # Cache sudo password for entire session
 
         # Current action state (for display)
         self.current_action = ActionType.NONE
@@ -899,6 +901,19 @@ class UIRenderer:
             content, title="📦 What would you like to install?", padding=(2, 2), box=ROUNDED
         )
 
+    def _render_password_dialog(self) -> Panel:
+        """Render password input dialog for sudo commands"""
+        instructions = (
+            "[cyan]Enter sudo password[/cyan] to continue installation\n"
+            "[dim]Press Enter to submit, Esc to cancel[/dim]"
+        )
+        # Show dots instead of actual characters for security
+        password_display = "•" * len(self.input_text)
+        content = f"{instructions}\n\n[bold]>[/bold] {password_display}[blink_fast]█[/blink_fast]"
+        return Panel(
+            content, title="🔐 Sudo Password Required", padding=(2, 2), box=ROUNDED
+        )
+
     def _render_confirmation_dialog(self) -> Panel:
         """Render confirmation dialog for installation"""
         progress = self.installation_progress
@@ -933,6 +948,9 @@ class UIRenderer:
 
         if progress.state == InstallationState.WAITING_INPUT:
             return self._render_input_dialog()
+
+        if progress.state == InstallationState.WAITING_PASSWORD:
+            return self._render_password_dialog()
 
         if progress.state == InstallationState.WAITING_CONFIRMATION:
             return self._render_confirmation_dialog()
@@ -1079,6 +1097,18 @@ class UIRenderer:
                 # Arrow keys in input mode - show in status
                 self.last_pressed_key = key
                 # Could implement history navigation or cursor movement here
+            elif key and key.isprintable() and len(self.input_text) < MAX_INPUT_LENGTH:
+                self.input_text += key
+            return
+
+        # Handle password input mode
+        if self.installation_progress.state == InstallationState.WAITING_PASSWORD:
+            if key == "\n" or key == "\r":  # Enter
+                self._submit_password()
+            elif key == "\x1b":  # Escape - cancel password entry
+                self._cancel_operation()
+            elif key == "\b" or key == "\x7f":  # Backspace
+                self.input_text = self.input_text[:-1]
             elif key and key.isprintable() and len(self.input_text) < MAX_INPUT_LENGTH:
                 self.input_text += key
             return
@@ -1498,6 +1528,15 @@ class UIRenderer:
             # Run dry-run first to get commands, then show confirmation
             self._run_dry_run_and_confirm()
 
+    def _submit_password(self) -> None:
+        """Submit password for sudo commands"""
+        with self.state_lock:
+            password = self.input_text
+            self.input_text = ""  # Clear for next use
+            self.installation_progress.state = InstallationState.IN_PROGRESS
+            # Store password for execution
+            self._cached_sudo_password = password
+
     def _run_dry_run_and_confirm(self) -> None:
         """
         Run dry-run to get commands, then show confirmation dialog.
@@ -1556,9 +1595,17 @@ class UIRenderer:
                         contextlib.redirect_stdout(stdout_capture),
                         contextlib.redirect_stderr(stderr_capture),
                     ):
+                        # Suppress CX prints that can contaminate JSON plan output
+                        silent_prev = os.environ.get("CORTEX_SILENT_OUTPUT")
+                        os.environ["CORTEX_SILENT_OUTPUT"] = "1"
                         result = cli.install(
                             package_name, dry_run=True, execute=False, json_output=True
                         )
+                        # Restore previous state
+                        if silent_prev is None:
+                            os.environ.pop("CORTEX_SILENT_OUTPUT", None)
+                        else:
+                            os.environ["CORTEX_SILENT_OUTPUT"] = silent_prev
                 except Exception as e:
                     result = 1
                     stderr_capture.write(str(e))
@@ -1665,6 +1712,20 @@ class UIRenderer:
             if self.stop_event.is_set():
                 return
 
+            # Get pending commands and check if sudo password is needed
+            with self.state_lock:
+                commands = self._pending_commands[:] if self._pending_commands else []
+
+            # Check if any command requires sudo and we don't have password yet
+            needs_password = any(cmd.strip().startswith("sudo") for cmd in commands)
+            if needs_password and not self._cached_sudo_password:
+                with self.state_lock:
+                    self.installation_progress.state = InstallationState.WAITING_PASSWORD
+                    self.installation_progress.current_library = "Waiting for sudo password..."
+                # Wait for password to be entered by user via _submit_password
+                while not self._cached_sudo_password and self.running:
+                    time.sleep(0.1)
+
             # Step 2: Execute installation
             with self.state_lock:
                 self.installation_progress.current_step = 2
@@ -1674,39 +1735,54 @@ class UIRenderer:
             # Execute via SandboxExecutor for security
             try:
                 sandbox = SandboxExecutor()
-                # Get commands from dry-run first
-                cli = CortexCLI()
-
-                with io.StringIO() as stdout_capture:
-                    try:
-                        with contextlib.redirect_stdout(stdout_capture):
-                            cli.install(package_name, dry_run=True, execute=False, json_output=True)
-                        json_output = stdout_capture.getvalue()
-                        json_data = json.loads(json_output)
-                        commands = json_data.get("commands", [])
-                    except (json.JSONDecodeError, KeyError) as e:
-                        logger.error(f"Failed to parse install commands: {e}", exc_info=True)
-                        commands = []
-                    except Exception as e:
-                        logger.error(f"Failed to get install commands: {e}", exc_info=True)
-                        commands = []
 
                 if not commands:
                     result = 1
                     stdout_output = ""
-                    stderr_output = "No commands generated"
+                    stderr_output = "No confirmed commands to execute. Please re-plan the installation."
                 else:
-                    # Execute each command via sandbox
+                    # Execute each command via sandbox, showing output and commands
                     all_success = True
                     outputs = []
-                    for cmd in commands:
-                        exec_result = sandbox.execute(cmd)
-                        output_text = getattr(
-                            exec_result, "stdout", getattr(exec_result, "output", "")
-                        )
-                        outputs.append(output_text or "")
-                        if not exec_result.success:
+                    total_commands = len(commands)
+
+                    for cmd_idx, cmd in enumerate(commands, 1):
+                        if self.stop_event.is_set():
+                            return
+
+                        # Show the command being executed
+                        with self.state_lock:
+                            display_cmd = cmd if len(cmd) <= 70 else cmd[:67] + "..."
+                            self.installation_progress.current_library = f"[{cmd_idx}/{total_commands}] {display_cmd}"
+                            self.installation_progress.update_elapsed()
+
+                        # Prepare command - if sudo is needed, inject password via stdin
+                        exec_cmd = cmd
+                        if cmd.strip().startswith("sudo") and self._cached_sudo_password:
+                            # Use sudo -S to read password from stdin
+                            exec_cmd = f"echo {repr(self._cached_sudo_password)} | sudo -S {cmd[4:].strip()}"
+
+                        # Execute the command
+                        exec_result = sandbox.execute(exec_cmd)
+                        output_text = exec_result.stdout or ""
+                        outputs.append(output_text)
+
+                        # Update with result indicator
+                        if exec_result.success:
+                            with self.state_lock:
+                                lines = output_text.split('\n') if output_text else []
+                                # Show last meaningful line of output
+                                preview = next((l for l in reversed(lines) if l.strip()), "")
+                                if preview and len(preview) > 60:
+                                    preview = preview[:57] + "..."
+                                status = f"✓ [{cmd_idx}/{total_commands}]"
+                                self.installation_progress.current_library = (
+                                    f"{status} {preview}" if preview else status
+                                )
+                        else:
                             all_success = False
+                            with self.state_lock:
+                                self.installation_progress.current_library = f"✗ [{cmd_idx}/{total_commands}] Failed"
                             break
 
                     result = 0 if all_success else 1

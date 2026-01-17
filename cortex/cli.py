@@ -820,6 +820,11 @@ class CortexCLI:
         parallel: bool = False,
         json_output: bool = False,
     ):
+        # Initialize installation history
+        history = InstallationHistory()
+        install_id = None
+        start_time = datetime.now()
+
         # Validate input first
         is_valid, error = validate_install_request(software)
         if not is_valid:
@@ -845,6 +850,18 @@ class CortexCLI:
         api_key = self._get_api_key()
         if not api_key:
             error_msg = "No API key found. Please configure an API provider."
+            # Record installation attempt before failing if we have packages
+            try:
+                packages = [software.split()[0]]  # Basic package extraction
+                install_id = history.record_installation(
+                    InstallationType.INSTALL, packages, [], start_time
+                )
+            except Exception:
+                pass  # If recording fails, continue with error reporting
+
+            if install_id:
+                history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
+
             if json_output:
                 print(
                     json.dumps({"success": False, "error": error_msg, "error_type": "RuntimeError"})
@@ -857,21 +874,18 @@ class CortexCLI:
         self._debug(f"Using provider: {provider}")
         self._debug(f"API key: {api_key[:10]}...{api_key[-4:]}")
 
-        # Initialize installation history
-        history = InstallationHistory()
-        install_id = None
-        start_time = datetime.now()
-
         try:
-            self._print_status("🧠", "Understanding request...")
+            if not json_output:
+                self._print_status("🧠", "Understanding request...")
 
             interpreter = CommandInterpreter(api_key=api_key, provider=provider)
 
-            self._print_status("📦", "Planning installation...")
+            if not json_output:
+                self._print_status("📦", "Planning installation...")
 
-            for _ in range(10):
-                self._animate_spinner("Analyzing system requirements...")
-            self._clear_line()
+                for _ in range(10):
+                    self._animate_spinner("Analyzing system requirements...")
+                self._clear_line()
 
             commands = interpreter.parse(f"install {software}")
 

@@ -458,16 +458,11 @@ class TestInstallFlows(unittest.TestCase):
             def execute(self, cmd):
                 return SimpleNamespace(success=True, stdout=f"ran {cmd}")
 
-        class FakeCLI:
-            def install(self, *_, **__):
-                import sys
-
-                sys.stdout.write(json.dumps({"success": True, "commands": ["echo hi"]}) + "\n")
-                return 0
+        # Set up pending commands as they would be stored from dry-run
+        self.ui._pending_commands = ["echo hi"]
 
         with patch("cortex.sandbox.sandbox_executor.SandboxExecutor", FakeSandbox):
-            with patch("cortex.cli.CortexCLI", FakeCLI):
-                self.ui._execute_confirmed_install()
+            self.ui._execute_confirmed_install()
 
         self.assertEqual(self.ui.installation_progress.state, InstallationState.COMPLETED)
         self.assertIn("nginx", self.ui.installation_progress.success_message)

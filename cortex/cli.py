@@ -3273,6 +3273,12 @@ def main():
     # Status command (includes comprehensive health checks)
     subparsers.add_parser("status", help="Show comprehensive system status and health checks")
 
+    # Dashboard command
+    dashboard_parser = subparsers.add_parser(
+        "dashboard", help="Interactive TUI dashboard with live system stats"
+    )
+    dashboard_parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+
     # Benchmark command
     benchmark_parser = subparsers.add_parser("benchmark", help="Run AI performance benchmark")
     benchmark_parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -3905,6 +3911,10 @@ def main():
             return cli.wizard()
         elif args.command == "status":
             return cli.status()
+        elif args.command == "dashboard":
+            from cortex.dashboard import run_dashboard
+
+            return run_dashboard(verbose=getattr(args, "verbose", False))
         elif args.command == "benchmark":
             return cli.benchmark(verbose=getattr(args, "verbose", False))
         elif args.command == "systemd":

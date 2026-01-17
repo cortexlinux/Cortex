@@ -6,6 +6,7 @@ Tests for lesson_loader and progress_tracker.
 
 import tempfile
 from pathlib import Path
+
 import pytest
 
 from cortex.tutor.tools import (

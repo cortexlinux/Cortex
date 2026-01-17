@@ -167,9 +167,7 @@ def generate_lesson(
     """
     router = get_router()
 
-    user_prompt = _build_lesson_user_prompt(
-        package_name, student_level, learning_style, skip_areas
-    )
+    user_prompt = _build_lesson_user_prompt(package_name, student_level, learning_style, skip_areas)
 
     try:
         response = router.complete(

@@ -829,6 +829,39 @@ class CortexCLI:
             self._print_error(error)
             return 1
 
+        # Predict conflicts before installation
+        try:
+            from cortex.conflict_predictor import ConflictPredictor
+
+            predictor = ConflictPredictor()
+            # Extract package name (first word, remove any pip/apt prefix)
+            package_name = software.split()[0].strip()
+            for prefix in ["apt-get", "apt", "install", "pip", "pip3", "-y"]:
+                if package_name == prefix:
+                    parts = software.split()
+                    for p in parts:
+                        if p not in ["apt-get", "apt", "install", "pip", "pip3", "-y", "sudo"]:
+                            package_name = p
+                            break
+
+            prediction = predictor.predict_conflicts(package_name)
+            if prediction.conflicts:
+                console.print()
+                predictor.display_prediction(prediction)
+                console.print()
+
+                if not execute:
+                    console.print(
+                        "[yellow]Conflicts detected. Use --execute to proceed anyway, "
+                        "or resolve conflicts first.[/yellow]"
+                    )
+                    return 1
+                else:
+                    console.print("[yellow]Proceeding despite conflicts (--execute flag)...[/yellow]")
+        except Exception as e:
+            # Don't block installation if prediction fails
+            self._debug(f"Conflict prediction skipped: {e}")
+
         # Special-case the ml-cpu stack:
         # The LLM sometimes generates outdated torch==1.8.1+cpu installs
         # which fail on modern Python. For the "pytorch-cpu jupyter numpy pandas"
@@ -3838,8 +3871,8 @@ def main():
         "action",
         nargs="?",
         default="analyze",
-        choices=["analyze", "parse", "check", "compare"],
-        help="Action to perform (default: analyze)",
+        choices=["analyze", "parse", "check", "compare", "predict"],
+        help="Action to perform (default: analyze). Use 'predict' for AI conflict prediction.",
     )
     deps_parser.add_argument(
         "packages",
@@ -3993,13 +4026,28 @@ def main():
                 verbose=getattr(args, "verbose", False),
             )
         elif args.command == "deps":
-            from cortex.semver_resolver import run_semver_resolver
+            action = getattr(args, "action", "analyze")
+            packages = getattr(args, "packages", None)
+            verbose = getattr(args, "verbose", False)
 
-            return run_semver_resolver(
-                action=getattr(args, "action", "analyze"),
-                packages=getattr(args, "packages", None),
-                verbose=getattr(args, "verbose", False),
-            )
+            if action == "predict":
+                from cortex.conflict_predictor import run_conflict_predictor
+
+                if not packages:
+                    console.print("[yellow]Usage: cortex deps predict <package_name>[/yellow]")
+                    return 1
+                return run_conflict_predictor(
+                    package_name=packages[0],
+                    verbose=verbose,
+                )
+            else:
+                from cortex.semver_resolver import run_semver_resolver
+
+                return run_semver_resolver(
+                    action=action,
+                    packages=packages,
+                    verbose=verbose,
+                )
         elif args.command == "health":
             from cortex.health_score import run_health_check
 

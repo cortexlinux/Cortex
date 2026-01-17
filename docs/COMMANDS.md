@@ -154,7 +154,7 @@ cortex troubleshoot
 - Dangerous command protection (blocks `rm -rf`, `mkfs`, etc.)
 
 **Flow:**
-```
+```text
 ┌─────────────────────────────────────────┐
 │  User describes issue                   │
 └─────────────────┬───────────────────────┘
@@ -177,7 +177,7 @@ cortex troubleshoot
 ```
 
 **Example Session:**
-```bash
+```text
 $ cortex troubleshoot
 🤖 Cortex Troubleshooter
 Describe your issue, or type 'doctor' to run health checks.
@@ -185,9 +185,8 @@ Describe your issue, or type 'doctor' to run health checks.
 You: docker won't start
 
 AI: Let's check the Docker service status:
-```bash
-systemctl status docker
-```
+
+$ systemctl status docker
 
 Suggested Command:
 systemctl status docker

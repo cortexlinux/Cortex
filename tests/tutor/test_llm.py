@@ -1,108 +1,89 @@
 """Tests for cortex.tutor.llm module."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import ValidationError
 
 
-class TestExtractJsonContent:
-    """Tests for _extract_json_content function."""
+class TestGetClient:
+    """Tests for get_client function."""
 
-    def test_extract_plain_json(self):
-        """Test extracting plain JSON."""
-        from cortex.tutor.llm import _extract_json_content
-
-        content = '{"key": "value"}'
-        result = _extract_json_content(content)
-        assert result == '{"key": "value"}'
-
-    def test_extract_json_with_markdown_fence(self):
-        """Test extracting JSON wrapped in markdown fences."""
-        from cortex.tutor.llm import _extract_json_content
-
-        content = '```json\n{"key": "value"}\n```'
-        result = _extract_json_content(content)
-        assert result == '{"key": "value"}'
-
-    def test_extract_json_with_plain_fence(self):
-        """Test extracting JSON wrapped in plain markdown fences."""
-        from cortex.tutor.llm import _extract_json_content
-
-        content = '```\n{"key": "value"}\n```'
-        result = _extract_json_content(content)
-        assert result == '{"key": "value"}'
-
-    def test_extract_json_with_python_fence(self):
-        """Test extracting JSON wrapped in python markdown fences."""
-        from cortex.tutor.llm import _extract_json_content
-
-        content = '```python\n{"key": "value"}\n```'
-        result = _extract_json_content(content)
-        assert result == '{"key": "value"}'
-
-    def test_extract_json_with_whitespace(self):
-        """Test extracting JSON with extra whitespace."""
-        from cortex.tutor.llm import _extract_json_content
-
-        content = '  \n  {"key": "value"}  \n  '
-        result = _extract_json_content(content)
-        assert result == '{"key": "value"}'
-
-
-class TestParseStructuredResponse:
-    """Tests for _parse_structured_response function."""
-
-    def test_parse_valid_lesson_response(self):
-        """Test parsing valid lesson response."""
-        from cortex.tutor.contracts import LessonResponse
-        from cortex.tutor.llm import _parse_structured_response
-
-        content = json.dumps(
-            {
-                "summary": "Test summary",
-                "explanation": "Test explanation",
-                "installation_command": "apt install test",
-                "confidence": 0.9,
-            }
-        )
-        result = _parse_structured_response(content, LessonResponse)
-        assert result.summary == "Test summary"
-        assert result.confidence == pytest.approx(0.9)
-
-    def test_parse_invalid_response_raises(self):
-        """Test that invalid response raises ValidationError."""
-        from cortex.tutor.contracts import LessonResponse
-        from cortex.tutor.llm import _parse_structured_response
-
-        with pytest.raises(ValidationError):
-            _parse_structured_response('{"invalid": "data"}', LessonResponse)
-
-
-class TestGetRouter:
-    """Tests for get_router function."""
-
-    def test_get_router_creates_singleton(self):
-        """Test that get_router creates a singleton instance."""
+    def test_get_client_creates_singleton(self):
+        """Test that get_client creates a singleton instance."""
         from cortex.tutor import llm
 
-        # Reset the global router
-        llm._router = None
+        # Reset the global client
+        llm._client = None
 
-        with patch.object(llm, "LLMRouter") as mock_router_class:
-            mock_router = MagicMock()
-            mock_router_class.return_value = mock_router
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.object(llm.anthropic, "Anthropic") as mock_anthropic:
+                mock_client = MagicMock()
+                mock_anthropic.return_value = mock_client
 
-            router1 = llm.get_router()
-            router2 = llm.get_router()
+                client1 = llm.get_client()
+                client2 = llm.get_client()
 
-            # Should only create one instance
-            assert mock_router_class.call_count == 1
-            assert router1 is router2
+                # Should only create one instance
+                assert mock_anthropic.call_count == 1
+                assert client1 is client2
 
         # Clean up
-        llm._router = None
+        llm._client = None
+
+    def test_get_client_raises_without_api_key(self):
+        """Test that get_client raises error without API key."""
+        from cortex.tutor import llm
+
+        llm._client = None
+
+        with patch.dict("os.environ", {}, clear=True):
+            # Remove ANTHROPIC_API_KEY if it exists
+            import os
+
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+
+            with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+                llm.get_client()
+
+        llm._client = None
+
+
+class TestCalculateCost:
+    """Tests for _calculate_cost function."""
+
+    def test_calculate_cost(self):
+        """Test cost calculation."""
+        from cortex.tutor.llm import _calculate_cost
+
+        # 1M input tokens at $3/1M = $3
+        # 1M output tokens at $15/1M = $15
+        cost = _calculate_cost(1_000_000, 1_000_000)
+        assert cost == pytest.approx(18.0)
+
+    def test_calculate_cost_small(self):
+        """Test cost calculation for small token counts."""
+        from cortex.tutor.llm import _calculate_cost
+
+        # 1000 input tokens, 500 output tokens
+        cost = _calculate_cost(1000, 500)
+        expected = (1000 / 1_000_000) * 3.0 + (500 / 1_000_000) * 15.0
+        assert cost == pytest.approx(expected)
+
+
+class TestCreateToolFromModel:
+    """Tests for _create_tool_from_model function."""
+
+    def test_create_tool_from_model(self):
+        """Test tool creation from Pydantic model."""
+        from cortex.tutor.contracts import QAResponse
+        from cortex.tutor.llm import _create_tool_from_model
+
+        tool = _create_tool_from_model("test_tool", "A test tool description", QAResponse)
+
+        assert tool["name"] == "test_tool"
+        assert tool["description"] == "A test tool description"
+        assert "input_schema" in tool
+        assert "properties" in tool["input_schema"]
 
 
 class TestGenerateLesson:
@@ -112,52 +93,66 @@ class TestGenerateLesson:
         """Test successful lesson generation."""
         from cortex.tutor import llm
 
-        mock_response = MagicMock()
-        mock_response.content = json.dumps(
-            {
-                "summary": "Test summary",
-                "explanation": "Test explanation",
-                "use_cases": ["use case 1"],
-                "best_practices": ["practice 1"],
-                "code_examples": [],
-                "tutorial_steps": [],
-                "installation_command": "apt install test",
-                "related_packages": [],
-                "confidence": 0.9,
-            }
-        )
-        mock_response.cost_usd = 0.01
+        # Create a proper mock for the tool_use block
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.name = "generate_lesson"
+        tool_block.input = {
+            "summary": "Test summary",
+            "explanation": "Test explanation",
+            "use_cases": ["use case 1"],
+            "best_practices": ["practice 1"],
+            "code_examples": [],
+            "tutorial_steps": [],
+            "installation_command": "apt install test",
+            "related_packages": [],
+            "confidence": 0.9,
+        }
 
-        with patch.object(llm, "get_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.complete.return_value = mock_response
-            mock_get_router.return_value = mock_router
+        mock_response = MagicMock()
+        mock_response.content = [tool_block]
+        mock_response.usage.input_tokens = 100
+        mock_response.usage.output_tokens = 200
+
+        with patch.object(llm, "get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_response
+            mock_get_client.return_value = mock_client
 
             result = llm.generate_lesson("docker")
 
             assert result["success"] is True
             assert result["lesson"]["summary"] == "Test summary"
-            assert result["cost_usd"] == pytest.approx(0.01)
+            assert result["lesson"]["confidence"] == pytest.approx(0.9)
 
     def test_generate_lesson_with_options(self):
         """Test lesson generation with custom options."""
         from cortex.tutor import llm
 
-        mock_response = MagicMock()
-        mock_response.content = json.dumps(
-            {
-                "summary": "Advanced lesson",
-                "explanation": "Advanced explanation",
-                "installation_command": "apt install nginx",
-                "confidence": 0.85,
-            }
-        )
-        mock_response.cost_usd = 0.02
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.name = "generate_lesson"
+        tool_block.input = {
+            "summary": "Advanced lesson",
+            "explanation": "Advanced explanation",
+            "use_cases": [],
+            "best_practices": [],
+            "code_examples": [],
+            "tutorial_steps": [],
+            "installation_command": "apt install nginx",
+            "related_packages": [],
+            "confidence": 0.85,
+        }
 
-        with patch.object(llm, "get_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.complete.return_value = mock_response
-            mock_get_router.return_value = mock_router
+        mock_response = MagicMock()
+        mock_response.content = [tool_block]
+        mock_response.usage.input_tokens = 100
+        mock_response.usage.output_tokens = 200
+
+        with patch.object(llm, "get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_response
+            mock_get_client.return_value = mock_client
 
             result = llm.generate_lesson(
                 "nginx",
@@ -167,38 +162,18 @@ class TestGenerateLesson:
             )
 
             assert result["success"] is True
-            # Verify the prompt includes skip areas
-            call_args = mock_router.complete.call_args
-            user_msg = call_args[1]["messages"][1]["content"]
-            assert "basics" in user_msg
-            assert "intro" in user_msg
-
-    def test_generate_lesson_json_error(self):
-        """Test lesson generation with JSON parse error."""
-        from cortex.tutor import llm
-
-        mock_response = MagicMock()
-        mock_response.content = "not valid json"
-
-        with patch.object(llm, "get_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.complete.return_value = mock_response
-            mock_get_router.return_value = mock_router
-
-            result = llm.generate_lesson("docker")
-
-            assert result["success"] is False
-            assert "error" in result
-            assert result["lesson"] is None
+            # Verify the call was made with correct parameters
+            call_args = mock_client.messages.create.call_args
+            assert "nginx" in call_args[1]["messages"][0]["content"]
 
     def test_generate_lesson_api_error(self):
         """Test lesson generation with API error."""
         from cortex.tutor import llm
 
-        with patch.object(llm, "get_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.complete.side_effect = Exception("API error")
-            mock_get_router.return_value = mock_router
+        with patch.object(llm, "get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.messages.create.side_effect = Exception("API error")
+            mock_get_client.return_value = mock_client
 
             result = llm.generate_lesson("docker")
 
@@ -213,46 +188,55 @@ class TestAnswerQuestion:
         """Test successful question answering."""
         from cortex.tutor import llm
 
-        mock_response = MagicMock()
-        mock_response.content = json.dumps(
-            {
-                "answer": "Docker is a containerization platform",
-                "code_example": {"code": "docker ps", "language": "bash"},
-                "related_topics": ["containers", "images"],
-                "confidence": 0.95,
-            }
-        )
-        mock_response.cost_usd = 0.005
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.name = "answer_question"
+        tool_block.input = {
+            "answer": "Docker is a containerization platform",
+            "code_example": {"code": "docker ps", "language": "bash"},
+            "related_topics": ["containers", "images"],
+            "confidence": 0.95,
+        }
 
-        with patch.object(llm, "get_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.complete.return_value = mock_response
-            mock_get_router.return_value = mock_router
+        mock_response = MagicMock()
+        mock_response.content = [tool_block]
+        mock_response.usage.input_tokens = 50
+        mock_response.usage.output_tokens = 100
+
+        with patch.object(llm, "get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_response
+            mock_get_client.return_value = mock_client
 
             result = llm.answer_question("docker", "What is Docker?")
 
             assert result["success"] is True
             assert "containerization" in result["answer"]["answer"]
-            assert result["cost_usd"] == pytest.approx(0.005)
+            assert result["answer"]["confidence"] == pytest.approx(0.95)
 
     def test_answer_question_with_context(self):
         """Test question answering with context."""
         from cortex.tutor import llm
 
-        mock_response = MagicMock()
-        mock_response.content = json.dumps(
-            {
-                "answer": "test",
-                "confidence": 0.9,
-                "related_topics": [],
-            }
-        )
-        mock_response.cost_usd = 0.01
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.name = "answer_question"
+        tool_block.input = {
+            "answer": "test",
+            "code_example": None,
+            "related_topics": [],
+            "confidence": 0.9,
+        }
 
-        with patch.object(llm, "get_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.complete.return_value = mock_response
-            mock_get_router.return_value = mock_router
+        mock_response = MagicMock()
+        mock_response.content = [tool_block]
+        mock_response.usage.input_tokens = 50
+        mock_response.usage.output_tokens = 100
+
+        with patch.object(llm, "get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_response
+            mock_get_client.return_value = mock_client
 
             result = llm.answer_question(
                 "docker",
@@ -262,35 +246,18 @@ class TestAnswerQuestion:
 
             assert result["success"] is True
             # Verify context is in the prompt
-            call_args = mock_router.complete.call_args
-            user_msg = call_args[1]["messages"][1]["content"]
+            call_args = mock_client.messages.create.call_args
+            user_msg = call_args[1]["messages"][0]["content"]
             assert "Learning about Dockerfiles" in user_msg
-
-    def test_answer_question_json_error(self):
-        """Test question answering with JSON parse error."""
-        from cortex.tutor import llm
-
-        mock_response = MagicMock()
-        mock_response.content = "invalid json response"
-
-        with patch.object(llm, "get_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.complete.return_value = mock_response
-            mock_get_router.return_value = mock_router
-
-            result = llm.answer_question("docker", "What is Docker?")
-
-            assert result["success"] is False
-            assert result["answer"] is None
 
     def test_answer_question_api_error(self):
         """Test question answering with API error."""
         from cortex.tutor import llm
 
-        with patch.object(llm, "get_router") as mock_get_router:
-            mock_router = MagicMock()
-            mock_router.complete.side_effect = RuntimeError("Connection failed")
-            mock_get_router.return_value = mock_router
+        with patch.object(llm, "get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.messages.create.side_effect = RuntimeError("Connection failed")
+            mock_get_client.return_value = mock_client
 
             result = llm.answer_question("docker", "What is Docker?")
 

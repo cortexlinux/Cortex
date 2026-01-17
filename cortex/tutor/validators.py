@@ -36,17 +36,6 @@ BLOCKED_PATTERNS = [
 # Valid package name pattern (alphanumeric, hyphens, underscores, dots)
 VALID_PACKAGE_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 
-# Common package categories for validation hints
-KNOWN_PACKAGE_CATEGORIES = [
-    "system",  # apt, systemctl, journalctl
-    "development",  # git, docker, npm, pip
-    "database",  # postgresql, mysql, redis, mongodb
-    "web",  # nginx, apache, curl, wget
-    "security",  # ufw, fail2ban, openssl
-    "networking",  # ssh, netstat, iptables
-    "utilities",  # vim, tmux, htop, grep
-]
-
 
 def validate_package_name(package_name: str) -> tuple[bool, str | None]:
     """

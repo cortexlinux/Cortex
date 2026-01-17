@@ -5,7 +5,7 @@ Defines structured output schemas for lesson generation, progress tracking, and 
 """
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -133,53 +133,6 @@ class LessonContext(BaseModel):
             "installation": self.installation_command,
             "confidence": f"{self.confidence:.0%}",
         }
-
-
-class LessonPlanOutput(BaseModel):
-    """Output from the PLAN phase for lesson generation."""
-
-    strategy: Literal["use_cache", "generate_full", "generate_quick"] = Field(
-        ..., description="Strategy chosen for lesson generation"
-    )
-    cached_data: dict[str, Any] | None = Field(
-        default=None, description="Cached lesson data if strategy is use_cache"
-    )
-    estimated_cost: float = Field(
-        default=0.0, description="Estimated cost for this strategy", ge=0.0
-    )
-    reasoning: str = Field(..., description="Explanation for why this strategy was chosen")
-
-
-class LessonReflectionOutput(BaseModel):
-    """Output from the REFLECT phase for lesson validation."""
-
-    confidence: float = Field(
-        ...,
-        description="Overall confidence in the lesson quality",
-        ge=0.0,
-        le=1.0,
-    )
-    quality_score: float = Field(
-        ...,
-        description="Quality score based on completeness and accuracy",
-        ge=0.0,
-        le=1.0,
-    )
-    insights: list[str] = Field(
-        default_factory=list,
-        description="Key insights about the generated lesson",
-    )
-    improvements: list[str] = Field(
-        default_factory=list,
-        description="Suggested improvements for future iterations",
-    )
-    validation_passed: bool = Field(
-        ..., description="Whether the lesson passed all validation checks"
-    )
-    validation_errors: list[str] = Field(
-        default_factory=list,
-        description="List of validation errors if any",
-    )
 
 
 # ==============================================================================

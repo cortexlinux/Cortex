@@ -134,7 +134,12 @@ class Troubleshooter:
         for additional security since AI-suggested commands are untrusted.
         """
         # Log the command execution for audit
-        self.logger.info(f"Executing command: {cmd}")
+        redacted = re.sub(
+             r"(?i)(--?(?:token|api[-_]?key|password|secret)\s+)(\S+)",
+             r"\1***",
+             cmd,
+         )
+        self.logger.info(f"Executing command: {redacted}")
 
         # Check if Firejail is available for sandboxing
         use_sandbox = shutil.which("firejail") is not None
@@ -228,7 +233,7 @@ class Troubleshooter:
                     log_path = os.path.abspath(log_file)
 
                     try:
-                        with open(log_file, "w") as f:
+                        with open(log_file, "w", encoding="utf-8") as f:
                             f.write("Cortex Troubleshooting Log\n")
                             f.write("==========================\n\n")
                             f.write("Issue Summary:\n")

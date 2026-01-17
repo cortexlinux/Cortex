@@ -44,7 +44,7 @@ struct Config {
     int max_requests_per_sec = 100;
     
     // Logging
-    int log_level = 1;  // 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR
+    int log_level = 1;  // 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR, 4=CRITICAL
     
     /**
      * @brief Load configuration from YAML file

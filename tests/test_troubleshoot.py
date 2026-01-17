@@ -454,7 +454,8 @@ class TestInteractiveLoop(unittest.TestCase):
                             "os.path.expanduser",
                             return_value="/home/krishna/.cortex/cortex_support_log.txt",
                         ):
-                            troubleshooter._interactive_loop()
+                            with patch("os.makedirs"):  # Prevent fallback to /tmp/
+                                troubleshooter._interactive_loop()
 
                             # Verify file was opened for writing
                             mock_file.assert_called_with(

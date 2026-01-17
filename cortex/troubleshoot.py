@@ -34,6 +34,7 @@ console = Console()
 DANGEROUS_PATTERNS = [
     r"\brm\s+(-[^\s]*\s+)*-rf\b",  # rm -rf
     r"\brm\s+(-[^\s]*\s+)*-fr\b",  # rm -fr (same as above)
+    r"\brm\b(?=.*\s-[-\w]*r)(?=.*\s-[-\w]*f)",  # rm with both -r and -f (any order)
     r"\brm\s+(-[^\s]*\s+)*/\s*$",  # rm /
     r"\bmkfs\b",  # Format filesystem
     r"\bdd\s+.*of=/dev/",  # dd to device

@@ -502,15 +502,13 @@ class HealthChecker:
                 cursor = conn.cursor()
 
                 # Create health_checks table if it doesn't exist
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS health_checks (
                         timestamp TEXT NOT NULL,
                         overall_score INTEGER NOT NULL,
                         factors TEXT NOT NULL
                     )
-                """
-                )
+                """)
 
                 # Insert health check record
                 cursor.execute(

@@ -899,8 +899,7 @@ class ConfigManager:
                 cursor = conn.cursor()
 
                 # Create audit table if it doesn't exist
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS install_audit (
                         timestamp TEXT NOT NULL,
                         package_name TEXT NOT NULL,
@@ -912,8 +911,7 @@ class ConfigManager:
                         escalation_consent INTEGER NOT NULL,
                         error TEXT
                     )
-                """
-                )
+                """)
 
                 # Insert audit record
                 cursor.execute(

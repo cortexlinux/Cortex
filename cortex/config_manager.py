@@ -219,16 +219,50 @@ class ConfigManager:
         services = []
 
         try:
-            # Get list of all service units
-            result = subprocess.run(
-                ["systemctl", "list-units", "--type=service", "--all", "--no-legend", "--no-pager"],
+            # 1. Get enabled status for all services (bulk)
+            enabled_map = {}
+            enabled_result = subprocess.run(
+                [
+                    "systemctl",
+                    "list-unit-files",
+                    "--type=service",
+                    "--all",
+                    "--no-legend",
+                    "--no-pager",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=self.DETECTION_TIMEOUT,
+            )
+            if enabled_result.returncode == 0:
+                for line in enabled_result.stdout.strip().split("\n"):
+                    if not line.strip():
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        unit = parts[0]
+                        state = parts[1]
+                        enabled_map[unit] = state == "enabled"
+
+            # 2. Get active/sub state for all services (bulk)
+            units_result = subprocess.run(
+                [
+                    "systemctl",
+                    "list-units",
+                    "--type=service",
+                    "--all",
+                    "--no-legend",
+                    "--no-pager",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=self.DETECTION_TIMEOUT,
             )
 
-            if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
+            if units_result.returncode == 0:
+                for line in units_result.stdout.strip().split("\n"):
+                    if not line.strip():
+                        continue
                     parts = line.split()
                     if len(parts) >= 4:
                         service_name = parts[0]
@@ -239,21 +273,12 @@ class ConfigManager:
                         active_state = parts[2]  # active, inactive, failed
                         sub_state = parts[3]  # running, dead, exited
 
-                        # Get enabled status
-                        enabled_result = subprocess.run(
-                            ["systemctl", "is-enabled", service_name],
-                            capture_output=True,
-                            text=True,
-                            timeout=5,
-                        )
-                        is_enabled = enabled_result.stdout.strip() == "enabled"
-
                         services.append(
                             {
                                 "name": service_name,
                                 "active_state": active_state,
                                 "sub_state": sub_state,
-                                "enabled": is_enabled,
+                                "enabled": enabled_map.get(service_name, False),
                                 "source": self.SOURCE_SERVICE,
                             }
                         )
@@ -765,13 +790,16 @@ class ConfigManager:
             "preferences_updated": False,
         }
 
+        # Compute diff once for efficiency
+        diff = self.diff_configuration(config)
+
         # Import packages
         if "packages" in selective:
-            self._import_packages(config, summary)
+            self._import_packages(diff, summary)
 
         # Import services
         if "services" in selective:
-            self._import_services(config, summary)
+            self._import_services(diff, summary)
 
         # Import preferences
         if "preferences" in selective:
@@ -779,22 +807,22 @@ class ConfigManager:
 
         return summary
 
-    def _import_packages(self, config: dict[str, Any], summary: dict[str, Any]) -> None:
+    def _import_packages(self, diff: dict[str, Any], summary: dict[str, Any]) -> None:
         """
         Import packages from configuration and update system state.
 
-        This method processes package installations by first computing the
-        difference between the current system state and the target configuration
-        using diff_configuration(). It then attempts to install, upgrade, or
-        downgrade packages as needed.
+        This method processes package installations based on the pre-computed
+        diff result. It attempts to install, upgrade, or downgrade packages
+        as needed.
 
         The method continues processing all packages even if individual packages
         fail to install, ensuring maximum success. Failed installations are
         tracked in the summary for user review.
 
         Args:
-            config: Configuration dictionary containing package specifications
-                   Expected to have 'packages' key with list of package dicts
+            diff: Pre-computed diff dictionary from diff_configuration()
+                  Expected to have keys: 'packages_to_install', 'packages_to_upgrade',
+                  'packages_to_downgrade'
             summary: Summary dictionary to update with results. Modified in-place
                     with keys: 'installed', 'upgraded', 'failed'
 
@@ -808,7 +836,6 @@ class ConfigManager:
             Each package is categorized based on diff results (install vs upgrade).
             Errors are caught and logged to allow processing to continue.
         """
-        diff = self.diff_configuration(config)
         packages_to_process = (
             diff["packages_to_install"]
             + diff["packages_to_upgrade"]
@@ -830,11 +857,10 @@ class ConfigManager:
             except Exception as e:
                 summary["failed"].append(f"{pkg['name']} ({str(e)})")
 
-    def _import_services(self, config: dict[str, Any], summary: dict[str, Any]) -> None:
+    def _import_services(self, diff: dict[str, Any], summary: dict[str, Any]) -> None:
         """
         Import and update service states from configuration.
         """
-        diff = self.diff_configuration(config)
         services_to_process = diff.get("services_to_update", [])
         # Note: services_missing are ignored as we don't have unit files to create them
 

@@ -6,7 +6,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from rich.markdown import Markdown
 
@@ -1974,159 +1974,188 @@ class CortexCLI:
 
     def template(self, args):
         """Handle template commands"""
-        from cortex.config_manager import ConfigManager
         from cortex.template_manager import TemplateManager
 
         manager = TemplateManager()
         cmd = args.template_command
 
         if not cmd:
-            self.console.print(
+            console.print(
                 "[yellow]Usage: cortex template [create|deploy|list|show|delete|export|import][/yellow]"
             )
             return 1
 
         if cmd == "create":
-            console.print("📸 [bold]Capturing system state...[/bold]")
-            version = manager.create_template(
-                args.name, args.description, package_sources=args.sources
-            )
-
-            # Get counts for the summary
-            t = manager.get_template(args.name, version)
-            pkgs = t["config"].get("packages", [])
-            apps = [p for p in pkgs if p["source"] != "service"]
-            services = [p for p in pkgs if p["source"] == "service"]
-
-            console.print(f"   - {len(apps)} packages")
-            console.print(
-                f"   - {len(t['config'].get('preferences', {})) + len(t['config'].get('environment_variables', {}))} configurations"
-            )
-            console.print(f"   - {len(services)} services")
-            console.print(f"[green]✓[/green]  Template saved: [bold]{args.name}-{version}[/bold]\n")
-            return 0
-
+            return self._template_create(manager, args)
         elif cmd == "list":
-            templates = manager.list_templates()
-            if not templates:
-                console.print("No templates found.")
-                return 0
+            return self._template_list(manager)
+        elif cmd == "show":
+            return self._template_show(manager, args)
+        elif cmd == "deploy":
+            return self._template_deploy(manager, args)
+        elif cmd == "delete":
+            return self._template_delete(manager, args)
+        elif cmd == "export":
+            return self._template_export(manager, args)
+        elif cmd == "import":
+            return self._template_import(manager, args)
 
-            console.print("\n[bold cyan]Available System Templates:[/bold cyan]\n")
-            for t in templates:
-                console.print(f"• [bold]{t['name']}[/bold] (latest: {t['latest_version']})")
-                for v in t["versions"]:
-                    console.print(
-                        f"  - {v['version']} ({v['created_at'][:10]}): {v['description']}"
-                    )
-            console.print()
+        return 0
+
+    def _parse_template_spec(self, name_spec: str) -> tuple[str, str | None]:
+        """Parse template name and version from spec (name:v1 or name-v1)."""
+        if ":" in name_spec:
+            parts = name_spec.split(":", 1)
+            return parts[0], parts[1]
+        elif "-v" in name_spec:
+            idx = name_spec.rfind("-v")
+            return name_spec[:idx], name_spec[idx + 1 :]
+        return name_spec, None
+
+    def _template_create(self, manager, args) -> int:
+        """Handle 'template create' command."""
+        console.print("📸 [bold]Capturing system state...[/bold]")
+        version = manager.create_template(args.name, args.description, package_sources=args.sources)
+
+        template_data = manager.get_template(args.name, version)
+        if not template_data:
+            return 1
+
+        pkgs = template_data["config"].get("packages", [])
+        apps = [p for p in pkgs if p["source"] != "service"]
+        services = [p for p in pkgs if p["source"] == "service"]
+
+        console.print(f"   - {len(apps)} packages")
+        console.print(
+            f"   - {len(template_data['config'].get('preferences', {})) + len(template_data['config'].get('environment_variables', {}))} configurations"
+        )
+        console.print(f"   - {len(services)} services")
+        console.print(f"[green]✓[/green]  Template saved: [bold]{args.name}-{version}[/bold]\n")
+        return 0
+
+    def _template_list(self, manager) -> int:
+        """Handle 'template list' command."""
+        templates = manager.list_templates()
+        if not templates:
+            console.print("No templates found.")
             return 0
 
-        elif cmd == "show" or cmd == "deploy" or cmd == "delete" or cmd == "export":
-            # These need a template specification
-            # Support both name:v1 and name-v1 syntax
-            if ":" in args.name:
-                parts = args.name.split(":", 1)
-                name = parts[0]
-                version = parts[1]
-            elif "-v" in args.name:
-                # Find the last -v
-                idx = args.name.rfind("-v")
-                name = args.name[:idx]
-                version = args.name[idx + 1 :]
-            else:
-                name = args.name
-                version = None
+        console.print("\n[bold cyan]Available System Templates:[/bold cyan]\n")
+        for template in templates:
+            console.print(
+                f"• [bold]{template['name']}[/bold] (latest: {template['latest_version']})"
+            )
+            for v in template["versions"]:
+                console.print(f"  - {v['version']} ({v['created_at'][:10]}): {v['description']}")
+        console.print()
+        return 0
 
-            if cmd == "show":
-                t = manager.get_template(name, version)
-                if not t:
-                    console.print(f"[red]Error:[/red] Template '{args.name}' not found.")
-                    return 1
+    def _template_show(self, manager, args) -> int:
+        """Handle 'template show' command."""
+        name, version = self._parse_template_spec(args.name)
+        template_data = manager.get_template(name, version)
+        if not template_data:
+            console.print(f"[red]Error:[/red] Template '{args.name}' not found.")
+            return 1
 
-                console.print(f"\n[bold]{t['name']}:{t['version']}[/bold]")
-                console.print(f"Description: {t['description']}")
-                console.print(f"Created: {t['created_at']}")
-                console.print(f"OS: {t['config'].get('os', 'unknown')}")
+        console.print(f"\n[bold]{template_data['name']}:{template_data['version']}[/bold]")
+        console.print(f"Description: {template_data['description']}")
+        console.print(f"Created: {template_data['created_at']}")
+        console.print(f"OS: {template_data['config'].get('os', 'unknown')}")
 
-                pkgs = t["config"].get("packages", [])
-                apps = [p for p in pkgs if p["source"] != "service"]
-                services = [p for p in pkgs if p["source"] == "service"]
+        pkgs = template_data["config"].get("packages", [])
+        apps = [p for p in pkgs if p["source"] != "service"]
+        services = [p for p in pkgs if p["source"] == "service"]
 
-                console.print("\n[bold]Summary:[/bold]")
-                console.print(f"- {len(apps)} Packages")
+        console.print("\n[bold]Summary:[/bold]")
+        console.print(f"- {len(apps)} Packages")
+        console.print(
+            f"- {len(template_data['config'].get('preferences', {})) + len(template_data['config'].get('environment_variables', {}))} Configurations"
+        )
+        console.print(f"- {len(services)} Services")
+        return 0
+
+    def _template_deploy(self, manager, args) -> int:
+        """Handle 'template deploy' command."""
+        from cortex.config_manager import ConfigManager
+
+        name, version = self._parse_template_spec(args.name)
+        template_data = manager.get_template(name, version)
+        if not template_data:
+            console.print(f"[red]Error:[/red] Template '{args.name}' not found.")
+            return 1
+
+        config_manager = ConfigManager()
+
+        if args.dry_run:
+            console.print(
+                f"\n[bold cyan]Previewing deployment of {template_data['name']}:{template_data['version']}[/bold cyan]\n"
+            )
+            diff = config_manager.diff_configuration(template_data["config"])
+
+            if diff["packages_to_install"]:
                 console.print(
-                    f"- {len(t['config'].get('preferences', {})) + len(t['config'].get('environment_variables', {}))} Configurations"
+                    f"📦 [bold]To Install:[/bold] {len(diff['packages_to_install'])} packages"
                 )
-                console.print(f"- {len(services)} Services")
-                return 0
-
-            elif cmd == "delete":
-                if manager.delete_template(name, version):
-                    spec = f"{name}:{version}" if version else name
-                    console.print(f"[green]✓[/green] Deleted template: {spec}")
-                    return 0
-                console.print(f"[red]Error:[/red] Template '{args.name}' not found.")
-                return 1
-
-            elif cmd == "export":
-                try:
-                    path = manager.export_template(name, version or "v1", args.file)
-                    console.print(f"[green]✓[/green] Template exported to: {path}")
-                    return 0
-                except Exception as e:
-                    console.print(f"[red]Error:[/red] {e}")
-                    return 1
-
-            elif cmd == "deploy":
-                t = manager.get_template(name, version)
-                if not t:
-                    console.print(f"[red]Error:[/red] Template '{args.name}' not found.")
-                    return 1
-
-                config_manager = ConfigManager()
-
-                if args.dry_run:
-                    console.print(
-                        f"\n[bold cyan]Previewing deployment of {t['name']}:{t['version']}[/bold cyan]\n"
-                    )
-                    diff = config_manager.diff_configuration(t["config"])
-
-                    if diff["packages_to_install"]:
-                        console.print(
-                            f"📦 [bold]To Install:[/bold] {len(diff['packages_to_install'])} packages"
-                        )
-                    if diff["services_to_update"]:
-                        console.print(
-                            f"⚙️ [bold]To Update:[/bold] {len(diff['services_to_update'])} services"
-                        )
-
-                    if not diff["packages_to_install"] and not diff["services_to_update"]:
-                        console.print("[green]System already matches template.[/green]")
-                    return 0
-
-                console.print("🚀 [bold]Deploying template...[/bold]")
-                result = config_manager.import_configuration(
-                    str(manager.base_dir / t["name"] / t["version"] / "template.yaml"),
-                    force=args.force,
+            if diff["services_to_update"]:
+                console.print(
+                    f"⚙️ [bold]To Update:[/bold] {len(diff['services_to_update'])} services"
                 )
 
-                if result:
-                    console.print("   [green]✓[/green]  Packages installed")
-                    console.print("   [green]✓[/green]  Configurations applied")
-                    console.print("   [green]✓[/green]  Services started")
-                    console.print("[green]✓[/green]  System cloned successfully\n")
-                    return 0
-                return 1
+            if not diff["packages_to_install"] and not diff["services_to_update"]:
+                console.print("[green]System already matches template.[/green]")
+            return 0
 
-        elif cmd == "import":
-            try:
-                name, version = manager.import_template(args.file)
-                console.print(f"[green]✓[/green] Template imported: [bold]{name}:{version}[/bold]")
-                return 0
-            except Exception as e:
-                console.print(f"[red]Error:[/red] {e}")
-                return 1
+        target_label = f" to {args.to}" if hasattr(args, "to") and args.to else ""
+        console.print(f"🚀 [bold]Deploying template{target_label}...[/bold]")
+        result = config_manager.import_configuration(
+            str(
+                manager.base_dir
+                / template_data["name"]
+                / template_data["version"]
+                / "template.yaml"
+            ),
+            force=args.force,
+        )
+
+        if result:
+            console.print("   [green]✓[/green]  Packages installed")
+            console.print("   [green]✓[/green]  Configurations applied")
+            console.print("   [green]✓[/green]  Services started")
+            console.print(f"[green]✓[/green]  System cloned successfully{target_label}\n")
+            return 0
+        return 1
+
+    def _template_delete(self, manager, args) -> int:
+        """Handle 'template delete' command."""
+        name, version = self._parse_template_spec(args.name)
+        if manager.delete_template(name, version):
+            spec = f"{name}:{version}" if version else name
+            console.print(f"[green]✓[/green] Deleted template: {spec}")
+            return 0
+        console.print(f"[red]Error:[/red] Template '{args.name}' not found.")
+        return 1
+
+    def _template_export(self, manager, args) -> int:
+        """Handle 'template export' command."""
+        name, version = self._parse_template_spec(args.name)
+        try:
+            path = manager.export_template(name, version or "v1", args.file)
+            console.print(f"[green]✓[/green] Template exported to: {path}")
+            return 0
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            return 1
+
+    def _template_import(self, manager, args) -> int:
+        """Handle 'template import' command."""
+        try:
+            name, version = manager.import_template(args.file)
+            console.print(f"[green]✓[/green] Template imported: [bold]{name}:{version}[/bold]")
+            return 0
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[red]Error:[/red] {e}")
+            return 1
 
         return 0
 

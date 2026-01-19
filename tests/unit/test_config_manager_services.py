@@ -20,21 +20,17 @@ class TestConfigManagerServices(unittest.TestCase):
 
     @patch("subprocess.run")
     def test_detect_services(self, mock_run):
+        # Mock list-unit-files
+        mock_unit_files = MagicMock()
+        mock_unit_files.returncode = 0
+        mock_unit_files.stdout = "test.service enabled\nother.service disabled\n"
+
         # Mock list-units
         mock_units = MagicMock()
         mock_units.returncode = 0
         mock_units.stdout = "test.service loaded active running Test Service\nother.service loaded inactive dead Other Service\n"
 
-        # Mock is-enabled (called twice)
-        mock_enabled = MagicMock()
-        mock_enabled.returncode = 0
-        mock_enabled.stdout = "enabled\n"
-
-        mock_disabled = MagicMock()
-        mock_disabled.returncode = 0
-        mock_disabled.stdout = "disabled\n"
-
-        mock_run.side_effect = [mock_units, mock_enabled, mock_disabled]
+        mock_run.side_effect = [mock_unit_files, mock_units]
 
         services = self.config_manager.detect_services()
 
@@ -141,19 +137,17 @@ class TestConfigManagerServices(unittest.TestCase):
         self.assertEqual(len(diff["services_missing"]), 1)
         self.assertEqual(diff["services_missing"][0]["name"], "new.service")
 
-    @patch("cortex.config_manager.ConfigManager.diff_configuration")
     @patch("cortex.config_manager.ConfigManager._update_service")
-    def test_import_services(self, mock_update, mock_diff):
+    def test_import_services(self, mock_update):
         mock_update.return_value = True
-        mock_diff.return_value = {
+        diff = {
             "services_missing": [{"name": "s1"}],
             "services_to_update": [{"name": "s2"}],
         }
 
-        config = {"packages": []}
-        summary = {"installed": [], "failed": [], "services_updated": [], "services_failed": []}
+        summary = {"installed": [], "failed": [], "services_updated": []}
 
-        self.config_manager._import_services(config, summary)
+        self.config_manager._import_services(diff, summary)
 
         # summary has "services_updated" from _import_services
         self.assertEqual(len(summary["services_updated"]), 1)  # s1 is ignored as per implementation
@@ -172,14 +166,13 @@ class TestConfigManagerServices(unittest.TestCase):
         self.assertIn("apt", sources)
         self.assertIn("service", sources)
 
-    @patch("cortex.config_manager.ConfigManager.diff_configuration")
     @patch("cortex.config_manager.ConfigManager._update_service")
-    def test_import_services_failure(self, mock_update, mock_diff):
+    def test_import_services_failure(self, mock_update):
         mock_update.return_value = False
-        mock_diff.return_value = {"services_to_update": [{"name": "fail-srv"}]}
-        summary = {"installed": [], "failed": [], "services_updated": [], "services_failed": []}
+        diff = {"services_to_update": [{"name": "fail-srv"}]}
+        summary = {"installed": [], "failed": [], "services_updated": []}
 
-        self.config_manager._import_services({}, summary)
+        self.config_manager._import_services(diff, summary)
         self.assertIn("service:fail-srv", summary["failed"])
 
     def test_categorize_service_skip(self):

@@ -18,12 +18,12 @@ from cortex.cli import CortexCLI
 
 
 class TestDaemonCommands(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.cli = CortexCLI()
         self._temp_dir = tempfile.TemporaryDirectory()
         self._temp_home = Path(self._temp_dir.name)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self._temp_dir.cleanup()
 
     def _create_mock_uninstall_script(self, exists=True):

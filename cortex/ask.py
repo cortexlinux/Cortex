@@ -252,6 +252,10 @@ class LearningTracker:
 
         history = self._load_history()
 
+        # Ensure history has expected structure (defensive defaults for malformed data)
+        history.setdefault("topics", {})
+        history.setdefault("total_queries", 0)
+
         # Use UTC timestamps for consistency and accurate sorting
         utc_now = datetime.now(timezone.utc).isoformat()
 

@@ -110,7 +110,7 @@ cortex ask "how to set up a Python virtual environment"
 - **System-Aware Responses**: Uses your actual system context (OS, Python version, GPU, etc.)
 - **Structured Learning**: Educational responses include examples, best practices, and related topics
 - **Learning Progress Tracking**: Educational topics you explore are tracked in `~/.cortex/learning_history.json`
-- **Response Caching**: Repeated questions return cached responses for faster performance
+- **Response Caching (best-effort)**: Repeated questions may return cached responses for faster performance; caching is disabled when `SemanticCache` is not available
 
 **Examples:**
 ```bash

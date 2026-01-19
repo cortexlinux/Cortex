@@ -1040,7 +1040,9 @@ class CortexCLI:
                         console.print()
 
                         try:
-                            return input("Enter choice [1/2/3]: ").strip()
+                            choice = input("Enter choice [1/2/3]: ").strip()
+                            # Blank input defaults to dry-run (1)
+                            return choice or "1"
                         except (KeyboardInterrupt, EOFError):
                             return "3"
 
@@ -1109,6 +1111,8 @@ class CortexCLI:
                         while True:
                             try:
                                 choice = input("Enter choice [1/2/3]: ").strip()
+                                # Blank input defaults to dry-run (1)
+                                choice = choice or "1"
                             except (KeyboardInterrupt, EOFError):
                                 response_queue.put({"choice": "3"})
                                 cx_print("\nCancelled.", "info")

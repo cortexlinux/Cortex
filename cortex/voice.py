@@ -5,13 +5,15 @@ Provides voice command capability using faster-whisper for speech-to-text.
 Supports push-to-talk (F9 by default) for low-latency voice input.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from cortex.branding import console, cx_print
 
@@ -367,7 +369,7 @@ class VoiceInputHandler:
         # Clear the line
         console.print(" " * 70, end="\r")
 
-    def _get_hotkey_key(self):
+    def _get_hotkey_key(self) -> Optional[keyboard.Key]:  # noqa: F821, UP045
         """Get the pynput key object for the configured hotkey."""
         from pynput import keyboard
 

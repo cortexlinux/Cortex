@@ -46,7 +46,7 @@ sudo dnf install portaudio portaudio-devel
 
 ### First Run
 
-On first use, Cortex will download the Whisper model (~150MB for `base.en`). This happens automatically and is stored in `~/.cortex/models/`.
+On first use, Cortex will automatically download the default Whisper model (`base.en`, ~140MB). This happens without any user prompt and is stored in `~/.cortex/models/`. Subsequent runs use the cached model, so downloads only happen once per model.
 
 ## Usage
 
@@ -112,17 +112,61 @@ cortex voice --single
 
 ### Available Models
 
-| Model | Size | Speed | Accuracy |
-|-------|------|-------|----------|
-| `base.en` | ~150MB | Fast | Good (default, recommended) |
-| `small.en` | ~500MB | Medium | Better |
-| `medium.en` | ~1.5GB | Slow | Best |
+| Model | Size | Speed | Accuracy | Language |
+|-------|------|-------|----------|----------|
+| `tiny.en` | 39MB | Fastest | Fair | English only |
+| `base.en` | 140MB | Fast | Good (default) | English only |
+| `small.en` | 466MB | Medium | Better | English only |
+| `medium.en` | 1.5GB | Slow | Best | English only |
+| `tiny` | 39MB | Fastest | Fair | Multilingual |
+| `base` | 290MB | Fast | Good | Multilingual |
+| `small` | 968MB | Medium | Better | Multilingual |
+| `medium` | 3GB | Slow | Best | Multilingual |
+| `large` | 6GB | Very slow | Excellent | Multilingual |
 
-Set your preferred model for higher accuracy:
+#### Model Selection & Downloading
 
+When you run `cortex voice` for the first time, the system **automatically downloads and caches** the default model (`base.en`). No manual intervention is required. The model is stored in `~/.cortex/models/` and reused on subsequent runs.
+
+**Choosing a Model:**
+
+Even if you have multiple models installed locally, you must explicitly choose which one to use—there is no interactive selection dialog. You can switch models in two ways:
+
+1. **Using environment variable** (persistent for your session):
 ```bash
 export CORTEX_WHISPER_MODEL=small.en
+cortex voice
 ```
+
+2. **Using command parameter** (one-time override):
+```bash
+cortex voice --model medium.en
+```
+
+If neither is specified, the system always defaults to `base.en`. To see which models you have installed:
+
+```bash
+ls -lh ~/.cortex/models/
+```
+
+#### Uninstalling Models
+
+To completely remove a downloaded model from your machine:
+
+```bash
+# Remove a specific model
+rm ~/.cortex/models/base.en.pt
+
+# Remove all Whisper models
+rm -rf ~/.cortex/models/
+
+# View all downloaded models
+ls -lh ~/.cortex/models/
+```
+
+**Model filename format:** `{model_name}.pt` (e.g., `base.en.pt`, `small.en.pt`)
+
+After deletion, the model will be automatically re-downloaded the next time you use `cortex voice` with that model.
 
 ### Config File
 

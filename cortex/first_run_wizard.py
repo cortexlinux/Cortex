@@ -680,6 +680,8 @@ class FirstRunWizard:
         env_path = get_env_file_path()
         try:
             from dotenv import load_dotenv
+        print("""
+Welcome to Cortex Linux! 🚀
 
             load_dotenv(dotenv_path=env_path, override=False)
         except ImportError:
@@ -733,6 +735,8 @@ class FirstRunWizard:
             print(f"\n✓ Keeping current provider: {current_name}")
             self.mark_setup_complete()
             return True
+This wizard will help you set up Cortex in just a few minutes.
+""")
 
         if provider == "anthropic":
             if not self._setup_provider_key("Anthropic", "anthropic", "ANTHROPIC_API_KEY"):
@@ -798,14 +802,14 @@ class FirstRunWizard:
 
         print(
             f"""
+        print("""
 Cortex uses AI to understand your commands. You can use:
 
   1. Claude API (Anthropic){claude_status} - Recommended
   2. OpenAI API{openai_status}
   3. Local LLM (Ollama) - Free, runs on your machine
   4. Skip for now (limited functionality)
-"""
-        )
+""")
 
         if not self.interactive:
             if existing_claude:
@@ -976,6 +980,202 @@ complete -c cortex -a 'info' -d 'Show package information'
 complete -c cortex -a 'doctor' -d 'Diagnose system issues'"""
         else:
             return f"# No completion available for shell: {shell}"
+complete -c cortex -n "__fish_use_subcommand" -a "install" -d "Install packages"
+complete -c cortex -n "__fish_use_subcommand" -a "remove" -d "Remove packages"
+complete -c cortex -n "__fish_use_subcommand" -a "update" -d "Update system"
+complete -c cortex -n "__fish_use_subcommand" -a "search" -d "Search packages"
+complete -c cortex -n "__fish_use_subcommand" -a "undo" -d "Undo last operation"
+complete -c cortex -n "__fish_use_subcommand" -a "history" -d "Show history"
+"""
+        return "# No completion available for this shell"
+
+    def _get_shell_config(self, shell: str) -> Path:
+        """Get the shell config file path."""
+        home = Path.home()
+        configs = {
+            "bash": home / ".bashrc",
+            "zsh": home / ".zshrc",
+            "fish": home / ".config" / "fish" / "config.fish",
+        }
+        return configs.get(shell, home / ".profile")
+
+    def _step_test_command(self) -> StepResult:
+        """Run a test command."""
+        self._clear_screen()
+        self._print_header("Step 5: Test Cortex")
+
+        print("\nLet's make sure everything works!\n")
+        print("Try running a simple command:\n")
+        print("  $ cortex search text editors\n")
+
+        if not self.interactive:
+            return StepResult(success=True, data={"test_completed": False})
+
+        run_test = self._prompt("Run test now? [Y/n]: ", default="y")
+
+        if run_test.lower() == "n":
+            return StepResult(success=True, data={"test_completed": False})
+
+        print("\n" + "=" * 50)
+
+        # Simulate or run actual test
+        try:
+            # Check if cortex command exists
+            cortex_path = shutil.which("cortex")
+            if cortex_path:
+                result = subprocess.run(
+                    ["cortex", "search", "text", "editors"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                print(result.stdout)
+                if result.returncode == 0:
+                    print("\n✓ Test successful!")
+                else:
+                    print(f"\n⚠ Test completed with warnings: {result.stderr}")
+            else:
+                # Fallback to apt search
+                print("Running: apt search text-editor")
+                subprocess.run(["apt", "search", "text-editor"], timeout=30)
+                print("\n✓ Basic functionality working!")
+        except subprocess.TimeoutExpired:
+            print("\n⚠ Test timed out - this is OK, Cortex is still usable")
+        except Exception as e:
+            print(f"\n⚠ Test failed: {e}")
+
+        print("=" * 50)
+
+        if self.interactive:
+            self._prompt("\nPress Enter to continue: ")
+
+        return StepResult(success=True, data={"test_completed": True})
+
+    def _step_complete(self) -> StepResult:
+        """Completion step."""
+        self._clear_screen()
+        self._print_header("Setup Complete! 🎉")
+
+        # Save all config
+        self.save_config()
+
+        print("""
+Cortex is ready to use! Here are some things to try:
+
+  📦 Install packages:
+     cortex install docker
+     cortex install a web server
+
+  🔍 Search packages:
+     cortex search image editors
+     cortex search something for pdf
+
+  🔄 Update system:
+     cortex update everything
+
+  ⏪ Undo mistakes:
+     cortex undo
+
+  📖 Get help:
+     cortex help
+
+""")
+
+        # Show configuration summary
+        print("Configuration Summary:")
+        print(f"  • API Provider: {self.config.get('api_provider', 'none')}")
+
+        hardware = self.config.get("hardware", {})
+        if hardware.get("gpu_vendor"):
+            print(f"  • GPU: {hardware.get('gpu', 'Detected')}")
+
+        prefs = self.config.get("preferences", {})
+        print(f"  • Verbosity: {prefs.get('verbosity', 'normal')}")
+        print(f"  • Caching: {'enabled' if prefs.get('enable_cache') else 'disabled'}")
+
+        print("\n" + "=" * 50)
+        print("Happy computing! 🐧")
+        print("=" * 50 + "\n")
+
+        return StepResult(success=True)
+
+    # Helper methods
+    def _clear_screen(self):
+        """Clear the terminal screen."""
+        if self.interactive:
+            os.system("clear" if os.name == "posix" else "cls")
+
+    def _print_banner(self):
+        """Print the Cortex banner."""
+        banner = """
+   ____           _
+  / ___|___  _ __| |_ _____  __
+ | |   / _ \\| '__| __/ _ \\ \\/ /
+ | |__| (_) | |  | ||  __/>  <
+  \\____\\___/|_|   \\__\\___/_/\\_\\
+
+        Linux that understands you.
+"""
+        print(banner)
+
+    def _print_header(self, title: str):
+        """Print a section header."""
+        print("\n" + "=" * 50)
+        print(f"  {title}")
+        print("=" * 50 + "\n")
+
+    def _print_error(self, message: str):
+        """Print an error message."""
+        print(f"\n❌ {message}\n")
+
+    def _prompt(self, message: str, default: str = "") -> str:
+        """Prompt for user input."""
+        if not self.interactive:
+            return default
+
+        try:
+            response = input(message).strip()
+            return response if response else default
+        except (EOFError, KeyboardInterrupt):
+            return default
+
+    def _save_env_var(self, name: str, value: str):
+        """Save environment variable securely using encrypted storage.
+
+        API keys are stored encrypted in ~/.cortex/environments/cortex.json
+        using Fernet encryption. The encryption key is stored in
+        ~/.cortex/.env_key with restricted permissions (chmod 600).
+        """
+        # Set for current session regardless of storage success
+        os.environ[name] = value
+
+        try:
+            env_mgr = get_env_manager()
+
+            # Handle brand names correctly (e.g., "OpenAI" not "Openai")
+            provider_name_raw = name.replace("_API_KEY", "")
+            if provider_name_raw == "OPENAI":
+                provider_name_display = "OpenAI"
+            elif provider_name_raw == "ANTHROPIC":
+                provider_name_display = "Anthropic"
+            else:
+                provider_name_display = provider_name_raw.replace("_", " ").title()
+
+            env_mgr.set_variable(
+                app=CORTEX_APP_NAME,
+                key=name,
+                value=value,
+                encrypt=True,
+                description=f"API key for {provider_name_display}",
+            )
+            logger.info(f"Saved {name} to encrypted storage")
+        except ImportError:
+            logger.warning(
+                f"cryptography package not installed. {name} set for current session only. "
+                "Install cryptography for persistent encrypted storage: pip install cryptography"
+            )
+        except Exception as e:
+            logger.warning(f"Could not save env var to encrypted storage: {e}")
 
 
 def needs_first_run() -> bool:

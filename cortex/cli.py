@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -50,6 +51,7 @@ from cortex.version_manager import get_version_string
 HELP_SKIP_CONFIRM = "Skip confirmation prompt"
 
 if TYPE_CHECKING:
+    from cortex.daemon_client import DaemonClient, DaemonResponse
     from cortex.shell_env_analyzer import ShellEnvironmentAnalyzer
 
 # Suppress noisy log messages in normal operation
@@ -1977,8 +1979,9 @@ class CortexCLI:
         - config: Get daemon configuration via IPC
         - reload-config: Reload daemon configuration via IPC
         - version: Get daemon version via IPC
-        - ping: Test daemon conDaemonnectivity via IPC
+        - ping: Test daemon connectivity via IPC
         - shutdown: Request daemon shutdown via IPC
+        - run-tests: Run daemon test suite
         """
         action = getattr(args, "daemon_action", None)
 
@@ -2012,7 +2015,29 @@ class CortexCLI:
             cx_print("  run-tests      Run daemon test suite", "info")
             return 0
 
-    def _daemon_ipc_call(self, operation_name: str, ipc_func):
+    def _update_history_on_failure(
+        self, history: InstallationHistory, install_id: int | None, error_msg: str
+    ) -> None:
+        """
+        Helper method to update installation history on failure.
+
+        Args:
+            history: InstallationHistory instance.
+            install_id: Installation ID to update, or None if not available.
+            error_msg: Error message to record.
+        """
+        if install_id:
+            try:
+                history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
+            except Exception:
+                # Continue even if audit logging fails - don't break the main flow
+                pass
+
+    def _daemon_ipc_call(
+        self,
+        operation_name: str,
+        ipc_func: "Callable[[DaemonClient], DaemonResponse]",
+    ) -> tuple[bool, "DaemonResponse | None"]:
         """
         Helper method for daemon IPC calls with centralized error handling.
 
@@ -2038,7 +2063,7 @@ class CortexCLI:
                 start_time,
             )
         except Exception:
-            # Continue even if audit logging fails
+            # Continue even if audit logging fails - don't break the main flow
             pass
 
         try:
@@ -2046,6 +2071,7 @@ class CortexCLI:
                 DaemonClient,
                 DaemonConnectionError,
                 DaemonNotInstalledError,
+                DaemonResponse,
             )
 
             client = DaemonClient()
@@ -2064,6 +2090,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
 
             return True, response
@@ -2071,38 +2098,22 @@ class CortexCLI:
         except DaemonNotInstalledError as e:
             error_msg = str(e)
             cx_print(f"{error_msg}", "error")
-            if install_id:
-                try:
-                    history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
-                except Exception:
-                    pass
+            self._update_history_on_failure(history, install_id, error_msg)
             return False, None
         except DaemonConnectionError as e:
             error_msg = str(e)
             cx_print(f"{error_msg}", "error")
-            if install_id:
-                try:
-                    history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
-                except Exception:
-                    pass
+            self._update_history_on_failure(history, install_id, error_msg)
             return False, None
         except ImportError:
             error_msg = "Daemon client not available."
             cx_print(error_msg, "error")
-            if install_id:
-                try:
-                    history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
-                except Exception:
-                    pass
+            self._update_history_on_failure(history, install_id, error_msg)
             return False, None
         except Exception as e:
             error_msg = f"Unexpected error during {operation_name}: {e}"
             cx_print(error_msg, "error")
-            if install_id:
-                try:
-                    history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
-                except Exception:
-                    pass
+            self._update_history_on_failure(history, install_id, error_msg)
             return False, None
 
     def _daemon_install(self, args: argparse.Namespace) -> int:
@@ -2140,6 +2151,7 @@ class CortexCLI:
                 try:
                     history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
             return 1
 
@@ -2164,6 +2176,7 @@ class CortexCLI:
                         "Operation cancelled (no --execute flag)",
                     )
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
             return 0
 
@@ -2186,6 +2199,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
 
             return result.returncode
@@ -2196,6 +2210,7 @@ class CortexCLI:
                 try:
                     history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
             return 1
         except Exception as e:
@@ -2205,6 +2220,7 @@ class CortexCLI:
                 try:
                     history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
             return 1
 
@@ -2252,6 +2268,7 @@ class CortexCLI:
                         "Operation cancelled (no --execute flag)",
                     )
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
             return 0
 
@@ -2262,21 +2279,19 @@ class CortexCLI:
         if uninstall_script.exists():
             cx_print("Running uninstall script...", "info")
             try:
-                # Log the uninstall script command
-                if install_id:
-                    try:
-                        history.record_installation(
-                            InstallationType.CONFIG,
-                            ["cortexd"],
-                            [f"sudo bash {uninstall_script}"],
-                            datetime.now(timezone.utc),
-                        )
-                    except Exception:
-                        pass
+                # Security: Lock down script permissions before execution
+                # Set read-only permissions for non-root users to prevent tampering
+                import stat
+
+                script_stat = uninstall_script.stat()
+                # Remove write permissions for group and others, keep owner read/execute
+                uninstall_script.chmod(stat.S_IRUSR | stat.S_IXUSR)
 
                 result = subprocess.run(
                     ["sudo", "bash", str(uninstall_script)],
                     check=False,
+                    capture_output=True,
+                    text=True,
                 )
 
                 # Record completion
@@ -2292,6 +2307,7 @@ class CortexCLI:
                                 install_id, InstallationStatus.FAILED, error_msg
                             )
                     except Exception:
+                        # Continue even if audit logging fails - don't break the main flow
                         pass
 
                 return result.returncode
@@ -2304,6 +2320,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                     except Exception:
+                        # Continue even if audit logging fails - don't break the main flow
                         pass
                 return 1
             except Exception as e:
@@ -2315,6 +2332,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                     except Exception:
+                        # Continue even if audit logging fails - don't break the main flow
                         pass
                 return 1
         else:
@@ -2337,16 +2355,18 @@ class CortexCLI:
                     cmd_str = " ".join(cmd)
                     cx_print(f"  Running: {cmd_str}", "dim")
 
-                    # Log each critical command before execution
+                    # Update installation history with command info (append to existing record)
                     if install_id:
                         try:
-                            history.record_installation(
-                                InstallationType.CONFIG,
-                                ["cortexd"],
-                                [cmd_str],
-                                datetime.now(timezone.utc),
+                            # Append command info to existing installation record
+                            # instead of creating orphan records
+                            history.update_installation(
+                                install_id,
+                                InstallationStatus.IN_PROGRESS,
+                                f"Executing: {cmd_str}",
                             )
                         except Exception:
+                            # Continue even if audit logging fails - don't break the main flow
                             pass
 
                     result = subprocess.run(cmd, check=False, capture_output=True, text=True)
@@ -2372,6 +2392,7 @@ class CortexCLI:
                                 install_id, InstallationStatus.FAILED, combined_error
                             )
                         except Exception:
+                            # Continue even if audit logging fails - don't break the main flow
                             pass
                     return 1
                 else:
@@ -2381,6 +2402,7 @@ class CortexCLI:
                         try:
                             history.update_installation(install_id, InstallationStatus.SUCCESS)
                         except Exception:
+                            # Continue even if audit logging fails - don't break the main flow
                             pass
                     return 0
             except subprocess.SubprocessError as e:
@@ -2392,6 +2414,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                     except Exception:
+                        # Continue even if audit logging fails - don't break the main flow
                         pass
                 return 1
             except Exception as e:
@@ -2403,6 +2426,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                     except Exception:
+                        # Continue even if audit logging fails - don't break the main flow
                         pass
                 return 1
 
@@ -2563,6 +2587,7 @@ class CortexCLI:
                 try:
                     history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
             return 1
 
@@ -2593,6 +2618,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                     except Exception:
+                        # Continue even if audit logging fails - don't break the main flow
                         pass
                 return 1
         elif run_unit and not run_integration:
@@ -2606,6 +2632,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                     except Exception:
+                        # Continue even if audit logging fails - don't break the main flow
                         pass
                 return 1
         elif run_integration and not run_unit:
@@ -2619,6 +2646,7 @@ class CortexCLI:
                             install_id, InstallationStatus.FAILED, error_msg
                         )
                     except Exception:
+                        # Continue even if audit logging fails - don't break the main flow
                         pass
                 return 1
         else:
@@ -2654,6 +2682,7 @@ class CortexCLI:
                 try:
                     history.update_installation(install_id, InstallationStatus.SUCCESS)
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
             return 0
         else:
@@ -2664,6 +2693,7 @@ class CortexCLI:
                 try:
                     history.update_installation(install_id, InstallationStatus.FAILED, error_msg)
                 except Exception:
+                    # Continue even if audit logging fails - don't break the main flow
                     pass
             return 1
 

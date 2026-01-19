@@ -286,20 +286,20 @@ class DocsGenerator:
 
     def export_docs(self, software_name: str, format: str = "md") -> str:
         """Export documentation in various formats."""
+        safe_name = self._sanitize_name(software_name)
         software_dir = self._get_software_dir(software_name)
 
         if format.lower() not in ("md", "html", "pdf"):
             raise ValueError(f"Unsupported or invalid export format: {format}")
 
-        software_dir = self.docs_dir / software_name
         if not software_dir.exists():
             self.generate_software_docs(software_name)
 
-        export_path = Path.cwd() / f"{software_name}_docs.{format}"
+        export_path = Path.cwd() / f"{safe_name}_docs.{format}"
 
         if format == "md":
             # Combine all MD files
-            combined = f"# {software_name.capitalize()} Documentation\n\n"
+            combined = f"# {safe_name.capitalize()} Documentation\n\n"
             for filename in sorted(os.listdir(software_dir)):
                 if filename.endswith(".md"):
                     with open(software_dir / filename) as f:

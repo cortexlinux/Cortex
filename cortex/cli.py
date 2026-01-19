@@ -1013,29 +1013,64 @@ class CortexCLI:
                 cx_print(f"Installing: {software}", "info")
 
                 # Handle prompt based on mode
-                if input_handler_thread is None:
-                    # Single-shot mode: inline prompt handling (no input handler thread running)
-                    console.print()
-                    console.print("[bold cyan]Choose an action:[/bold cyan]")
-                    console.print("  [1] Dry run (preview commands)")
-                    console.print("  [2] Execute (run commands)")
-                    console.print("  [3] Cancel")
-                    console.print()
+                def _drain_queues() -> None:
+                    """Clear any stale prompt/response messages from previous interactions."""
 
                     try:
-                        choice = input("Enter choice [1/2/3]: ").strip()
-                    except (KeyboardInterrupt, EOFError):
-                        choice = "3"
-                else:
+                        while not response_queue.empty():
+                            response_queue.get_nowait()
+                    except Exception:
+                        pass
+
+                    try:
+                        while not input_queue.empty():
+                            input_queue.get_nowait()
+                    except Exception:
+                        pass
+
+                def _resolve_choice() -> str:
+                    """Prompt user until a valid choice is provided."""
+
+                    def _prompt_inline() -> str:
+                        console.print()
+                        console.print("[bold cyan]Choose an action:[/bold cyan]")
+                        console.print("  [1] Dry run (preview commands)")
+                        console.print("  [2] Execute (run commands)")
+                        console.print("  [3] Cancel")
+                        console.print()
+
+                        try:
+                            return input("Enter choice [1/2/3]: ").strip()
+                        except (KeyboardInterrupt, EOFError):
+                            return "3"
+
+                    if input_handler_thread is None:
+                        # Single-shot mode: inline prompt handling (no input handler thread running)
+                        choice_local = _prompt_inline()
+                        while choice_local not in {"1", "2", "3"}:
+                            cx_print("Invalid choice. Please enter 1, 2, or 3.", "warning")
+                            choice_local = _prompt_inline()
+                        return choice_local
+
                     # Continuous mode: use queue-based communication with input handler thread
-                    input_queue.put({"type": "prompt", "software": software})
+                    _drain_queues()
+                    while True:
+                        input_queue.put({"type": "prompt", "software": software})
 
-                    try:
-                        response = response_queue.get(timeout=60)
-                        choice = response.get("choice")
-                    except queue.Empty:
-                        cx_print("\nInput timeout - cancelled.", "warning")
-                        choice = "3"
+                        try:
+                            response = response_queue.get(timeout=60)
+                            choice_local = response.get("choice")
+                        except queue.Empty:
+                            cx_print("\nInput timeout - cancelled.", "warning")
+                            return "3"
+
+                        if choice_local in {"1", "2", "3"}:
+                            return choice_local
+
+                        # Invalid or malformed response — re-prompt
+                        cx_print("Invalid choice. Please enter 1, 2, or 3.", "warning")
+
+                choice = _resolve_choice()
 
                 # Process choice (unified for both modes)
                 if choice == "1":
@@ -1071,12 +1106,19 @@ class CortexCLI:
                         console.print("  [3] Cancel")
                         console.print()
 
-                        try:
-                            choice = input("Enter choice [1/2/3]: ").strip()
-                            response_queue.put({"choice": choice})
-                        except (KeyboardInterrupt, EOFError):
-                            response_queue.put({"choice": "3"})
-                            cx_print("\nCancelled.", "info")
+                        while True:
+                            try:
+                                choice = input("Enter choice [1/2/3]: ").strip()
+                            except (KeyboardInterrupt, EOFError):
+                                response_queue.put({"choice": "3"})
+                                cx_print("\nCancelled.", "info")
+                                break
+
+                            if choice in {"1", "2", "3"}:
+                                response_queue.put({"choice": choice})
+                                break
+
+                            cx_print("Invalid choice. Please enter 1, 2, or 3.", "warning")
                 except queue.Empty:
                     continue
                 except Exception as e:

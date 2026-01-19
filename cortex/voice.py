@@ -50,7 +50,7 @@ class VoiceInputHandler:
         self,
         model_name: str | None = None,
         sample_rate: int = 16000,
-        hotkey: str = "f9",
+        hotkey: str | None = None,
         model_dir: str | None = None,
     ):
         """Initialize the voice input handler.
@@ -60,12 +60,13 @@ class VoiceInputHandler:
                        Defaults to CORTEX_WHISPER_MODEL env var or 'base.en'.
             sample_rate: Audio sample rate in Hz. Default 16000.
             hotkey: Push-to-talk hotkey. Default 'f9'.
+                   Respects CORTEX_VOICE_HOTKEY env var if hotkey arg not provided.
             model_dir: Directory to store whisper models.
                       Defaults to ~/.cortex/models/
         """
         self.model_name = model_name or os.environ.get("CORTEX_WHISPER_MODEL", "base.en")
         self.sample_rate = sample_rate
-        self.hotkey = hotkey.lower()
+        self.hotkey = (hotkey or os.environ.get("CORTEX_VOICE_HOTKEY", "f9")).lower()
         self.model_dir = model_dir or str(Path.home() / ".cortex" / "models")
 
         # Recording state
@@ -573,14 +574,15 @@ class VoiceInputHandler:
 def get_voice_handler(
     model_name: str | None = None,
     sample_rate: int = 16000,
-    hotkey: str = "f9",
+    hotkey: str | None = None,
 ) -> VoiceInputHandler:
     """Factory function to create a VoiceInputHandler.
 
     Args:
-        model_name: Whisper model name. Defaults to env var or 'base.en'.
+        model_name: Whisper model name. Defaults to CORTEX_WHISPER_MODEL env var or 'base.en'.
         sample_rate: Audio sample rate. Default 16000.
         hotkey: Push-to-talk hotkey. Default 'f9'.
+               Respects CORTEX_VOICE_HOTKEY env var if hotkey arg not provided.
 
     Returns:
         Configured VoiceInputHandler instance.

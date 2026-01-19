@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from string import Template
@@ -31,23 +32,38 @@ logger = logging.getLogger(__name__)
 class DocsGenerator:
     """Core engine for generating system and software documentation."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize docs generator, configure paths and helpers."""
         self.config_manager = ConfigManager()
         self.history = InstallationHistory()
         self.console = Console()
-        self.docs_dir = Path.home() / ".cortex" / "docs"
+        self.docs_dir = (Path.home() / ".cortex" / "docs").resolve()
         self.docs_dir.mkdir(parents=True, exist_ok=True)
-        self.template_base_dir = Path(__file__).parent / "templates" / "docs"
+        self.template_base_dir = (Path(__file__).parent / "templates" / "docs").resolve()
 
-    def _validate_software_name(self, software_name: str) -> None:
+    def _sanitize_name(self, software_name: str) -> str:
         """Sanitize and validate software name to prevent path traversal."""
-        if (
-            not software_name
-            or ".." in software_name
-            or "/" in software_name
-            or "\\" in software_name
-        ):
+        if not software_name:
+            raise ValueError("Software name cannot be empty")
+
+        # Allow only alphanumeric, dots, underscores, pluses, and hyphens.
+        # Replace everything else with underscores.
+        safe = re.sub(r"[^A-Za-z0-9._+-]", "_", software_name).strip("._")
+
+        if not safe:
             raise ValueError(f"Invalid characters in software name: {software_name}")
+
+        return safe
+
+    def _get_software_dir(self, software_name: str) -> Path:
+        """Get and validate software directory."""
+        safe_name = self._sanitize_name(software_name)
+        software_dir = (self.docs_dir / safe_name).resolve()
+
+        if self.docs_dir not in software_dir.parents:
+            raise ValueError(f"Invalid software name (path escape attempt): {software_name}")
+
+        return software_dir
 
     def _get_system_data(self) -> dict[str, Any]:
         """Gather comprehensive system data."""
@@ -62,10 +78,10 @@ class DocsGenerator:
 
     def _get_software_data(self, software_name: str) -> dict[str, Any]:
         """Gather documentation data for a specific software/package."""
-        self._validate_software_name(software_name)
+        safe_name = self._sanitize_name(software_name)
         # Find package in installed packages
         all_packages = self.config_manager.detect_installed_packages()
-        pkg_info = next((p for p in all_packages if p["name"] == software_name), None)
+        pkg_info = next((p for p in all_packages if p["name"] == safe_name), None)
 
         # Get installation history for this package
         history_records = self.history.get_history(limit=100)
@@ -101,13 +117,14 @@ class DocsGenerator:
 
     def _find_config_files(self, software_name: str) -> list[str]:
         """Search for configuration files in standard locations."""
+        safe_name = self._sanitize_name(software_name)
         potential_paths = [
-            f"/etc/{software_name}",
-            f"/etc/{software_name}.conf",
-            f"/etc/{software_name}/{software_name}.conf",
-            f"/etc/{software_name}rc",
-            os.path.expanduser(f"~/.{software_name}rc"),
-            os.path.expanduser(f"~/.config/{software_name}"),
+            f"/etc/{safe_name}",
+            f"/etc/{safe_name}.conf",
+            f"/etc/{safe_name}/{safe_name}.conf",
+            f"/etc/{safe_name}rc",
+            os.path.expanduser(f"~/.{safe_name}rc"),
+            os.path.expanduser(f"~/.config/{safe_name}"),
         ]
 
         found = []
@@ -116,7 +133,7 @@ class DocsGenerator:
                 found.append(path)
 
         # Also try listing /etc/software_name/ if it's a directory
-        etc_dir = Path(f"/etc/{software_name}")
+        etc_dir = Path(f"/etc/{safe_name}")
         if etc_dir.is_dir():
             try:
                 for item in etc_dir.glob("*"):
@@ -135,7 +152,7 @@ class DocsGenerator:
 
     def generate_software_docs(self, software_name: str) -> dict[str, str]:
         """Generate multiple MD documents for a software."""
-        self._validate_software_name(software_name)
+        software_dir = self._get_software_dir(software_name)
         data = self._get_software_data(software_name)
 
         docs = {
@@ -145,7 +162,7 @@ class DocsGenerator:
             "Troubleshooting.md": self._render_troubleshooting(data),
         }
 
-        software_dir = self.docs_dir / software_name
+        # software_dir is already validated by _get_software_dir
         software_dir.mkdir(parents=True, exist_ok=True)
 
         for filename, content in docs.items():
@@ -156,10 +173,16 @@ class DocsGenerator:
 
     def _get_template(self, software_name: str, guide_name: str) -> Template:
         """Load a template for a specific software or the default."""
-        software_template = self.template_base_dir / software_name / f"{guide_name}.md"
-        default_template = self.template_base_dir / "default" / f"{guide_name}.md"
+        safe_name = self._sanitize_name(software_name)
+        software_template = (self.template_base_dir / safe_name / f"{guide_name}.md").resolve()
+        default_template = (self.template_base_dir / "default" / f"{guide_name}.md").resolve()
 
-        template_path = software_template if software_template.exists() else default_template
+        if self.template_base_dir not in software_template.parents:
+            # Fallback to default if someone tries to escape via guide_name or if safe_name is weird
+            # though safe_name is sanitized.
+            template_path = default_template
+        else:
+            template_path = software_template if software_template.exists() else default_template
 
         try:
             with open(template_path) as f:
@@ -234,9 +257,9 @@ class DocsGenerator:
         template = self._get_template(name, "Troubleshooting")
         return template.safe_substitute(name=name)
 
-    def view_guide(self, software_name: str, guide_type: str):
+    def view_guide(self, software_name: str, guide_type: str) -> None:
         """View a documentation guide in the terminal."""
-        self._validate_software_name(software_name)
+        software_dir = self._get_software_dir(software_name)
         guide_map = {
             "installation": "Installation_Guide.md",
             "config": "Configuration_Reference.md",
@@ -249,7 +272,7 @@ class DocsGenerator:
             self.console.print(f"[red]Unknown guide type: {guide_type}[/red]")
             return
 
-        filepath = self.docs_dir / software_name / filename
+        filepath = software_dir / filename
         if not filepath.exists():
             # Try to generate it
             self.generate_software_docs(software_name)
@@ -263,7 +286,11 @@ class DocsGenerator:
 
     def export_docs(self, software_name: str, format: str = "md") -> str:
         """Export documentation in various formats."""
-        self._validate_software_name(software_name)
+        software_dir = self._get_software_dir(software_name)
+
+        if format.lower() not in ("md", "html", "pdf"):
+            raise ValueError(f"Unsupported or invalid export format: {format}")
+
         software_dir = self.docs_dir / software_name
         if not software_dir.exists():
             self.generate_software_docs(software_name)

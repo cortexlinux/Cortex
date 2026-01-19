@@ -105,7 +105,8 @@ class InstallationHistory:
                 cursor = conn.cursor()
 
                 # Create installations table
-                cursor.execute("""
+                cursor.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS installations (
                         id TEXT PRIMARY KEY,
                         timestamp TEXT NOT NULL,
@@ -119,13 +120,16 @@ class InstallationHistory:
                         rollback_available INTEGER,
                         duration_seconds REAL
                     )
-                """)
+                """
+                )
 
                 # Create index on timestamp
-                cursor.execute("""
+                cursor.execute(
+                    """
                     CREATE INDEX IF NOT EXISTS idx_timestamp
                     ON installations(timestamp)
-                """)
+                """
+                )
 
                 conn.commit()
 
@@ -322,7 +326,8 @@ class InstallationHistory:
 
                 # Get packages from record
                 cursor.execute(
-                    "SELECT packages, timestamp FROM installations WHERE id = ?", (install_id,)
+                    "SELECT packages, timestamp, operation_type FROM installations WHERE id = ?",
+                    (install_id,),
                 )
                 result = cursor.fetchone()
 
@@ -331,6 +336,7 @@ class InstallationHistory:
                     return
 
                 packages = json.loads(result[0])
+                op_type = InstallationType(result[2])
             start_time = datetime.datetime.fromisoformat(result[1])
             duration = (datetime.datetime.now() - start_time).total_seconds()
 
@@ -360,8 +366,12 @@ class InstallationHistory:
 
             logger.info(f"Installation {install_id} updated: {status.value}")
 
-            # Trigger documentation update for successful installations
-            if status == InstallationStatus.SUCCESS:
+            # Trigger documentation update for successful installations (relevant types only)
+            if status == InstallationStatus.SUCCESS and op_type in {
+                InstallationType.INSTALL,
+                InstallationType.UPGRADE,
+                InstallationType.CONFIG,
+            }:
                 try:
                     from cortex.docs_generator import DocsGenerator
 

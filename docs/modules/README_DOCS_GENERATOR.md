@@ -8,7 +8,7 @@ Cortex provides a comprehensive documentation system that goes beyond simple log
 
 ## Features
 
-- **Automated Generation**: Documentation is automatically updated when software is successfully installed or modified via Cortex.
+- **Automated Generation**: Documentation is automatically updated when software is successfully installed, upgraded, or configured via Cortex. Redundant updates during removals or rollbacks are suppressed.
 - **Rich Terminal View**: View documentation directly in your terminal with beautiful formatting and syntax highlighting.
 - **Multiple Export Formats**: Export unified documentation files in Markdown, HTML, or PDF formats.
 - **Customizable Templates**: Customize the layout and content of generated documentation using external templates.
@@ -37,6 +37,9 @@ cortex docs view <software_name> <guide_type>
 # Export documentation to a file
 cortex docs export <software_name> --format <md|html|pdf>
 ```
+
+> [!NOTE]
+> Software names are strictly sanitized to a safe subset of characters (`A-Za-z0-9._+-`). Multiple path traversal protections are in place to ensure all file operations stay within the intended directory.
 
 ### Customization
 
@@ -68,3 +71,11 @@ The generator gathers data from:
 2.  **ConfigManager**: System package information and configuration snapshots.
 3.  **HardwareDetector**: System-wide hardware context.
 4.  **Proactive Scanner**: Searches `/etc/`, `~/.config/`, and other standard locations for configuration files.
+
+## Security
+
+The `DocsGenerator` module is hardened against path traversal and unsafe file access:
+- **Input Sanitization**: All software names are sanitized using a strict allowlist. Any illegal characters are replaced with underscores.
+- **Path Resolution**: All filesystem operations use resolved, absolute paths to prevent directory escape via symbolic links or relative paths.
+- **Parent Validation**: The system explicitly verifies that every software-specific documentation directory is a child of the root documentation storage.
+- **Format Filtering**: Documentation exports are restricted to an explicit allowlist of safe formats (`md`, `html`, `pdf`).

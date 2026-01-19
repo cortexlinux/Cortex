@@ -861,13 +861,13 @@ class CortexCLI:
         # Try providers in order
         initial_provider = forced_provider or self._get_provider()
         providers_to_try = [initial_provider]
-        if initial_provider in ["claude", "openai"]:
+        # Only use fallback if provider was not explicitly forced
+        if not forced_provider and initial_provider in ["claude", "openai"]:
             other_provider = "openai" if initial_provider == "claude" else "claude"
             if self._get_api_key_for_provider(other_provider):
                 providers_to_try.append(other_provider)
 
         commands = None
-        provider = None  # noqa: F841 - assigned in loop
         api_key = None
         history = InstallationHistory()
         start_time = datetime.now()
@@ -886,7 +886,6 @@ class CortexCLI:
                 commands = interpreter.parse(f"install {software}")
 
                 if commands:
-                    provider = try_provider
                     api_key = try_api_key
                     break
                 else:
@@ -2107,7 +2106,8 @@ class CortexCLI:
             return 1
         except ImportError as e:
             self._print_error(str(e))
-            cx_print("Install with: pip install cryptography", "info")
+            if "cryptography" in str(e).lower():
+                cx_print("Install with: pip install cryptography", "info")
             return 1
 
     def _env_get(self, env_mgr: EnvironmentManager, args: argparse.Namespace) -> int:
@@ -2238,7 +2238,8 @@ class CortexCLI:
             else:
                 cx_print("No variables imported", "info")
 
-            return 0 if not errors else 1
+            # Return success (0) even with partial errors - some vars imported successfully
+            return 0
 
         except FileNotFoundError:
             self._print_error(f"File not found: {input_file}")

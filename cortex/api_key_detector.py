@@ -705,9 +705,31 @@ def detect_api_key(provider: str) -> str | None:
     Returns:
         The API key or None if not found
     """
-    found, key, detected_provider, source = auto_detect_api_key()
-    if found and detected_provider == provider:
-        return key
+    # Create detector and check for the specific provider's key
+    detector = APIKeyDetector()
+
+    # Check environment variables first
+    env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+    value = os.environ.get(env_var)
+    if value:
+        return value
+
+    # Check encrypted storage
+    try:
+        from cortex.env_manager import get_env_manager
+
+        env_mgr = get_env_manager()
+        value = env_mgr.get_variable(app="cortex", key=env_var, decrypt=True)
+        if value:
+            return value
+    except (ImportError, Exception):
+        pass
+
+    # Check other file locations
+    result = detector._check_all_locations()
+    if result and result[0] and result[2] == provider:
+        return result[1]
+
     return None
 
 

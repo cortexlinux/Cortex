@@ -44,6 +44,7 @@ def get_env_file_locations() -> list[Path]:
         cortex_dir = Path(cortex.__file__).parent / ".env"
         locations.append(cortex_dir)
     except ImportError:
+        # Cortex package not installed or not importable - skip this location
         pass
 
     # 4. User's home directory .cortex folder

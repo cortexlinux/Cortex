@@ -139,8 +139,8 @@ class TestVoiceInputHandler:
 
                 importlib.reload(cortex.voice)
                 handler = cortex.voice.VoiceInputHandler()
-                result = handler._check_microphone()
-                assert result is False
+                with pytest.raises(cortex.voice.MicrophoneNotFoundError):
+                    handler._check_microphone()
 
     def test_transcribe_empty_audio(self, handler):
         """Test transcription with empty audio data."""

@@ -85,8 +85,11 @@ class VoiceInputHandler:
     def _ensure_dependencies(self) -> bool:
         """Check if voice dependencies are installed.
 
+        Raises:
+            VoiceInputError: If required dependencies are missing.
+
         Returns:
-            True if all dependencies are available, False otherwise.
+            True if all dependencies are available.
         """
         missing = []
 
@@ -106,19 +109,12 @@ class VoiceInputHandler:
             missing.append("pynput")
 
         if missing:
-            cx_print(
-                f"Missing voice dependencies: {', '.join(missing)}",
-                "error",
+            error_msg = f"Missing voice dependencies: {', '.join(missing)}"
+            install_cmd = f"pip install {' '.join(missing)}"
+            raise VoiceInputError(
+                f"{error_msg}\n\nInstall with: pip install cortex-linux[voice]\n"
+                f"Or: {install_cmd}"
             )
-            cx_print(
-                "Install with: pip install cortex-linux[voice]",
-                "info",
-            )
-            cx_print(
-                f"Or: pip install {' '.join(missing)}",
-                "info",
-            )
-            return False
 
         return True
 
@@ -190,8 +186,11 @@ class VoiceInputHandler:
     def _check_microphone(self) -> bool:
         """Check if a microphone is available.
 
+        Raises:
+            MicrophoneNotFoundError: If no microphone is available or error occurs.
+
         Returns:
-            True if microphone is available, False otherwise.
+            True if microphone is available.
         """
         import sounddevice as sd
 
@@ -200,16 +199,18 @@ class VoiceInputHandler:
             input_devices = [d for d in devices if d["max_input_channels"] > 0]
 
             if not input_devices:
-                cx_print("No microphone found. Please connect a microphone.", "error")
-                return False
+                raise MicrophoneNotFoundError(
+                    "No microphone found. Please connect a microphone."
+                )
 
             default = sd.query_devices(kind="input")
             cx_print(f"Using microphone: {default['name']}", "info")
             return True
 
+        except MicrophoneNotFoundError:
+            raise
         except Exception as e:
-            cx_print(f"Error checking microphone: {e}", "error")
-            return False
+            raise MicrophoneNotFoundError(f"Error checking microphone: {e}") from e
 
     def _start_recording(self) -> None:
         """Start recording audio from microphone."""
@@ -467,11 +468,16 @@ class VoiceInputHandler:
 
         Args:
             on_transcription: Callback called with transcribed text.
-        """
-        if not self._ensure_dependencies():
-            return
 
-        if not self._check_microphone():
+        Raises:
+            VoiceInputError: If dependencies are missing.
+            MicrophoneNotFoundError: If microphone is not available.
+        """
+        try:
+            self._ensure_dependencies()
+            self._check_microphone()
+        except (VoiceInputError, MicrophoneNotFoundError) as e:
+            cx_print(str(e), "error")
             return
 
         # Pre-load the model
@@ -504,12 +510,17 @@ class VoiceInputHandler:
         to start and stop recording.
 
         Returns:
-            Transcribed text from the recording.
-        """
-        if not self._ensure_dependencies():
-            return ""
+            Transcribed text from the recording, or empty string on error.
 
-        if not self._check_microphone():
+        Raises:
+            VoiceInputError: If dependencies are missing.
+            MicrophoneNotFoundError: If microphone is not available.
+        """
+        try:
+            self._ensure_dependencies()
+            self._check_microphone()
+        except (VoiceInputError, MicrophoneNotFoundError) as e:
+            cx_print(str(e), "error")
             return ""
 
         # Pre-load the model

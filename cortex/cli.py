@@ -1012,27 +1012,43 @@ class CortexCLI:
 
                 cx_print(f"Installing: {software}", "info")
 
-                # Request input from main thread via queue
-                input_queue.put({"type": "prompt", "software": software})
+                # Handle prompt based on mode
+                if input_handler_thread is None:
+                    # Single-shot mode: inline prompt handling (no input handler thread running)
+                    console.print()
+                    console.print("[bold cyan]Choose an action:[/bold cyan]")
+                    console.print("  [1] Dry run (preview commands)")
+                    console.print("  [2] Execute (run commands)")
+                    console.print("  [3] Cancel")
+                    console.print()
 
-                # Wait for response from main thread
-                try:
-                    response = response_queue.get(timeout=60)
-                    choice = response.get("choice")
+                    try:
+                        choice = input("Enter choice [1/2/3]: ").strip()
+                    except (KeyboardInterrupt, EOFError):
+                        choice = "3"
+                else:
+                    # Continuous mode: use queue-based communication with input handler thread
+                    input_queue.put({"type": "prompt", "software": software})
 
-                    if choice == "1":
-                        self._install_with_session_key(
-                            software, api_key, provider, execute=False, dry_run=True
-                        )
-                    elif choice == "2":
-                        cx_print("Executing installation...", "info")
-                        self._install_with_session_key(
-                            software, api_key, provider, execute=True, dry_run=False
-                        )
-                    else:
-                        cx_print("Cancelled.", "info")
-                except queue.Empty:
-                    cx_print("\nInput timeout - cancelled.", "warning")
+                    try:
+                        response = response_queue.get(timeout=60)
+                        choice = response.get("choice")
+                    except queue.Empty:
+                        cx_print("\nInput timeout - cancelled.", "warning")
+                        choice = "3"
+
+                # Process choice (unified for both modes)
+                if choice == "1":
+                    self._install_with_session_key(
+                        software, api_key, provider, execute=False, dry_run=True
+                    )
+                elif choice == "2":
+                    cx_print("Executing installation...", "info")
+                    self._install_with_session_key(
+                        software, api_key, provider, execute=True, dry_run=False
+                    )
+                else:
+                    cx_print("Cancelled.", "info")
             else:
                 # Treat as a question
                 cx_print(f"Question: {text}", "info")

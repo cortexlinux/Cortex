@@ -531,6 +531,9 @@ class VoiceInputHandler:
             cx_print("\nCancelled.", "info")
         finally:
             self.stop()
+            # Brief pause to ensure keyboard listener fully releases
+            # and any buffered key events are cleared
+            time.sleep(0.1)
 
         return result["text"]
 

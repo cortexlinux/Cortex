@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import select
 import sys
 import time
 import uuid
@@ -1033,6 +1034,16 @@ class CortexCLI:
                     except Exception:
                         pass
 
+                def _flush_stdin() -> None:
+                    """Flush any pending input from stdin."""
+                    try:
+                        # Use select to check for pending input without blocking
+                        while select.select([sys.stdin], [], [], 0.0)[0]:
+                            sys.stdin.read(1)
+                    except (OSError, ValueError, TypeError):
+                        # OSError: fd not valid, ValueError: fd negative, TypeError: not selectable
+                        pass
+
                 def _resolve_choice() -> str:
                     """Prompt user until a valid choice is provided."""
 
@@ -1042,9 +1053,11 @@ class CortexCLI:
                         console.print("  [1] Dry run (preview commands)")
                         console.print("  [2] Execute (run commands)")
                         console.print("  [3] Cancel")
+                        console.print("  [dim](Ctrl+C to cancel)[/dim]")
                         console.print()
 
                         try:
+                            _flush_stdin()  # Clear any buffered input
                             choice = input("Enter choice [1/2/3]: ").strip()
                             # Blank input defaults to dry-run (1)
                             return choice or "1"
@@ -1053,6 +1066,7 @@ class CortexCLI:
 
                     if input_handler_thread is None:
                         # Single-shot mode: inline prompt handling (no input handler thread running)
+                        _flush_stdin()  # Clear any buffered input before prompting
                         choice_local = _prompt_inline()
                         while choice_local not in {"1", "2", "3"}:
                             cx_print("Invalid choice. Please enter 1, 2, or 3.", "warning")
@@ -1077,6 +1091,22 @@ class CortexCLI:
                         # Invalid or malformed response — re-prompt
                         cx_print("Invalid choice. Please enter 1, 2, or 3.", "warning")
 
+                def _prompt_execute_after_dry_run() -> str:
+                    """Prompt user to execute or cancel after dry-run preview."""
+                    console.print()
+                    console.print("[bold cyan]Dry-run complete. What next?[/bold cyan]")
+                    console.print("  [1] Execute (run commands)")
+                    console.print("  [2] Cancel")
+                    console.print("  [dim](Ctrl+C to cancel)[/dim]")
+                    console.print()
+
+                    try:
+                        _flush_stdin()  # Clear any buffered input
+                        choice_input = input("Enter choice [1/2]: ").strip()
+                        return choice_input or "2"  # Default to cancel
+                    except (KeyboardInterrupt, EOFError):
+                        return "2"
+
                 choice = _resolve_choice()
 
                 # Process choice (unified for both modes)
@@ -1084,6 +1114,18 @@ class CortexCLI:
                     self._install_with_session_key(
                         software, api_key, provider, execute=False, dry_run=True
                     )
+                    # After dry-run, ask if user wants to execute
+                    follow_up = _prompt_execute_after_dry_run()
+                    while follow_up not in {"1", "2"}:
+                        cx_print("Invalid choice. Please enter 1 or 2.", "warning")
+                        follow_up = _prompt_execute_after_dry_run()
+                    if follow_up == "1":
+                        cx_print("Executing installation...", "info")
+                        self._install_with_session_key(
+                            software, api_key, provider, execute=True, dry_run=False
+                        )
+                    else:
+                        cx_print("Cancelled.", "info")
                 elif choice == "2":
                     cx_print("Executing installation...", "info")
                     self._install_with_session_key(

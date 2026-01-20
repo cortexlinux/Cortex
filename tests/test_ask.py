@@ -199,9 +199,7 @@ class TestAskHandler(unittest.TestCase):
     def test_call_claude_uses_max_tokens_constant(self, mock_anthropic_client):
         """Test that _call_claude uses the MAX_TOKENS constant."""
         mock_create = MagicMock()
-        mock_create.return_value = MagicMock(
-            content=[MagicMock(text="Test response")]
-        )
+        mock_create.return_value = MagicMock(content=[MagicMock(text="Test response")])
         mock_client_instance = MagicMock()
         mock_client_instance.messages.create = mock_create
         mock_anthropic_client.return_value = mock_client_instance
@@ -218,8 +216,11 @@ class TestAskHandler(unittest.TestCase):
     def test_call_ollama_uses_max_tokens_constant(self, mock_urlopen):
         """Test that _call_ollama uses the MAX_TOKENS constant."""
         import json as json_module
+
         mock_response = MagicMock()
-        mock_response.read.return_value = json_module.dumps({"response": "Test response"}).encode("utf-8")
+        mock_response.read.return_value = json_module.dumps({"response": "Test response"}).encode(
+            "utf-8"
+        )
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_response
@@ -470,14 +471,14 @@ class TestLearningTracker(unittest.TestCase):
             ("why is my disk full", False, "Non-educational query"),
             ("check system status", False, "Non-educational query"),
         ]
-        
+
         for query, expected, description in test_cases:
             with self.subTest(query=query, description=description):
                 result = self.tracker.is_educational_query(query)
                 self.assertEqual(
                     result,
                     expected,
-                    f"{description}: Expected {expected} for '{query}', got {result}"
+                    f"{description}: Expected {expected} for '{query}', got {result}",
                 )
 
     def test_is_educational_query_non_educational(self):
@@ -510,7 +511,9 @@ class TestLearningTracker(unittest.TestCase):
     def test_extract_topic_truncation_at_word_boundary(self):
         """Test that truncation preserves word boundaries."""
         # Create a topic that's longer than 50 chars with spaces
-        long_question = "explain this is a very long topic name that exceeds fifty characters easily"
+        long_question = (
+            "explain this is a very long topic name that exceeds fifty characters easily"
+        )
         topic = self.tracker.extract_topic(long_question)
         self.assertLessEqual(len(topic), 50)
         # Should not end with a partial word
@@ -583,6 +586,7 @@ class TestLearningTracker(unittest.TestCase):
         """Test that record_topic handles malformed topic data with missing count key."""
         # Manually create history with a topic missing the count key
         import json
+
         self.temp_file.parent.mkdir(parents=True, exist_ok=True)
         malformed_history = {
             "topics": {
@@ -592,7 +596,7 @@ class TestLearningTracker(unittest.TestCase):
                     # Missing "count" key
                 }
             },
-            "total_queries": 1
+            "total_queries": 1,
         }
         with open(self.temp_file, "w") as f:
             json.dump(malformed_history, f)
@@ -600,7 +604,7 @@ class TestLearningTracker(unittest.TestCase):
         # This should not crash and should reinitialize the topic
         self.tracker.record_topic("explain docker")
         history = self.tracker.get_history()
-        
+
         # Should have reinitialized with count=1
         self.assertIn("docker", history["topics"])
         self.assertEqual(history["topics"]["docker"]["count"], 1)
@@ -609,10 +613,8 @@ class TestLearningTracker(unittest.TestCase):
         """Test that record_topic handles topic data that's not a dictionary."""
         self.temp_file.parent.mkdir(parents=True, exist_ok=True)
         malformed_history = {
-            "topics": {
-                "docker": "invalid_data_type"  # Should be a dict
-            },
-            "total_queries": 1
+            "topics": {"docker": "invalid_data_type"},  # Should be a dict
+            "total_queries": 1,
         }
         with open(self.temp_file, "w") as f:
             json.dump(malformed_history, f)
@@ -620,7 +622,7 @@ class TestLearningTracker(unittest.TestCase):
         # This should not crash and should reinitialize the topic
         self.tracker.record_topic("explain docker")
         history = self.tracker.get_history()
-        
+
         # Should have reinitialized properly
         self.assertIn("docker", history["topics"])
         topic_data = history["topics"]["docker"]

@@ -15,6 +15,7 @@ import sqlite3
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
+from datetime import timezone
 from enum import Enum
 from pathlib import Path
 
@@ -105,7 +106,8 @@ class InstallationHistory:
                 cursor = conn.cursor()
 
                 # Create installations table
-                cursor.execute("""
+                cursor.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS installations (
                         id TEXT PRIMARY KEY,
                         timestamp TEXT NOT NULL,
@@ -119,13 +121,16 @@ class InstallationHistory:
                         rollback_available INTEGER,
                         duration_seconds REAL
                     )
-                """)
+                """
+                )
 
                 # Create index on timestamp
-                cursor.execute("""
+                cursor.execute(
+                    """
                     CREATE INDEX IF NOT EXISTS idx_timestamp
                     ON installations(timestamp)
-                """)
+                """
+                )
 
                 conn.commit()
 
@@ -150,7 +155,12 @@ class InstallationHistory:
         """Get current state of a package"""
         # Check if package is installed
         success, stdout, _ = self._run_command(
-            ["dpkg-query", "-W", "-f=${Status}|${Version}", package_name]
+            [
+                "dpkg-query",
+                "-W",
+                "-f=${Status}|${Version}",
+                package_name,
+            ]
         )
 
         if not success:
@@ -288,7 +298,7 @@ class InstallationHistory:
                 cursor.execute(
                     """
                     INSERT INTO installations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
+                    """,
                     (
                         install_id,
                         timestamp,
@@ -304,7 +314,7 @@ class InstallationHistory:
                     ),
                 )
 
-            conn.commit()
+                conn.commit()
 
             logger.info(f"Installation {install_id} recorded")
             return install_id
@@ -331,32 +341,32 @@ class InstallationHistory:
                     return
 
                 packages = json.loads(result[0])
-            start_time = datetime.datetime.fromisoformat(result[1])
-            duration = (datetime.datetime.now() - start_time).total_seconds()
+                start_time = datetime.datetime.fromisoformat(result[1])
+                duration = (datetime.datetime.now(timezone.utc) - start_time).total_seconds()
 
-            # Create after snapshot
-            after_snapshot = self._create_snapshot(packages)
+                # Create after snapshot
+                after_snapshot = self._create_snapshot(packages)
 
-            # Update record
-            cursor.execute(
-                """
-                UPDATE installations
-                SET status = ?,
-                    after_snapshot = ?,
-                    error_message = ?,
-                    duration_seconds = ?
-                WHERE id = ?
-            """,
-                (
-                    status.value,
-                    json.dumps([asdict(s) for s in after_snapshot]),
-                    error_message,
-                    duration,
-                    install_id,
-                ),
-            )
+                # Update record
+                cursor.execute(
+                    """
+                    UPDATE installations
+                    SET status = ?,
+                        after_snapshot = ?,
+                        error_message = ?,
+                        duration_seconds = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        status.value,
+                        json.dumps([asdict(s) for s in after_snapshot]),
+                        error_message,
+                        duration,
+                        install_id,
+                    ),
+                )
 
-            conn.commit()
+                conn.commit()
 
             logger.info(f"Installation {install_id} updated: {status.value}")
         except Exception as e:
@@ -590,7 +600,15 @@ class InstallationHistory:
             with open(filepath, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(
-                    ["ID", "Timestamp", "Operation", "Packages", "Status", "Duration", "Error"]
+                    [
+                        "ID",
+                        "Timestamp",
+                        "Operation",
+                        "Packages",
+                        "Status",
+                        "Duration",
+                        "Error",
+                    ]
                 )
 
                 for r in history:

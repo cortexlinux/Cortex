@@ -28,6 +28,36 @@ class TestCortexCLIExtended(unittest.TestCase):
     def tearDown(self):
         self._temp_dir.cleanup()
 
+    def _setup_predictive_mock(self, mock_predictive_class):
+        """Helper to configure PredictiveErrorManager mock with default safe response."""
+        mock_predictive = Mock()
+        mock_prediction = Mock()
+        mock_prediction.risk_level = 0
+        mock_predictive.analyze_installation.return_value = mock_prediction
+        mock_predictive_class.return_value = mock_predictive
+        return mock_predictive
+
+    def _setup_interpreter_mock(self, mock_interpreter_class, commands=None):
+        """Helper to setup CommandInterpreter mock."""
+        if commands is None:
+            commands = ["apt update", "apt install docker"]
+        mock_interpreter = Mock()
+        mock_interpreter.parse.return_value = commands
+        mock_interpreter_class.return_value = mock_interpreter
+        return mock_interpreter
+
+    def _setup_coordinator_mock(self, mock_coordinator_class, success=True, error_message=None):
+        """Helper to setup InstallationCoordinator mock."""
+        mock_coordinator = Mock()
+        mock_result = Mock()
+        mock_result.success = success
+        mock_result.total_duration = 1.5
+        mock_result.failed_step = 0
+        mock_result.error_message = error_message
+        mock_coordinator.execute.return_value = mock_result
+        mock_coordinator_class.return_value = mock_coordinator
+        return mock_coordinator
+
     def test_get_api_key_openai(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key"}, clear=True):
             with patch("pathlib.Path.home", return_value=self._temp_home):
@@ -117,15 +147,8 @@ class TestCortexCLIExtended(unittest.TestCase):
         _mock_get_api_key,
         _mock_get_provider,
     ) -> None:
-        mock_interpreter = Mock()
-        mock_interpreter.parse.return_value = ["apt update", "apt install docker"]
-        mock_interpreter_class.return_value = mock_interpreter
-
-        mock_predictive = Mock()
-        mock_prediction = Mock()
-        mock_prediction.risk_level = 0
-        mock_predictive.analyze_installation.return_value = mock_prediction
-        mock_predictive_class.return_value = mock_predictive
+        mock_interpreter = self._setup_interpreter_mock(mock_interpreter_class)
+        self._setup_predictive_mock(mock_predictive_class)
 
         result = self.cli.install("docker", dry_run=True)
 
@@ -147,15 +170,8 @@ class TestCortexCLIExtended(unittest.TestCase):
         _mock_get_api_key,
         _mock_get_provider,
     ) -> None:
-        mock_interpreter = Mock()
-        mock_interpreter.parse.return_value = ["apt update", "apt install docker"]
-        mock_interpreter_class.return_value = mock_interpreter
-
-        mock_predictive = Mock()
-        mock_prediction = Mock()
-        mock_prediction.risk_level = 0
-        mock_predictive.analyze_installation.return_value = mock_prediction
-        mock_predictive_class.return_value = mock_predictive
+        mock_interpreter = self._setup_interpreter_mock(mock_interpreter_class)
+        self._setup_predictive_mock(mock_predictive_class)
 
         result = self.cli.install("docker", execute=False)
 
@@ -179,22 +195,9 @@ class TestCortexCLIExtended(unittest.TestCase):
         _mock_get_api_key,
         _mock_get_provider,
     ) -> None:
-        mock_interpreter = Mock()
-        mock_interpreter.parse.return_value = ["echo test"]
-        mock_interpreter_class.return_value = mock_interpreter
-
-        mock_predictive = Mock()
-        mock_prediction = Mock()
-        mock_prediction.risk_level = 0
-        mock_predictive.analyze_installation.return_value = mock_prediction
-        mock_predictive_class.return_value = mock_predictive
-
-        mock_coordinator = Mock()
-        mock_result = Mock()
-        mock_result.success = True
-        mock_result.total_duration = 1.5
-        mock_coordinator.execute.return_value = mock_result
-        mock_coordinator_class.return_value = mock_coordinator
+        self._setup_interpreter_mock(mock_interpreter_class, commands=["echo test"])
+        self._setup_predictive_mock(mock_predictive_class)
+        mock_coordinator = self._setup_coordinator_mock(mock_coordinator_class, success=True)
 
         result = self.cli.install("docker", execute=True)
 
@@ -218,23 +221,11 @@ class TestCortexCLIExtended(unittest.TestCase):
         _mock_get_api_key,
         _mock_get_provider,
     ) -> None:
-        mock_interpreter = Mock()
-        mock_interpreter.parse.return_value = ["invalid command"]
-        mock_interpreter_class.return_value = mock_interpreter
-
-        mock_predictive = Mock()
-        mock_prediction = Mock()
-        mock_prediction.risk_level = 0
-        mock_predictive.analyze_installation.return_value = mock_prediction
-        mock_predictive_class.return_value = mock_predictive
-
-        mock_coordinator = Mock()
-        mock_result = Mock()
-        mock_result.success = False
-        mock_result.failed_step = 0
-        mock_result.error_message = "command not found"
-        mock_coordinator.execute.return_value = mock_result
-        mock_coordinator_class.return_value = mock_coordinator
+        self._setup_interpreter_mock(mock_interpreter_class, commands=["invalid command"])
+        self._setup_predictive_mock(mock_predictive_class)
+        self._setup_coordinator_mock(
+            mock_coordinator_class, success=False, error_message="command not found"
+        )
 
         result = self.cli.install("docker", execute=True)
 
@@ -253,9 +244,7 @@ class TestCortexCLIExtended(unittest.TestCase):
         _mock_get_api_key,
         _mock_get_provider,
     ) -> None:
-        mock_interpreter = Mock()
-        mock_interpreter.parse.return_value = []
-        mock_interpreter_class.return_value = mock_interpreter
+        self._setup_interpreter_mock(mock_interpreter_class, commands=[])
 
         result = self.cli.install("docker")
 
@@ -274,9 +263,8 @@ class TestCortexCLIExtended(unittest.TestCase):
         _mock_get_api_key,
         _mock_get_provider,
     ) -> None:
-        mock_interpreter = Mock()
+        mock_interpreter = self._setup_interpreter_mock(mock_interpreter_class)
         mock_interpreter.parse.side_effect = ValueError("Invalid input")
-        mock_interpreter_class.return_value = mock_interpreter
 
         result = self.cli.install("docker")
 
@@ -295,9 +283,8 @@ class TestCortexCLIExtended(unittest.TestCase):
         _mock_get_api_key,
         _mock_get_provider,
     ) -> None:
-        mock_interpreter = Mock()
+        mock_interpreter = self._setup_interpreter_mock(mock_interpreter_class)
         mock_interpreter.parse.side_effect = RuntimeError("API failed")
-        mock_interpreter_class.return_value = mock_interpreter
 
         result = self.cli.install("docker")
 
@@ -316,9 +303,8 @@ class TestCortexCLIExtended(unittest.TestCase):
         _mock_get_api_key,
         _mock_get_provider,
     ) -> None:
-        mock_interpreter = Mock()
+        mock_interpreter = self._setup_interpreter_mock(mock_interpreter_class)
         mock_interpreter.parse.side_effect = Exception("Unexpected")
-        mock_interpreter_class.return_value = mock_interpreter
 
         result = self.cli.install("docker")
 

@@ -2050,6 +2050,10 @@ class CortexCLI:
             return self._daemon_ping()
         elif action == "shutdown":
             return self._daemon_shutdown()
+        elif action == "health":
+            return self._daemon_health()
+        elif action == "alerts":
+            return self._daemon_alerts(args)
         elif action == "run-tests":
             return self._daemon_run_tests(args)
         else:
@@ -2063,6 +2067,8 @@ class CortexCLI:
             cx_print("  version        Show daemon version", "info")
             cx_print("  ping           Test daemon connectivity", "info")
             cx_print("  shutdown       Request daemon shutdown", "info")
+            cx_print("  health         Check system health", "info")
+            cx_print("  alerts         List and manage alerts", "info")
             cx_print("  run-tests      Run daemon test suite", "info")
             return 0
 
@@ -2547,6 +2553,222 @@ class CortexCLI:
         cx_print(f"Failed to request shutdown: {response.error}", "error")
         return 1
 
+    def _daemon_health(self) -> int:
+        """Check system health via IPC."""
+        cx_header("System Health Check")
+
+        success, response = self._daemon_ipc_call("health", lambda c: c.health())
+        if not success:
+            return 1
+
+        if not response.success:
+            cx_print(f"Failed to get health: {response.error}", "error")
+            return 1
+
+        result = response.result
+        if not result:
+            return 1
+
+        # Display health metrics in a box
+        from rich.panel import Panel
+        from rich.table import Table
+
+        # Create health metrics table
+        health_table = Table(show_header=False, box=None, padding=(0, 2))
+        health_table.add_column("Metric", style="bold")
+        health_table.add_column("Value", style="")
+
+        # CPU
+        if "cpu" in result:
+            cpu = result["cpu"]
+            usage = cpu.get("usage_percent", 0)
+            color = "red" if usage >= 95 else "yellow" if usage >= 80 else "green"
+            health_table.add_row(
+                "CPU Usage",
+                f"[{color}]{usage:.1f}%[/{color}] ({cpu.get('cores', 0)} cores)"
+            )
+
+        # Memory
+        if "memory" in result:
+            mem = result["memory"]
+            usage = mem.get("usage_percent", 0)
+            color = "red" if usage >= 95 else "yellow" if usage >= 80 else "green"
+            mem_gb = mem.get("used_bytes", 0) / (1024**3)
+            mem_total_gb = mem.get("total_bytes", 0) / (1024**3)
+            health_table.add_row(
+                "Memory Usage",
+                f"[{color}]{usage:.1f}%[/{color}] ({mem_gb:.2f}GB / {mem_total_gb:.2f}GB)"
+            )
+
+        # Disk
+        if "disk" in result:
+            disk = result["disk"]
+            usage = disk.get("usage_percent", 0)
+            color = "red" if usage >= 95 else "yellow" if usage >= 80 else "green"
+            disk_gb = disk.get("used_bytes", 0) / (1024**3)
+            disk_total_gb = disk.get("total_bytes", 0) / (1024**3)
+            mount_point = disk.get("mount_point", "/")
+            health_table.add_row(
+                f"Disk Usage ({mount_point})",
+                f"[{color}]{usage:.1f}%[/{color}] ({disk_gb:.2f}GB / {disk_total_gb:.2f}GB)"
+            )
+
+        # System info
+        if "system" in result:
+            sys_info = result["system"]
+            uptime_hours = sys_info.get("uptime_seconds", 0) / 3600
+            health_table.add_row("System Uptime", f"{uptime_hours:.1f} hours")
+            
+            failed = sys_info.get("failed_services_count", 0)
+            if failed > 0:
+                health_table.add_row("Failed Services", f"[red]{failed}[/red]")
+            else:
+                health_table.add_row("Failed Services", "[green]0[/green]")
+
+        # Display health panel
+        console.print()
+        console.print(Panel(health_table, title="[bold cyan]System Health Metrics[/bold cyan]", border_style="cyan"))
+
+        # Display thresholds in a separate panel
+        if "thresholds" in result:
+            thresholds = result["thresholds"]
+            threshold_table = Table(show_header=True, header_style="bold yellow", box=None, padding=(0, 2))
+            threshold_table.add_column("Resource", style="bold")
+            threshold_table.add_column("Warning", style="yellow")
+            threshold_table.add_column("Critical", style="red")
+
+            if "cpu" in thresholds:
+                cpu_th = thresholds["cpu"]
+                threshold_table.add_row(
+                    "CPU",
+                    f"{cpu_th.get('warning', 80)}%",
+                    f"{cpu_th.get('critical', 95)}%"
+                )
+            if "memory" in thresholds:
+                mem_th = thresholds["memory"]
+                threshold_table.add_row(
+                    "Memory",
+                    f"{mem_th.get('warning', 80)}%",
+                    f"{mem_th.get('critical', 95)}%"
+                )
+            if "disk" in thresholds:
+                disk_th = thresholds["disk"]
+                threshold_table.add_row(
+                    "Disk",
+                    f"{disk_th.get('warning', 80)}%",
+                    f"{disk_th.get('critical', 95)}%"
+                )
+
+            console.print()
+            console.print(Panel(threshold_table, title="[bold yellow]Monitoring Thresholds[/bold yellow]", border_style="yellow"))
+
+        return 0
+
+    def _daemon_alerts(self, args: argparse.Namespace) -> int:
+        """Manage alerts via IPC."""
+        # Handle acknowledge-all
+        if getattr(args, "acknowledge_all", False):
+            cx_header("Acknowledging All Alerts")
+            success, response = self._daemon_ipc_call(
+                "alerts_acknowledge_all", lambda c: c.alerts_acknowledge_all()
+            )
+            if not success:
+                return 1
+            if response.success:
+                count = response.result.get("acknowledged", 0) if response.result else 0
+                cx_print(f"Acknowledged {count} alert(s)", "success")
+                return 0
+            cx_print(f"Failed: {response.error}", "error")
+            return 1
+
+        # Handle dismiss
+        dismiss_uuid = getattr(args, "dismiss", None)
+        if dismiss_uuid:
+            cx_header("Dismissing Alert")
+            success, response = self._daemon_ipc_call(
+                "alerts_dismiss", lambda c: c.alerts_dismiss(dismiss_uuid)
+            )
+            if not success:
+                return 1
+            if response.success:
+                cx_print(f"Alert {dismiss_uuid} dismissed", "success")
+                return 0
+            cx_print(f"Failed: {response.error}", "error")
+            return 1
+
+        # List alerts
+        cx_header("Alerts")
+
+        severity = getattr(args, "severity", None)
+        category = getattr(args, "category", None)
+
+        success, response = self._daemon_ipc_call(
+            "alerts_get",
+            lambda c: c.alerts_get(severity=severity, category=category),
+        )
+        if not success:
+            return 1
+
+        if not response.success:
+            cx_print(f"Failed to get alerts: {response.error}", "error")
+            return 1
+
+        result = response.result
+        if not result:
+            return 1
+
+        alerts = result.get("alerts", [])
+        counts = result.get("counts", {})
+
+        # Display summary
+        console.print(f"[bold]Total Alerts:[/bold] {result.get('count', 0)}")
+        if counts:
+            console.print(
+                f"  Info: {counts.get('info', 0)}, "
+                f"Warning: {counts.get('warning', 0)}, "
+                f"Error: {counts.get('error', 0)}, "
+                f"Critical: {counts.get('critical', 0)}"
+            )
+
+        if not alerts:
+            console.print("[dim]No alerts found[/dim]")
+            return 0
+
+        console.print()
+        # Display alerts table
+        from rich.table import Table
+
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("UUID", style="dim")
+        table.add_column("Severity", style="bold")
+        table.add_column("Category")
+        table.add_column("Source")
+        table.add_column("Message")
+        table.add_column("Status")
+        table.add_column("Timestamp")
+
+        for alert in alerts:
+            severity_name = alert.get("severity_name", "unknown")
+            severity_color = {
+                "info": "blue",
+                "warning": "yellow",
+                "error": "red",
+                "critical": "bold red",
+            }.get(severity_name, "white")
+
+            table.add_row(
+                alert.get("uuid", "")[:8] + "...",
+                f"[{severity_color}]{severity_name.upper()}[/{severity_color}]",
+                alert.get("category_name", "unknown"),
+                alert.get("source", "unknown"),
+                alert.get("message", ""),
+                alert.get("status_name", "unknown"),
+                alert.get("timestamp", ""),
+            )
+
+        console.print(table)
+        return 0
+
     def _daemon_run_tests(self, args: argparse.Namespace) -> int:
         """Run the daemon test suite."""
         import subprocess
@@ -2582,6 +2804,7 @@ class CortexCLI:
             "test_rate_limiter",
             "test_logger",
             "test_common",
+            "test_alert_manager",
         ]
         integration_tests = ["test_ipc_server", "test_handlers", "test_daemon"]
         all_tests = unit_tests + integration_tests
@@ -4335,6 +4558,34 @@ def main():
 
     # daemon shutdown - uses shutdown IPC handler
     daemon_subs.add_parser("shutdown", help="Request daemon shutdown")
+
+    # daemon health - uses health IPC handler
+    daemon_subs.add_parser("health", help="Check system health")
+
+    # daemon alerts - uses alerts IPC handlers
+    daemon_alerts_parser = daemon_subs.add_parser(
+        "alerts", help="Manage alerts"
+    )
+    daemon_alerts_parser.add_argument(
+        "--severity",
+        choices=["info", "warning", "error", "critical"],
+        help="Filter alerts by severity",
+    )
+    daemon_alerts_parser.add_argument(
+        "--category",
+        choices=["cpu", "memory", "disk", "apt", "cve", "service", "system"],
+        help="Filter alerts by category",
+    )
+    daemon_alerts_parser.add_argument(
+        "--acknowledge-all",
+        action="store_true",
+        help="Acknowledge all active alerts",
+    )
+    daemon_alerts_parser.add_argument(
+        "--dismiss",
+        metavar="UUID",
+        help="Dismiss a specific alert by UUID",
+    )
 
     # daemon run-tests - run daemon test suite
     daemon_run_tests_parser = daemon_subs.add_parser(

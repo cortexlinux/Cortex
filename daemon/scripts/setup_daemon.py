@@ -391,17 +391,76 @@ def check_tests_built() -> bool:
     return (DAEMON_DIR / "build" / "tests" / "test_config").exists()
 
 
+def ensure_config_file() -> bool:
+    """
+    Ensure the daemon config file exists, creating it from template if needed.
+
+    Creates /etc/cortex/daemon.yaml from the template if it doesn't exist.
+    This is a safety measure in case install.sh doesn't create it.
+
+    Returns:
+        bool: True if config file exists or was created successfully, False otherwise.
+    """
+    config_path = Path(CONFIG_FILE)
+    
+    # If config already exists, we're done
+    if config_path.exists():
+        return True
+    
+    # Check if template exists
+    if not CONFIG_EXAMPLE.exists():
+        console.print(
+            f"[yellow]Warning: Config template not found at {CONFIG_EXAMPLE}[/yellow]"
+        )
+        return False
+    
+    try:
+        # Create /etc/cortex directory if needed
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Copy template to config file (requires sudo)
+        result = subprocess.run(
+            ["sudo", "cp", str(CONFIG_EXAMPLE), CONFIG_FILE],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        
+        if result.returncode == 0:
+            # Set proper permissions
+            subprocess.run(
+                ["sudo", "chmod", "0644", CONFIG_FILE],
+                check=False,
+            )
+            console.print(f"[green]Created config file: {CONFIG_FILE}[/green]")
+            log_audit_event("create_config", f"Created config from template")
+            return True
+        else:
+            console.print(
+                f"[red]Failed to create config file: {result.stderr}[/red]"
+            )
+            return False
+            
+    except Exception as e:
+        console.print(f"[red]Error creating config file: {e}[/red]")
+        return False
+
+
 def install_daemon() -> bool:
     """
     Install the cortexd daemon system-wide.
 
     Runs the INSTALL_SCRIPT (daemon/scripts/install.sh) with sudo using
-    subprocess.run.
+    subprocess.run. The install script will create the config file if it
+    doesn't exist, but we also ensure it exists as a safety measure.
 
     Returns:
         bool: True if the installation completed successfully (exit code 0),
               False otherwise.
     """
+    # Ensure config file exists before installation
+    ensure_config_file()
+    
     console.print("[cyan]Installing the daemon...[/cyan]")
     result = subprocess.run(["sudo", str(INSTALL_SCRIPT)], check=False)
     success = result.returncode == 0

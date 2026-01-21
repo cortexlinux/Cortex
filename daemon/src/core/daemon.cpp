@@ -119,6 +119,7 @@ void Daemon::request_shutdown() {
  
  void Daemon::register_service(std::unique_ptr<Service> service) {
      LOG_DEBUG("Daemon", "Registering service: " + std::string(service->name()));
+     std::unique_lock<std::shared_mutex> lock(services_mutex_);
      services_.push_back(std::move(service));
  }
  
@@ -164,18 +165,20 @@ bool Daemon::reload_config() {
     return false;
 }
 
-void Daemon::reset() {
-    // Reset all singleton state for test isolation
-    // This ensures each test starts with a clean daemon state
-    // WARNING: This function has no synchronization and should ONLY be called
-    // when the daemon is stopped and no other threads are accessing services_.
-    // For production builds, consider using #ifdef TESTING guards.
-    
-    // Stop any running services first
-    stop_services();
-    
-    // Clear all registered services
-    services_.clear();
+ void Daemon::reset() {
+     // Reset all singleton state for test isolation
+     // This ensures each test starts with a clean daemon state
+     // WARNING: This function has no synchronization and should ONLY be called
+     // when the daemon is stopped and no other threads are accessing services_.
+     // For production builds, consider using #ifdef TESTING guards.
+     
+     // Stop any running services first
+     stop_services();
+     
+     // Clear all registered services (exclusive lock for write)
+     std::unique_lock<std::shared_mutex> lock(services_mutex_);
+     services_.clear();
+     lock.unlock();
     
     // Reset state flags
     shutdown_requested_.store(false, std::memory_order_relaxed);
@@ -204,13 +207,27 @@ void Daemon::reset() {
  }
  
  bool Daemon::start_services() {
+     std::unique_lock<std::shared_mutex> lock(services_mutex_);
+     
      // Sort services by priority (higher first)
      std::sort(services_.begin(), services_.end(),
          [](const auto& a, const auto& b) {
              return a->priority() > b->priority();
          });
      
+     // Release lock before starting services (start() may take time)
+     lock.unlock();
+     
      for (auto& service : services_) {
+         // Re-acquire lock to access services_ safely
+         std::shared_lock<std::shared_mutex> read_lock(services_mutex_);
+         auto it = std::find_if(services_.begin(), services_.end(),
+             [&service](const auto& s) { return s.get() == service.get(); });
+         if (it == services_.end()) {
+             read_lock.unlock();
+             continue;  // Service was removed
+         }
+         read_lock.unlock();
          LOG_INFO("Daemon", "Starting service: " + std::string(service->name()));
          
          if (!service->start()) {
@@ -227,13 +244,21 @@ void Daemon::reset() {
  }
  
  void Daemon::stop_services() {
-     // Stop services in reverse order (lower priority first)
+     std::shared_lock<std::shared_mutex> lock(services_mutex_);
+     
+     // Copy service pointers to avoid holding lock during stop()
+     std::vector<Service*> service_ptrs;
      for (auto it = services_.rbegin(); it != services_.rend(); ++it) {
-         auto& service = *it;
-         if (service->is_running()) {
-             LOG_INFO("Daemon", "Stopping service: " + std::string(service->name()));
-             service->stop();
-             LOG_INFO("Daemon", "Service stopped: " + std::string(service->name()));
+         service_ptrs.push_back(it->get());
+     }
+     lock.unlock();  // Release lock before stopping services
+     
+     // Stop services in reverse order (lower priority first)
+     for (auto* service_ptr : service_ptrs) {
+         if (service_ptr->is_running()) {
+             LOG_INFO("Daemon", "Stopping service: " + std::string(service_ptr->name()));
+             service_ptr->stop();
+             LOG_INFO("Daemon", "Service stopped: " + std::string(service_ptr->name()));
          }
      }
  }
@@ -254,10 +279,13 @@ void Daemon::reset() {
          reload_config();
      }
      
-     // Check service health
-     for (auto& service : services_) {
-         if (service->is_running() && !service->is_healthy()) {
-             LOG_WARN("Daemon", "Service unhealthy: " + std::string(service->name()));
+     // Check service health (read-only access - use shared lock)
+     {
+         std::shared_lock<std::shared_mutex> lock(services_mutex_);
+         for (const auto& service : services_) {
+             if (service->is_running() && !service->is_healthy()) {
+                 LOG_WARN("Daemon", "Service unhealthy: " + std::string(service->name()));
+             }
          }
      }
      

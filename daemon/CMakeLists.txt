@@ -62,8 +62,8 @@ endif()
 # Find required packages
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SYSTEMD REQUIRED libsystemd)
-pkg_check_modules(OPENSSL REQUIRED openssl)
 pkg_check_modules(UUID REQUIRED uuid)
+pkg_check_modules(SQLITE3 REQUIRED sqlite3)
 
 # Fetch nlohmann/json
 include(FetchContent)
@@ -89,8 +89,8 @@ FetchContent_MakeAvailable(yaml-cpp)
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${SYSTEMD_INCLUDE_DIRS}
-    ${OPENSSL_INCLUDE_DIRS}
     ${UUID_INCLUDE_DIRS}
+    ${SQLITE3_INCLUDE_DIRS}
 )
 
 # Source files
@@ -106,6 +106,12 @@ set(DAEMON_SOURCES
     src/ipc/server.cpp
     src/ipc/protocol.cpp
     src/ipc/handlers.cpp
+    
+    # Monitoring
+    src/monitor/system_monitor.cpp
+    
+    # Alerts
+    src/alerts/alert_manager.cpp
     
     # Utils
     src/utils/logger.cpp
@@ -123,8 +129,8 @@ target_compile_definitions(cortexd PRIVATE
 target_link_libraries(cortexd
     PRIVATE
     ${SYSTEMD_LIBRARIES}
-    ${OPENSSL_LIBRARIES}
     ${UUID_LIBRARIES}
+    ${SQLITE3_LIBRARIES}
     nlohmann_json::nlohmann_json
     yaml-cpp::yaml-cpp
     pthread

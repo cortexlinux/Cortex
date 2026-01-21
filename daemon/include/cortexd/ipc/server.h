@@ -7,14 +7,15 @@
 
  #include "cortexd/core/service.h"
  #include "cortexd/ipc/protocol.h"
- #include <string>
- #include <thread>
- #include <atomic>
- #include <mutex>
- #include <condition_variable>
- #include <functional>
- #include <unordered_map>
- #include <chrono>
+#include <string>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <shared_mutex>
+#include <condition_variable>
+#include <functional>
+#include <unordered_map>
+#include <chrono>
  
  namespace cortexd {
  
@@ -23,30 +24,33 @@
   */
  using RequestHandler = std::function<Response(const Request&)>;
  
- /**
-  * @brief Rate limiter for request throttling
-  */
- class RateLimiter {
- public:
-     explicit RateLimiter(int max_per_second);
-     
-     /**
-      * @brief Check if request is allowed
-      * @return true if allowed, false if rate limited
-      */
-     bool allow();
-     
-     /**
-      * @brief Reset the rate limiter
-      */
-     void reset();
-     
- private:
-     int max_per_second_;
-     int count_ = 0;
-     std::chrono::steady_clock::time_point window_start_;
-     std::mutex mutex_;
- };
+/**
+ * @brief Lock-free rate limiter for request throttling
+ * Uses atomic operations for better performance under high concurrency.
+ * 
+ * SECURITY: Uses compare-and-swap to ensure the limit is never exceeded,
+ * even under high concurrency. This prevents rate limit bypass attacks.
+ */
+class RateLimiter {
+public:
+    explicit RateLimiter(int max_per_second);
+    
+    /**
+     * @brief Check if request is allowed (lock-free)
+     * @return true if allowed, false if rate limited
+     */
+    bool allow();
+    
+    /**
+     * @brief Reset the rate limiter
+     */
+    void reset();
+    
+private:
+    int max_per_second_;
+    std::atomic<int> count_{0};
+    std::atomic<std::chrono::steady_clock::time_point::rep> window_start_rep_{0};
+};
  
  /**
   * @brief Unix socket IPC server
@@ -92,8 +96,8 @@
      std::atomic<bool> running_{false};
      std::unique_ptr<std::thread> accept_thread_;
      
-     std::unordered_map<std::string, RequestHandler> handlers_;
-     std::mutex handlers_mutex_;
+    std::unordered_map<std::string, RequestHandler> handlers_;
+    mutable std::shared_mutex handlers_mutex_;  // Read-write lock for concurrent reads
      
      RateLimiter rate_limiter_;
      

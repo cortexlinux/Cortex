@@ -44,6 +44,41 @@ std::optional<Config> Config::load(const std::string& path) {
             config.log_level = yaml["log_level"].as<int>();
         }
         
+        // Monitoring thresholds
+        if (yaml["monitoring"]) {
+            auto monitoring = yaml["monitoring"];
+            if (monitoring["cpu"]) {
+                auto cpu = monitoring["cpu"];
+                if (cpu["warning_threshold"]) {
+                    config.cpu_warning_threshold = cpu["warning_threshold"].as<double>();
+                }
+                if (cpu["critical_threshold"]) {
+                    config.cpu_critical_threshold = cpu["critical_threshold"].as<double>();
+                }
+            }
+            if (monitoring["memory"]) {
+                auto memory = monitoring["memory"];
+                if (memory["warning_threshold"]) {
+                    config.memory_warning_threshold = memory["warning_threshold"].as<double>();
+                }
+                if (memory["critical_threshold"]) {
+                    config.memory_critical_threshold = memory["critical_threshold"].as<double>();
+                }
+            }
+            if (monitoring["disk"]) {
+                auto disk = monitoring["disk"];
+                if (disk["warning_threshold"]) {
+                    config.disk_warning_threshold = disk["warning_threshold"].as<double>();
+                }
+                if (disk["critical_threshold"]) {
+                    config.disk_critical_threshold = disk["critical_threshold"].as<double>();
+                }
+            }
+            if (monitoring["check_interval_seconds"]) {
+                config.monitor_check_interval_seconds = monitoring["check_interval_seconds"].as<int>();
+            }
+        }
+        
         // Expand paths and validate
         config.expand_paths();
         std::string error = config.validate();
@@ -86,6 +121,23 @@ bool Config::save(const std::string& path) const {
         // Logging
         out << YAML::Key << "log_level" << YAML::Value << log_level;
         
+        // Monitoring thresholds
+        out << YAML::Key << "monitoring" << YAML::Value << YAML::BeginMap;
+        out << YAML::Key << "cpu" << YAML::Value << YAML::BeginMap;
+        out << YAML::Key << "warning_threshold" << YAML::Value << cpu_warning_threshold;
+        out << YAML::Key << "critical_threshold" << YAML::Value << cpu_critical_threshold;
+        out << YAML::EndMap;
+        out << YAML::Key << "memory" << YAML::Value << YAML::BeginMap;
+        out << YAML::Key << "warning_threshold" << YAML::Value << memory_warning_threshold;
+        out << YAML::Key << "critical_threshold" << YAML::Value << memory_critical_threshold;
+        out << YAML::EndMap;
+        out << YAML::Key << "disk" << YAML::Value << YAML::BeginMap;
+        out << YAML::Key << "warning_threshold" << YAML::Value << disk_warning_threshold;
+        out << YAML::Key << "critical_threshold" << YAML::Value << disk_critical_threshold;
+        out << YAML::EndMap;
+        out << YAML::Key << "check_interval_seconds" << YAML::Value << monitor_check_interval_seconds;
+        out << YAML::EndMap;
+        
         out << YAML::EndMap;
         
         std::ofstream file(expanded_path);
@@ -120,6 +172,30 @@ std::string Config::validate() const {
     }
     if (log_level < 0 || log_level > 4) {
         return "log_level must be between 0 and 4";
+    }
+    if (cpu_warning_threshold < 0 || cpu_warning_threshold > 100 ||
+        cpu_critical_threshold < 0 || cpu_critical_threshold > 100) {
+        return "CPU thresholds must be between 0 and 100";
+    }
+    if (cpu_warning_threshold >= cpu_critical_threshold) {
+        return "CPU warning threshold must be less than critical threshold";
+    }
+    if (memory_warning_threshold < 0 || memory_warning_threshold > 100 ||
+        memory_critical_threshold < 0 || memory_critical_threshold > 100) {
+        return "Memory thresholds must be between 0 and 100";
+    }
+    if (memory_warning_threshold >= memory_critical_threshold) {
+        return "Memory warning threshold must be less than critical threshold";
+    }
+    if (disk_warning_threshold < 0 || disk_warning_threshold > 100 ||
+        disk_critical_threshold < 0 || disk_critical_threshold > 100) {
+        return "Disk thresholds must be between 0 and 100";
+    }
+    if (disk_warning_threshold >= disk_critical_threshold) {
+        return "Disk warning threshold must be less than critical threshold";
+    }
+    if (monitor_check_interval_seconds <= 0) {
+        return "monitor_check_interval_seconds must be positive";
     }
     return "";  // Valid
 }

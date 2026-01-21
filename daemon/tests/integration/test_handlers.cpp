@@ -6,6 +6,8 @@
 #include <gtest/gtest.h>
 #include <thread>
 #include <chrono>
+#include <atomic>
+#include <cstring>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -17,6 +19,9 @@
 #include "cortexd/config.h"
 #include "cortexd/core/daemon.h"
 #include "cortexd/logger.h"
+#include "cortexd/monitor/system_monitor.h"
+#include "cortexd/alerts/alert_manager.h"
+#include <memory>
 
 namespace fs = std::filesystem;
 
@@ -52,10 +57,17 @@ log_level: 1
     }
     
     void TearDown() override {
+        if (system_monitor_) {
+            system_monitor_->stop();
+            system_monitor_.reset();
+        }
+        
         if (server_) {
             server_->stop();
             server_.reset();
         }
+        
+        alert_manager_.reset();
         
         fs::remove_all(temp_dir_);
         cortexd::Logger::shutdown();
@@ -67,6 +79,37 @@ log_level: 1
         cortexd::Handlers::register_all(*server_);
         ASSERT_TRUE(server_->start());
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    
+    void start_server_with_monitoring() {
+        auto config = cortexd::ConfigManager::instance().get();
+        server_ = std::make_unique<cortexd::IPCServer>(socket_path_, config.max_requests_per_sec);
+        
+        // Create alert manager
+        std::string alert_db = (temp_dir_ / "alerts.db").string();
+        alert_manager_ = std::make_shared<cortexd::AlertManager>(alert_db);
+        ASSERT_TRUE(alert_manager_->initialize());
+        
+        // Create system monitor with explicit thresholds (matching defaults)
+        cortexd::MonitoringThresholds thresholds;
+        thresholds.cpu_warning = 80.0;
+        thresholds.cpu_critical = 95.0;
+        thresholds.memory_warning = 80.0;
+        thresholds.memory_critical = 95.0;
+        thresholds.disk_warning = 80.0;
+        thresholds.disk_critical = 95.0;
+        system_monitor_ = std::make_unique<cortexd::SystemMonitor>(alert_manager_, 60, thresholds);
+        
+        // Start the monitor to populate health data
+        ASSERT_TRUE(system_monitor_->start());
+        
+        // Register handlers with monitoring
+        cortexd::Handlers::register_all(*server_, system_monitor_.get(), alert_manager_);
+        ASSERT_TRUE(server_->start());
+        
+        // Wait for monitor thread to start and run at least once to populate health data
+        // The monitor loop calls check_health() immediately when it starts
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     
     std::string send_request(const std::string& request) {
@@ -112,13 +155,19 @@ log_level: 1
             return cortexd::json{{"error", "empty response"}};
         }
         
-        return cortexd::json::parse(response);
+        try {
+            return cortexd::json::parse(response);
+        } catch (const std::exception& e) {
+            return cortexd::json{{"error", "json parse error"}, {"message", e.what()}};
+        }
     }
     
     fs::path temp_dir_;
     std::string socket_path_;
     std::string config_path_;
     std::unique_ptr<cortexd::IPCServer> server_;
+    std::shared_ptr<cortexd::AlertManager> alert_manager_;
+    std::unique_ptr<cortexd::SystemMonitor> system_monitor_;
 };
 
 // ============================================================================
@@ -270,34 +319,144 @@ TEST_F(HandlersTest, UnknownMethodReturnsError) {
     EXPECT_EQ(response["error"]["code"], cortexd::ErrorCodes::METHOD_NOT_FOUND);
 }
 
-TEST_F(HandlersTest, StatusMethodNotAvailableInPR1) {
-    start_server_with_handlers();
-    
-    // Status handler is not registered in PR 1
-    auto response = send_json_request("status");
-    
-    EXPECT_FALSE(response["success"]);
-    EXPECT_EQ(response["error"]["code"], cortexd::ErrorCodes::METHOD_NOT_FOUND);
-}
+// ============================================================================
+// Health handler tests
+// ============================================================================
 
-TEST_F(HandlersTest, HealthMethodNotAvailableInPR1) {
-    start_server_with_handlers();
+TEST_F(HandlersTest, HealthReturnsSystemMetrics) {
+    start_server_with_monitoring();
     
-    // Health handler is not registered in PR 1
     auto response = send_json_request("health");
     
-    EXPECT_FALSE(response["success"]);
-    EXPECT_EQ(response["error"]["code"], cortexd::ErrorCodes::METHOD_NOT_FOUND);
+    EXPECT_TRUE(response["success"]);
+    EXPECT_TRUE(response["result"].contains("cpu"));
+    EXPECT_TRUE(response["result"].contains("memory"));
+    EXPECT_TRUE(response["result"].contains("disk"));
+    EXPECT_TRUE(response["result"].contains("system"));
+    EXPECT_TRUE(response["result"].contains("thresholds"));
 }
 
-TEST_F(HandlersTest, AlertsMethodNotAvailableInPR1) {
-    start_server_with_handlers();
+TEST_F(HandlersTest, HealthReturnsValidCpuMetrics) {
+    start_server_with_monitoring();
     
-    // Alerts handler is not registered in PR 1
+    auto response = send_json_request("health");
+    
+    EXPECT_TRUE(response["success"]);
+    auto cpu = response["result"]["cpu"];
+    EXPECT_TRUE(cpu.contains("usage_percent"));
+    EXPECT_TRUE(cpu.contains("cores"));
+    EXPECT_GE(cpu["usage_percent"], 0.0);
+    EXPECT_LE(cpu["usage_percent"], 100.0);
+    EXPECT_GT(cpu["cores"], 0);
+}
+
+TEST_F(HandlersTest, HealthReturnsValidMemoryMetrics) {
+    start_server_with_monitoring();
+    
+    auto response = send_json_request("health");
+    
+    EXPECT_TRUE(response["success"]);
+    auto memory = response["result"]["memory"];
+    EXPECT_TRUE(memory.contains("usage_percent"));
+    EXPECT_TRUE(memory.contains("total_bytes"));
+    EXPECT_TRUE(memory.contains("used_bytes"));
+    EXPECT_TRUE(memory.contains("available_bytes"));
+    EXPECT_GE(memory["usage_percent"], 0.0);
+    EXPECT_LE(memory["usage_percent"], 100.0);
+}
+
+// ============================================================================
+// Alerts handler tests
+// ============================================================================
+
+TEST_F(HandlersTest, AlertsGetReturnsAlertsList) {
+    start_server_with_monitoring();
+    
     auto response = send_json_request("alerts");
     
-    EXPECT_FALSE(response["success"]);
-    EXPECT_EQ(response["error"]["code"], cortexd::ErrorCodes::METHOD_NOT_FOUND);
+    EXPECT_TRUE(response["success"]);
+    EXPECT_TRUE(response["result"].contains("alerts"));
+    EXPECT_TRUE(response["result"].contains("count"));
+    EXPECT_TRUE(response["result"].contains("counts"));
+    EXPECT_TRUE(response["result"]["alerts"].is_array());
+}
+
+TEST_F(HandlersTest, AlertsGetWithSeverityFilter) {
+    start_server_with_monitoring();
+    
+    // Create a test alert
+    cortexd::Alert alert;
+    alert.severity = cortexd::AlertSeverity::WARNING;
+    alert.category = cortexd::AlertCategory::CPU;
+    alert.source = "test";
+    alert.message = "Test warning";
+    alert.status = cortexd::AlertStatus::ACTIVE;
+    alert_manager_->create_alert(alert);
+    
+    auto response = send_json_request("alerts", {{"severity", "warning"}});
+    
+    EXPECT_TRUE(response["success"]);
+    auto alerts = response["result"]["alerts"];
+    EXPECT_GE(alerts.size(), 1);
+    
+    // All returned alerts should be warnings
+    for (const auto& a : alerts) {
+        EXPECT_EQ(a["severity_name"], "warning");
+    }
+}
+
+TEST_F(HandlersTest, AlertsAcknowledgeAll) {
+    start_server_with_monitoring();
+    
+    // Create multiple alerts
+    for (int i = 0; i < 3; ++i) {
+        cortexd::Alert alert;
+        alert.severity = cortexd::AlertSeverity::INFO;
+        alert.category = cortexd::AlertCategory::SYSTEM;
+        alert.source = "test";
+        alert.message = "Test alert " + std::to_string(i);
+        alert.status = cortexd::AlertStatus::ACTIVE;
+        alert_manager_->create_alert(alert);
+    }
+    
+    auto response = send_json_request("alerts.acknowledge", {{"all", true}});
+    
+    EXPECT_TRUE(response["success"]);
+    EXPECT_GE(response["result"]["acknowledged"], 3);
+}
+
+TEST_F(HandlersTest, AlertsDismiss) {
+    start_server_with_monitoring();
+    
+    // Create an alert
+    cortexd::Alert alert;
+    alert.severity = cortexd::AlertSeverity::WARNING;
+    alert.category = cortexd::AlertCategory::CPU;
+    alert.source = "test";
+    alert.message = "Test alert";
+    alert.status = cortexd::AlertStatus::ACTIVE;
+    auto created = alert_manager_->create_alert(alert);
+    ASSERT_TRUE(created.has_value());
+    
+    auto response = send_json_request("alerts.dismiss", {{"uuid", created->uuid}});
+    
+    EXPECT_TRUE(response["success"]);
+    EXPECT_TRUE(response["result"]["dismissed"]);
+    EXPECT_EQ(response["result"]["uuid"], created->uuid);
+    
+    // Verify it's dismissed
+    auto get_response = send_json_request("alerts");
+    auto alerts = get_response["result"]["alerts"];
+    bool found = false;
+    for (const auto& a : alerts) {
+        if (a["uuid"] == created->uuid) {
+            found = true;
+            EXPECT_EQ(a["status_name"], "dismissed");
+            break;
+        }
+    }
+    // Dismissed alerts are excluded by default, so it shouldn't be in the list
+    EXPECT_FALSE(found);
 }
 
 // ============================================================================

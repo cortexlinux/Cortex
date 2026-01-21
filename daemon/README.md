@@ -9,7 +9,9 @@
 - 🔌 **Unix Socket IPC**: JSON-RPC protocol at `/run/cortex/cortex.sock`
 - ⚙️ **systemd Integration**: Type=notify, watchdog, journald logging
 - 📝 **Configuration Management**: YAML-based configuration with hot reload
-- 🔧 **Basic IPC Handlers**: ping, version, config, shutdown
+- 🔧 **IPC Handlers**: ping, version, config, shutdown, health, alerts
+- 📊 **System Monitoring**: Continuous monitoring of CPU, memory, disk, and system services
+- 🚨 **Alert Management**: SQLite-based alert persistence with severity levels and filtering
 
 ## Quick Start
 
@@ -86,13 +88,31 @@ sudo systemctl restart cortexd && sleep 1 && journalctl -u cortexd -n 10 | grep 
 │  │ IPC Server                                              │ │
 │  │ ───────────                                             │ │
 │  │ JSON-RPC Protocol                                       │ │
-│  │ Basic Handlers: ping, version, config, shutdown        │ │
+│  │ Handlers: ping, version, config, shutdown,              │ │
+│  │          health, alerts                                 │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │ System Monitor                                          │ │
+│  │ ─────────────                                           │ │
+│  │ • CPU/Memory/Disk monitoring                            │ │
+│  │ • System uptime & failed services                       │ │
+│  │ • Threshold-based alert generation                      │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │ Alert Manager                                           │ │
+│  │ ────────────                                            │ │
+│  │ • SQLite persistence                                    │ │
+│  │ • Severity levels (INFO/WARNING/ERROR/CRITICAL)         │ │
+│  │ • Categories (CPU/MEMORY/DISK/APT/CVE/SERVICE/SYSTEM)   │ │
+│  │ • Filtering & querying                                  │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                              │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │ Config Manager (YAML) │ Logger │ Daemon Lifecycle       │ │
 │  └─────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Directory Structure
@@ -106,14 +126,20 @@ daemon/
 │   ├── core/                 # Daemon core
 │   │   ├── daemon.h
 │   │   └── service.h
-│   └── ipc/                  # IPC layer
-│       ├── server.h
-│       ├── protocol.h
-│       └── handlers.h        # Basic handlers only
+│   ├── ipc/                  # IPC layer
+│   │   ├── server.h
+│   │   ├── protocol.h
+│   │   └── handlers.h
+│   ├── monitor/              # System monitoring
+│   │   └── system_monitor.h
+│   └── alerts/               # Alert management
+│       └── alert_manager.h
 ├── src/                      # Implementation
 │   ├── core/                 # Daemon lifecycle
 │   ├── config/               # Configuration management
 │   ├── ipc/                  # IPC server and handlers
+│   ├── monitor/              # System monitoring implementation
+│   ├── alerts/               # Alert management implementation
 │   └── utils/                # Logging utilities
 ├── systemd/                  # Service files
 ├── config/                   # Config templates
@@ -132,12 +158,20 @@ cortex daemon config          # Show configuration
 cortex daemon reload-config   # Reload configuration
 cortex daemon shutdown        # Request daemon shutdown
 
+# System monitoring
+cortex daemon health          # Get system health metrics
+
+# Alert management
+cortex daemon alerts                          # List all active alerts
+cortex daemon alerts --severity warning      # Filter by severity
+cortex daemon alerts --category cpu          # Filter by category
+cortex daemon alerts --acknowledge-all       # Acknowledge all alerts
+cortex daemon alerts --dismiss <uuid>        # Dismiss specific alert
+
 # Install/uninstall daemon
 cortex daemon install
 cortex daemon install --execute
 cortex daemon uninstall
-```
-
 ```
 
 ## IPC API
@@ -151,6 +185,10 @@ cortex daemon uninstall
 | `config.get` | Get configuration |
 | `config.reload` | Reload config file |
 | `shutdown` | Request shutdown |
+| `health` | Get system health metrics (CPU, memory, disk, services) |
+| `alerts` / `alerts.get` | Get alerts with optional filtering |
+| `alerts.acknowledge` | Acknowledge alerts (all or by UUID) |
+| `alerts.dismiss` | Dismiss a specific alert by UUID |
 
 ### Example
 
@@ -176,8 +214,30 @@ echo '{"method":"version"}' | socat - UNIX-CONNECT:/run/cortex/cortex.sock
 #   }
 # }
 
-# Get configuration
-echo '{"method":"config.get"}' | socat - UNIX-CONNECT:/run/cortex/cortex.sock
+# Get system health
+echo '{"method":"health"}' | socat - UNIX-CONNECT:/run/cortex/cortex.sock
+
+# Response:
+# {
+#   "success": true,
+#   "result": {
+#     "cpu_usage_percent": 45.2,
+#     "memory_usage_percent": 62.1,
+#     "disk_usage_percent": 78.5,
+#     "uptime_seconds": 86400,
+#     "failed_services_count": 0,
+#     "thresholds": { ... }
+#   }
+# }
+
+# Get alerts
+echo '{"method":"alerts"}' | socat - UNIX-CONNECT:/run/cortex/cortex.sock
+
+# Get alerts filtered by severity
+echo '{"method":"alerts","params":{"severity":"warning"}}' | socat - UNIX-CONNECT:/run/cortex/cortex.sock
+
+# Acknowledge all alerts
+echo '{"method":"alerts.acknowledge","params":{"all":true}}' | socat - UNIX-CONNECT:/run/cortex/cortex.sock
 ```
 
 ## Configuration
@@ -190,7 +250,114 @@ socket:
   timeout_ms: 5000
 
 log_level: 1  # 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR
+
+# Monitoring thresholds (optional - uses defaults if not specified)
+monitoring:
+  cpu:
+    warning_threshold: 80.0    # CPU usage % to trigger warning alert
+    critical_threshold: 95.0   # CPU usage % to trigger critical alert
+  memory:
+    warning_threshold: 80.0    # Memory usage % to trigger warning alert
+    critical_threshold: 95.0   # Memory usage % to trigger critical alert
+  disk:
+    warning_threshold: 80.0    # Disk usage % to trigger warning alert
+    critical_threshold: 95.0   # Disk usage % to trigger critical alert
+  check_interval_seconds: 60  # How often to check system health
 ```
+
+**Note**: Thresholds can be adjusted without restarting the daemon. After editing the config file, reload it with:
+```bash
+cortex daemon reload-config
+# or
+sudo systemctl reload cortexd
+```
+
+## System Monitoring
+
+The daemon includes a built-in system monitor that continuously tracks system health metrics and generates alerts when thresholds are exceeded.
+
+### Monitored Metrics
+
+- **CPU Usage**: Percentage of CPU utilization across all cores
+- **Memory Usage**: Total, used, and available memory
+- **Disk Usage**: Total, used, and available disk space (primary mount point)
+- **System Uptime**: System uptime in seconds
+- **Failed Services**: Count of failed systemd services
+
+### Monitoring Thresholds
+
+The monitor uses configurable thresholds to determine when to generate alerts. These can be configured in `/etc/cortex/daemon.yaml`:
+
+- **Warning Threshold**: Default 80% (CPU, memory, disk) - configurable via `monitoring.*.warning_threshold`
+- **Critical Threshold**: Default 95% (CPU, memory, disk) - configurable via `monitoring.*.critical_threshold`
+- **Check Interval**: Default 60 seconds - configurable via `monitoring.check_interval_seconds`
+
+Thresholds can be updated without restarting the daemon by editing the config file and reloading:
+```bash
+sudo systemctl reload cortexd
+# or
+cortex daemon reload-config
+```
+
+### Check Interval
+
+The monitor performs health checks every 60 seconds by default. This interval can be configured when creating the `SystemMonitor` instance.
+
+### Alert Generation
+
+When a metric exceeds a threshold, the monitor automatically creates an alert with:
+- **Severity**: `WARNING` for threshold violations, `CRITICAL` for critical violations
+- **Category**: `CPU`, `MEMORY`, `DISK`, or `SERVICE` (for failed services)
+- **Source**: `SystemMonitor`
+- **Message**: Brief description of the issue
+- **Description**: Detailed information including current values and thresholds
+
+Alerts are persisted to SQLite and can be queried via the IPC API or CLI commands.
+
+## Alert Management
+
+The daemon includes a comprehensive alert management system with SQLite persistence.
+
+### Alert Database
+
+Alerts are stored in `/var/lib/cortex/alerts.db` (SQLite database). The database is automatically created and initialized on first use.
+
+### Alert Properties
+
+- **UUID**: Unique identifier for each alert
+- **Severity**: `INFO`, `WARNING`, `ERROR`, or `CRITICAL`
+- **Category**: `CPU`, `MEMORY`, `DISK`, `APT`, `CVE`, `SERVICE`, or `SYSTEM`
+- **Source**: Origin of the alert (e.g., `SystemMonitor`)
+- **Message**: Brief alert message
+- **Description**: Detailed alert description
+- **Timestamp**: When the alert was created
+- **Status**: `ACTIVE`, `ACKNOWLEDGED`, or `DISMISSED`
+- **Acknowledged At**: Optional timestamp when alert was acknowledged
+- **Dismissed At**: Optional timestamp when alert was dismissed
+
+### Alert Lifecycle
+
+1. **Created**: Alert is created and stored with `ACTIVE` status
+2. **Acknowledged**: User acknowledges the alert (status changes to `ACKNOWLEDGED`)
+3. **Dismissed**: User dismisses the alert (status changes to `DISMISSED`)
+
+Dismissed alerts are excluded from default queries unless `include_dismissed=true` is specified.
+
+### Filtering Alerts
+
+Alerts can be filtered by:
+- **Severity**: `info`, `warning`, `error`, `critical`
+- **Category**: `cpu`, `memory`, `disk`, `apt`, `cve`, `service`, `system`
+- **Status**: `active`, `acknowledged`, `dismissed`
+- **Include Dismissed**: Include dismissed alerts in results (default: false)
+
+### Alert Counts
+
+The alert manager maintains real-time counts of alerts by severity:
+- Total count
+- Count by severity (INFO, WARNING, ERROR, CRITICAL)
+
+These counts are updated atomically and returned with alert queries for quick status overview.
 
 
 ## Building from Source

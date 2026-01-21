@@ -62,7 +62,6 @@
   */
  namespace Methods {
      // Status and health
-     constexpr const char* STATUS = "status";
      constexpr const char* HEALTH = "health";
      constexpr const char* VERSION = "version";
      
@@ -72,17 +71,11 @@
      constexpr const char* ALERTS_ACK = "alerts.acknowledge";
      constexpr const char* ALERTS_DISMISS = "alerts.dismiss";
      
-     // Configuration
-     constexpr const char* CONFIG_GET = "config.get";
-     constexpr const char* CONFIG_RELOAD = "config.reload";
-     
-     // LLM operations
-     constexpr const char* LLM_STATUS = "llm.status";
-     constexpr const char* LLM_LOAD = "llm.load";
-     constexpr const char* LLM_UNLOAD = "llm.unload";
-     constexpr const char* LLM_INFER = "llm.infer";
-     
-     // Daemon control
+    // Configuration
+    constexpr const char* CONFIG_GET = "config.get";
+    constexpr const char* CONFIG_RELOAD = "config.reload";
+    
+    // Daemon control
      constexpr const char* SHUTDOWN = "shutdown";
      constexpr const char* PING = "ping";
  }
@@ -101,10 +94,8 @@
      constexpr int INVALID_PARAMS = -32602;
      constexpr int INTERNAL_ERROR = -32603;
      
-     // Custom application errors (non-reserved range: 1-999)
-     constexpr int LLM_NOT_LOADED = 100;
-     constexpr int LLM_BUSY = 101;
-     constexpr int RATE_LIMITED = 102;
+    // Custom application errors (non-reserved range: 1-999)
+    constexpr int RATE_LIMITED = 102;
      constexpr int ALERT_NOT_FOUND = 103;
      constexpr int CONFIG_ERROR = 104;
  }

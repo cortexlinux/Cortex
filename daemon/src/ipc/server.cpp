@@ -15,38 +15,77 @@
  
  namespace cortexd {
  
- // RateLimiter implementation
- 
- RateLimiter::RateLimiter(int max_per_second)
-     : max_per_second_(max_per_second)
-     , window_start_(std::chrono::steady_clock::now()) {
- }
- 
- bool RateLimiter::allow() {
-     std::lock_guard<std::mutex> lock(mutex_);
-     
-     auto now = std::chrono::steady_clock::now();
-     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - window_start_);
-     
-     // Reset window every second
-     if (elapsed.count() >= 1000) {
-         count_ = 0;
-         window_start_ = now;
-     }
-     
-     if (count_ >= max_per_second_) {
-         return false;
-     }
-     
-     count_++;
-     return true;
- }
- 
- void RateLimiter::reset() {
-     std::lock_guard<std::mutex> lock(mutex_);
-     count_ = 0;
-     window_start_ = std::chrono::steady_clock::now();
- }
+// RateLimiter implementation (lock-free)
+
+RateLimiter::RateLimiter(int max_per_second)
+    : max_per_second_(max_per_second) {
+    auto now = std::chrono::steady_clock::now();
+    auto now_rep = now.time_since_epoch().count();
+    window_start_rep_.store(now_rep, std::memory_order_relaxed);
+}
+
+bool RateLimiter::allow() {
+    auto now = std::chrono::steady_clock::now();
+    auto now_rep = now.time_since_epoch().count();
+    auto window_start_rep = window_start_rep_.load(std::memory_order_acquire);
+    
+    std::chrono::steady_clock::time_point window_start{
+        std::chrono::steady_clock::duration{window_start_rep}
+    };
+    
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - window_start);
+    
+    // Reset window every second (lock-free compare-and-swap)
+    if (elapsed.count() >= 1000) {
+        // Try to update window_start atomically
+        auto expected = window_start_rep;
+        if (window_start_rep_.compare_exchange_weak(
+                expected, now_rep, 
+                std::memory_order_acq_rel, 
+                std::memory_order_acquire)) {
+            // We won the race to reset - reset count atomically
+            count_.store(0, std::memory_order_release);
+        } else {
+            // If we lost the race, reload window_start as another thread may have reset
+            window_start_rep = window_start_rep_.load(std::memory_order_acquire);
+            // Recalculate elapsed time with new window_start
+            std::chrono::steady_clock::time_point new_window_start{
+                std::chrono::steady_clock::duration{window_start_rep}
+            };
+            elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - new_window_start);
+            // If still in new window and count was reset, current will be 0, which is fine
+        }
+    }
+    
+    // Secure lock-free increment with check: use compare-and-swap loop
+    // This ensures we never exceed the limit, even under high concurrency
+    int current;
+    int next;
+    do {
+        current = count_.load(std::memory_order_acquire);
+        
+        // Check limit BEFORE incrementing (security: never exceed limit)
+        if (current >= max_per_second_) {
+            return false;  // Rate limit exceeded
+        }
+        
+        next = current + 1;
+        // Atomically increment only if count hasn't changed (prevents race conditions)
+    } while (!count_.compare_exchange_weak(
+        current, next,
+        std::memory_order_release,
+        std::memory_order_acquire));
+    
+    // Successfully incremented without exceeding limit
+    return true;
+}
+
+void RateLimiter::reset() {
+    auto now = std::chrono::steady_clock::now();
+    auto now_rep = now.time_since_epoch().count();
+    count_.store(0, std::memory_order_relaxed);
+    window_start_rep_.store(now_rep, std::memory_order_relaxed);
+}
  
  // IPCServer implementation
  
@@ -109,11 +148,11 @@
      return running_.load() && server_fd_ != -1;
  }
  
- void IPCServer::register_handler(const std::string& method, RequestHandler handler) {
-     std::lock_guard<std::mutex> lock(handlers_mutex_);
-     handlers_[method] = std::move(handler);
-     LOG_DEBUG("IPCServer", "Registered handler for: " + method);
- }
+void IPCServer::register_handler(const std::string& method, RequestHandler handler) {
+    std::unique_lock<std::shared_mutex> lock(handlers_mutex_);  // Exclusive lock for write
+    handlers_[method] = std::move(handler);
+    LOG_DEBUG("IPCServer", "Registered handler for: " + method);
+}
  
  bool IPCServer::create_socket() {
      // Create socket
@@ -247,9 +286,9 @@ bool IPCServer::setup_permissions() {
              return;
          }
          
-         buffer[bytes] = '\0';
-         std::string raw_request(buffer.data());
-         LOG_DEBUG("IPCServer", "Received: " + raw_request);
+        buffer[bytes] = '\0';
+        std::string raw_request(buffer.data());
+        LOG_DEBUG("IPCServer", "Received request (" + std::to_string(bytes) + " bytes)");
          
          // Check rate limit
          if (!rate_limiter_.allow()) {
@@ -276,9 +315,9 @@ bool IPCServer::setup_permissions() {
              response = dispatch(*request);
          }
          
-         // Send response
-         std::string response_str = response.to_json();
-         LOG_DEBUG("IPCServer", "Sending: " + response_str);
+        // Send response
+        std::string response_str = response.to_json();
+        LOG_DEBUG("IPCServer", "Sending response (" + std::to_string(response_str.length()) + " bytes)");
          
          if (send(client_fd, response_str.c_str(), response_str.length(), 0) == -1) {
              LOG_ERROR("IPCServer", "Failed to send response: " + std::string(strerror(errno)));
@@ -299,28 +338,28 @@ bool IPCServer::setup_permissions() {
      connections_cv_.notify_all();
  }
  
- Response IPCServer::dispatch(const Request& request) {
-     RequestHandler handler;
-     {
-         std::lock_guard<std::mutex> lock(handlers_mutex_);
-         
-         auto it = handlers_.find(request.method);
-         if (it == handlers_.end()) {
-             LOG_WARN("IPCServer", "Unknown method: " + request.method);
-             return Response::err("Method not found: " + request.method, ErrorCodes::METHOD_NOT_FOUND);
-         }
-         
-         // Copy handler to execute outside the lock
-         handler = it->second;
-     }
+Response IPCServer::dispatch(const Request& request) {
+    RequestHandler handler;
+    {
+        std::shared_lock<std::shared_mutex> lock(handlers_mutex_);  // Shared lock for read
+        
+        auto it = handlers_.find(request.method);
+        if (it == handlers_.end()) {
+            LOG_WARN("IPCServer", "Unknown method: " + request.method);
+            return Response::err("Method not found: " + request.method, ErrorCodes::METHOD_NOT_FOUND);
+        }
+        
+        // Copy handler to execute outside the lock
+        handler = it->second;
+    }
      
-     // Execute handler without holding the mutex to prevent deadlock
-     // if handler calls back into server (e.g., registering another handler)
-     LOG_INFO("IPCServer", "Handler found, invoking...");
-     try {
-         Response resp = handler(request);
-         LOG_INFO("IPCServer", "Handler completed successfully");
-         return resp;
+    // Execute handler without holding the mutex to prevent deadlock
+    // if handler calls back into server (e.g., registering another handler)
+    LOG_DEBUG("IPCServer", "Handler found, invoking: " + request.method);
+    try {
+        Response resp = handler(request);
+        LOG_DEBUG("IPCServer", "Handler completed: " + request.method);
+        return resp;
      } catch (const std::exception& e) {
          LOG_ERROR("IPCServer", "Handler error for " + request.method + ": " + e.what());
          return Response::err(e.what(), ErrorCodes::INTERNAL_ERROR);

@@ -2,7 +2,7 @@
 # Copy this file to /etc/cortex/daemon.yaml or ~/.cortex/daemon.yaml
 #
 # - Socket and logging config
-# - Additional configuration options may be added in future versions
+# - Monitoring thresholds for alert generation
 
 # Socket configuration
 socket:
@@ -18,3 +18,17 @@ rate_limit:
 # Logging level
 # 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR
 log_level: 1
+
+# Monitoring thresholds for alert generation
+# Alerts are generated when system metrics exceed these thresholds
+monitoring:
+  cpu:
+    warning_threshold: 80.0    # CPU usage % to trigger warning alert
+    critical_threshold: 95.0   # CPU usage % to trigger critical alert
+  memory:
+    warning_threshold: 80.0    # Memory usage % to trigger warning alert
+    critical_threshold: 95.0   # Memory usage % to trigger critical alert
+  disk:
+    warning_threshold: 80.0    # Disk usage % to trigger warning alert
+    critical_threshold: 95.0   # Disk usage % to trigger critical alert
+  check_interval_seconds: 60  # How often to check system health (in seconds)

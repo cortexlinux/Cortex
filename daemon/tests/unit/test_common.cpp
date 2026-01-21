@@ -1,8 +1,6 @@
 /**
  * @file test_common.cpp
- * @brief Unit tests for common.h constants and types (PR1 scope only)
- * 
- * PR1 includes: Core daemon, IPC server, config management
+ * @brief Unit tests for common.h constants and types
  */
 
 #include <gtest/gtest.h>
@@ -15,7 +13,7 @@ protected:
 };
 
 // ============================================================================
-// Version and Name constants (PR1)
+// Version and Name constants
 // ============================================================================
 
 TEST_F(CommonTest, VersionIsDefined) {
@@ -29,7 +27,7 @@ TEST_F(CommonTest, NameIsDefined) {
 }
 
 // ============================================================================
-// Socket constants (PR1 - used by IPC server)
+// Socket constants
 // ============================================================================
 
 TEST_F(CommonTest, DefaultSocketPathIsDefined) {
@@ -52,7 +50,7 @@ TEST_F(CommonTest, MaxMessageSizeIsPositive) {
 }
 
 // ============================================================================
-// Startup time target (PR1 - daemon startup performance)
+// Startup time target
 // ============================================================================
 
 TEST_F(CommonTest, StartupTimeTargetIsDefined) {
@@ -62,7 +60,7 @@ TEST_F(CommonTest, StartupTimeTargetIsDefined) {
 }
 
 // ============================================================================
-// Clock type alias (PR1 - used in IPC protocol)
+// Clock type alias
 // ============================================================================
 
 TEST_F(CommonTest, ClockTypeAliasIsDefined) {

@@ -301,22 +301,15 @@ TEST_F(ProtocolTest, ResponseToJsonIncludesTimestamp) {
 }
 
 // ============================================================================
-// Methods namespace tests (PR1 methods only)
+// Methods namespace tests
 // ============================================================================
 
-TEST_F(ProtocolTest, PR1MethodConstantsAreDefined) {
-    // PR1 available methods: ping, version, config.get, config.reload, shutdown
+TEST_F(ProtocolTest, MethodConstantsAreDefined) {
     EXPECT_STREQ(cortexd::Methods::PING, "ping");
     EXPECT_STREQ(cortexd::Methods::VERSION, "version");
     EXPECT_STREQ(cortexd::Methods::CONFIG_GET, "config.get");
     EXPECT_STREQ(cortexd::Methods::CONFIG_RELOAD, "config.reload");
     EXPECT_STREQ(cortexd::Methods::SHUTDOWN, "shutdown");
-}
-
-TEST_F(ProtocolTest, PR2MethodConstantsAreDefined) {
-    // PR2 methods are defined in protocol.h but handlers not registered in PR1
-    // These constants exist for forward compatibility
-    EXPECT_STREQ(cortexd::Methods::STATUS, "status");
     EXPECT_STREQ(cortexd::Methods::HEALTH, "health");
     EXPECT_STREQ(cortexd::Methods::ALERTS, "alerts");
 }

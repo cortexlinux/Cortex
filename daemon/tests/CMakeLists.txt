@@ -7,6 +7,8 @@ set(DAEMON_TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/ipc/server.cpp
     ${CMAKE_SOURCE_DIR}/src/ipc/protocol.cpp
     ${CMAKE_SOURCE_DIR}/src/ipc/handlers.cpp
+    ${CMAKE_SOURCE_DIR}/src/monitor/system_monitor.cpp
+    ${CMAKE_SOURCE_DIR}/src/alerts/alert_manager.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/logger.cpp
 )
 
@@ -15,14 +17,14 @@ add_library(cortexd_lib STATIC ${DAEMON_TEST_SOURCES})
 target_include_directories(cortexd_lib PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${SYSTEMD_INCLUDE_DIRS}
-    ${OPENSSL_INCLUDE_DIRS}
     ${UUID_INCLUDE_DIRS}
+    ${SQLITE3_INCLUDE_DIRS}
 )
 
 target_link_libraries(cortexd_lib PUBLIC
     ${SYSTEMD_LIBRARIES}
-    ${OPENSSL_LIBRARIES}
     ${UUID_LIBRARIES}
+    ${SQLITE3_LIBRARIES}
     nlohmann_json::nlohmann_json
     yaml-cpp::yaml-cpp
     pthread
@@ -63,6 +65,12 @@ add_executable(test_common
 target_link_libraries(test_common PRIVATE cortexd_lib GTest::gtest_main)
 add_test(NAME test_common COMMAND test_common)
 
+add_executable(test_alert_manager
+    unit/test_alert_manager.cpp
+)
+target_link_libraries(test_alert_manager PRIVATE cortexd_lib GTest::gtest_main)
+add_test(NAME test_alert_manager COMMAND test_alert_manager)
+
 # Integration tests
 add_executable(test_ipc_server
     integration/test_ipc_server.cpp
@@ -85,6 +93,6 @@ add_test(NAME test_daemon COMMAND test_daemon)
 # Add custom target to run all tests
 add_custom_target(run_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_config test_protocol test_rate_limiter test_logger test_common test_ipc_server test_handlers test_daemon
+    DEPENDS test_config test_protocol test_rate_limiter test_logger test_common test_alert_manager test_ipc_server test_handlers test_daemon
     COMMENT "Running all cortexd tests"
 )

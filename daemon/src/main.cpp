@@ -9,8 +9,11 @@
 #include "cortexd/logger.h"
 #include "cortexd/config.h"
 #include "cortexd/common.h"
+#include "cortexd/monitor/system_monitor.h"
+#include "cortexd/alerts/alert_manager.h"
 #include <iostream>
 #include <getopt.h>
+#include <memory>
  
  using namespace cortexd;
  
@@ -99,20 +102,58 @@
          return 1;
      }
      
-     // Get configuration
-     const auto& config = ConfigManager::instance().get();
-     
-     // Create IPC server
-     auto ipc_server = std::make_unique<IPCServer>(
-         config.socket_path,
-         config.max_requests_per_sec
-     );
-     
-     // Register IPC handlers
-     Handlers::register_all(*ipc_server);
-     
-     // Register services with daemon
-     daemon.register_service(std::move(ipc_server));
+    // Get configuration
+    const auto& config = ConfigManager::instance().get();
+    
+    // Create alert manager (shared pointer for use by multiple components)
+    auto alert_manager = std::make_shared<AlertManager>();
+    if (!alert_manager->initialize()) {
+        LOG_ERROR("main", "Failed to initialize alert manager");
+        return 1;
+    }
+    
+    // Create monitoring thresholds from config
+    MonitoringThresholds thresholds;
+    thresholds.cpu_warning = config.cpu_warning_threshold;
+    thresholds.cpu_critical = config.cpu_critical_threshold;
+    thresholds.memory_warning = config.memory_warning_threshold;
+    thresholds.memory_critical = config.memory_critical_threshold;
+    thresholds.disk_warning = config.disk_warning_threshold;
+    thresholds.disk_critical = config.disk_critical_threshold;
+    
+    // Create system monitor with config thresholds
+    auto system_monitor = std::make_unique<SystemMonitor>(
+        alert_manager,
+        config.monitor_check_interval_seconds,
+        thresholds
+    );
+    
+    // Create IPC server
+    auto ipc_server = std::make_unique<IPCServer>(
+        config.socket_path,
+        config.max_requests_per_sec
+    );
+    
+    // Register IPC handlers (with monitor and alerts)
+    Handlers::register_all(*ipc_server, system_monitor.get(), alert_manager);
+    
+    // Register config change callback to update monitor thresholds on reload
+    SystemMonitor* monitor_ptr = system_monitor.get();
+    ConfigManager::instance().on_change([monitor_ptr](const Config& config) {
+        MonitoringThresholds thresholds;
+        thresholds.cpu_warning = config.cpu_warning_threshold;
+        thresholds.cpu_critical = config.cpu_critical_threshold;
+        thresholds.memory_warning = config.memory_warning_threshold;
+        thresholds.memory_critical = config.memory_critical_threshold;
+        thresholds.disk_warning = config.disk_warning_threshold;
+        thresholds.disk_critical = config.disk_critical_threshold;
+        monitor_ptr->set_thresholds(thresholds);
+        LOG_INFO("main", "Updated SystemMonitor thresholds from config");
+    });
+    
+    // Register services with daemon
+    daemon.register_service(std::move(ipc_server));
+    daemon.register_service(std::move(system_monitor));
      
      // Run daemon (blocks until shutdown)
      int exit_code = daemon.run();

@@ -13,6 +13,7 @@
  #include <atomic>
  #include <chrono>
  #include <functional>
+ #include <shared_mutex>
  
  namespace cortexd {
  
@@ -74,7 +75,8 @@ class IPCServer;
       */
      template<typename T>
      T* get_service() {
-         for (auto& svc : services_) {
+         std::shared_lock<std::shared_mutex> lock(services_mutex_);
+         for (const auto& svc : services_) {
              if (auto* ptr = dynamic_cast<T*>(svc.get())) {
                  return ptr;
              }
@@ -129,6 +131,7 @@ class IPCServer;
      Daemon() = default;
      
      std::vector<std::unique_ptr<Service>> services_;
+     mutable std::shared_mutex services_mutex_;  // Protect services_ vector access
      std::atomic<bool> running_{false};
      std::atomic<bool> shutdown_requested_{false};
      std::chrono::steady_clock::time_point start_time_;

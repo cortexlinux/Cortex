@@ -242,6 +242,72 @@ class DaemonClient:
         """
         return self._send_request("shutdown")
 
+    # =========================================================================
+    # PR2 IPC Methods: Monitoring and Alerts
+    # =========================================================================
+
+    def health(self) -> DaemonResponse:
+        """
+        Get detailed system health metrics.
+
+        Returns:
+            DaemonResponse with health metrics (CPU, memory, disk, etc.).
+        """
+        return self._send_request("health")
+
+    def alerts_get(
+        self,
+        severity: str | None = None,
+        category: str | None = None,
+        status: str | None = None,
+        include_dismissed: bool = False,
+    ) -> DaemonResponse:
+        """
+        Get alerts matching filter criteria.
+
+        Args:
+            severity: Filter by severity (info, warning, error, critical).
+            category: Filter by category (cpu, memory, disk, apt, cve, service, system).
+            status: Filter by status (active, acknowledged, dismissed).
+            include_dismissed: If True, include dismissed alerts.
+
+        Returns:
+            DaemonResponse with alerts list and counts.
+        """
+        params: dict[str, Any] = {}
+        if severity:
+            params["severity"] = severity
+        if category:
+            params["category"] = category
+        if status:
+            params["status"] = status
+        if include_dismissed:
+            params["include_dismissed"] = True
+
+        # Use "alerts" as the primary method (maps to alerts.get internally)
+        return self._send_request("alerts", params if params else None)
+
+    def alerts_acknowledge_all(self) -> DaemonResponse:
+        """
+        Acknowledge all active alerts.
+
+        Returns:
+            DaemonResponse with count of acknowledged alerts.
+        """
+        return self._send_request("alerts.acknowledge", {"all": True})
+
+    def alerts_dismiss(self, uuid: str) -> DaemonResponse:
+        """
+        Dismiss a specific alert by UUID.
+
+        Args:
+            uuid: Alert UUID to dismiss.
+
+        Returns:
+            DaemonResponse with dismissal confirmation.
+        """
+        return self._send_request("alerts.dismiss", {"uuid": uuid})
+
 
 class DaemonNotInstalledError(Exception):
     """Raised when the daemon is not installed."""

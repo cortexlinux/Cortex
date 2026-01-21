@@ -46,6 +46,15 @@ struct Config {
     // Logging
     int log_level = 1;  // 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR, 4=CRITICAL
     
+    // Monitoring thresholds
+    double cpu_warning_threshold = 80.0;
+    double cpu_critical_threshold = 95.0;
+    double memory_warning_threshold = 80.0;
+    double memory_critical_threshold = 95.0;
+    double disk_warning_threshold = 80.0;
+    double disk_critical_threshold = 95.0;
+    int monitor_check_interval_seconds = 60;
+    
     /**
      * @brief Load configuration from YAML file
      * @param path Path to configuration file

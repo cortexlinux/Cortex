@@ -72,6 +72,7 @@ cortex install "tools for video compression"
 | **Audit Trail** | Complete history in `~/.cortex/history.db` |
 | **Hardware-Aware** | Detects GPU, CPU, memory for optimized packages |
 | **Multi-LLM Support** | Works with Claude, GPT-4, or local Ollama models |
+| **System Monitoring** | Background daemon monitors CPU, memory, disk, and services with alerts |
 
 ---
 
@@ -203,6 +204,13 @@ cortex role set <slug>
 | `cortex daemon version` | Show daemon version |
 | `cortex daemon config` | Show daemon configuration |
 | `cortex daemon reload-config` | Reload daemon configuration |
+| `cortex daemon health` | Get system health metrics (CPU, memory, disk, services) |
+| `cortex daemon alerts` | List and manage alerts |
+| `cortex daemon alerts --severity <level>` | Filter alerts by severity (info/warning/error/critical) |
+| `cortex daemon alerts --category <cat>` | Filter alerts by category (cpu/memory/disk/apt/cve/service/system) |
+| `cortex daemon alerts --acknowledge-all` | Acknowledge all active alerts |
+| `cortex daemon alerts --dismiss <uuid>` | Dismiss a specific alert by UUID |
+| `cortex daemon shutdown` | Request daemon shutdown |
 
 ### Configuration
 
@@ -299,6 +307,14 @@ cortex daemon install --execute
 # Check daemon status
 cortex daemon ping
 cortex daemon version
+
+# Monitor system health
+cortex daemon health
+
+# View and manage alerts
+cortex daemon alerts
+cortex daemon alerts --severity warning
+cortex daemon alerts --acknowledge-all
 
 # Run daemon tests (no installation required)
 cortex daemon run-tests

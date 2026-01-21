@@ -482,7 +482,7 @@ progress:
   completed_in: "Completed in {seconds} seconds"
 
 # =============================================================================
-# Predictive Prevention
+# Predictive Error Prevention
 # =============================================================================
 predictive:
   analyzing: "AI is predicting potential installation failures..."

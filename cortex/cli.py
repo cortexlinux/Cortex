@@ -21,11 +21,7 @@ from cortex.ask import AskHandler
 from cortex.branding import VERSION, console, cx_header, cx_print, show_banner
 from cortex.coordinator import InstallationCoordinator, InstallationStep, StepStatus
 from cortex.demo import run_demo
-from cortex.dependency_importer import (
-    DependencyImporter,
-    PackageEcosystem,
-    ParseResult,
-)
+from cortex.dependency_importer import DependencyImporter, PackageEcosystem, ParseResult
 from cortex.env_manager import EnvironmentManager, get_env_manager
 from cortex.i18n import SUPPORTED_LANGUAGES, LanguageConfig, get_language, set_language, t
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
@@ -4817,6 +4813,8 @@ def main():
         "--json",
         action="store_true",
         help="Output as JSON",
+    )
+    install_parser.add_argument(
         "--mic",
         action="store_true",
         help="Use voice input for software name (press F9 to record)",

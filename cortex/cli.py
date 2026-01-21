@@ -2739,7 +2739,7 @@ class CortexCLI:
         from rich.table import Table
 
         table = Table(show_header=True, header_style="bold cyan")
-        table.add_column("UUID", style="dim")
+        table.add_column("UUID", style="bold cyan")
         table.add_column("Severity", style="bold")
         table.add_column("Category")
         table.add_column("Source")
@@ -2757,7 +2757,7 @@ class CortexCLI:
             }.get(severity_name, "white")
 
             table.add_row(
-                alert.get("uuid", "")[:8] + "...",
+                alert.get("uuid", ""),
                 f"[{severity_color}]{severity_name.upper()}[/{severity_color}]",
                 alert.get("category_name", "unknown"),
                 alert.get("source", "unknown"),

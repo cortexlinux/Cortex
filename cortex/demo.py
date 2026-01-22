@@ -4,9 +4,9 @@ import subprocess
 import sys
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
 from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.prompt import Confirm, Prompt
 
 from cortex.branding import show_banner
 
@@ -41,106 +41,95 @@ def run_demo() -> int:
     """Run the interactive Cortex demo."""
     console.clear()
     show_banner()
-    
+
     # ─────────────────────────────────────────────────────────────────
     # INTRODUCTION
     # ─────────────────────────────────────────────────────────────────
-    
+
     intro = """
 **Cortex** - The AI-native package manager for Linux.
 
 In this demo you'll try:
 • **Ask** - Query your system in natural language
-• **Install** - Install packages with AI interpretation  
+• **Install** - Install packages with AI interpretation
 • **Rollback** - Undo installations safely
 """
     console.print(Panel(Markdown(intro), title="[cyan]Demo[/cyan]", border_style="cyan"))
     _wait_for_enter()
-    
+
     # ─────────────────────────────────────────────────────────────────
     # ASK COMMAND
     # ─────────────────────────────────────────────────────────────────
-    
-    _section(
-        "🔍 Ask Command",
-        "Query your system without memorizing Linux commands."
-    )
-    
+
+    _section("🔍 Ask Command", "Query your system without memorizing Linux commands.")
+
     console.print("[dim]Examples: 'What Python version?', 'How much disk space?'[/dim]\n")
-    
+
     user_question = Prompt.ask(
-        "[cyan]What would you like to ask?[/cyan]",
-        default="What version of Python is installed?"
+        "[cyan]What would you like to ask?[/cyan]", default="What version of Python is installed?"
     )
-    
-    console.print(f"\n[yellow]$[/yellow] cortex ask \"{user_question}\"\n")
+
+    console.print(f'\n[yellow]$[/yellow] cortex ask "{user_question}"\n')
     _run_cortex_command(["ask", user_question])
-    
+
     _wait_for_enter()
-    
+
     # ─────────────────────────────────────────────────────────────────
     # INSTALL COMMAND
     # ─────────────────────────────────────────────────────────────────
-    
-    _section(
-        "📦 Install Command", 
-        "Describe what you want - Cortex finds the right packages."
-    )
-    
+
+    _section("📦 Install Command", "Describe what you want - Cortex finds the right packages.")
+
     console.print("[dim]Examples: 'a web server', 'python dev tools', 'docker'[/dim]\n")
-    
+
     user_install = Prompt.ask(
-        "[cyan]What would you like to install?[/cyan]",
-        default="a lightweight text editor"
+        "[cyan]What would you like to install?[/cyan]", default="a lightweight text editor"
     )
-    
-    console.print(f"\n[yellow]$[/yellow] cortex install \"{user_install}\" --dry-run\n")
+
+    console.print(f'\n[yellow]$[/yellow] cortex install "{user_install}" --dry-run\n')
     _run_cortex_command(["install", user_install, "--dry-run"])
-    
+
     console.print()
     if Confirm.ask("Actually install this?", default=False):
-        console.print(f"\n[yellow]$[/yellow] cortex install \"{user_install}\" --execute\n")
+        console.print(f'\n[yellow]$[/yellow] cortex install "{user_install}" --execute\n')
         _run_cortex_command(["install", user_install, "--execute"])
-    
+
     _wait_for_enter()
-    
+
     # ─────────────────────────────────────────────────────────────────
     # ROLLBACK COMMAND
     # ─────────────────────────────────────────────────────────────────
-    
-    _section(
-        "⏪ Rollback Command",
-        "Undo any installation by reverting to the previous state."
-    )
-    
+
+    _section("⏪ Rollback Command", "Undo any installation by reverting to the previous state.")
+
     console.print("[dim]First, let's see your installation history with IDs:[/dim]\n")
     console.print("[yellow]$[/yellow] cortex history --limit 5\n")
     _run_cortex_command(["history", "--limit", "5"])
-    
+
     _wait_for_enter()
-    
+
     if Confirm.ask("Preview a rollback?", default=False):
         console.print("\n[cyan]Copy an installation ID from the history above:[/cyan]")
         console.print("[dim]$ cortex rollback [/dim]", end="")
         rollback_id = input().strip()
-        
+
         if rollback_id:
             console.print(f"\n[yellow]$[/yellow] cortex rollback {rollback_id} --dry-run\n")
             _run_cortex_command(["rollback", rollback_id, "--dry-run"])
-            
+
             if Confirm.ask("Actually rollback?", default=False):
                 console.print(f"\n[yellow]$[/yellow] cortex rollback {rollback_id}\n")
                 _run_cortex_command(["rollback", rollback_id])
-    
+
     # ─────────────────────────────────────────────────────────────────
     # SUMMARY
     # ─────────────────────────────────────────────────────────────────
-    
+
     console.print(f"\n[bold cyan]{'─' * 50}[/bold cyan]")
     console.print("[bold green]✓ Demo Complete![/bold green]\n")
     console.print("[dim]Commands: ask, install, history, rollback, stack, status[/dim]")
     console.print("[dim]Run 'cortex --help' for more.[/dim]\n")
-    
+
     return 0
 
 

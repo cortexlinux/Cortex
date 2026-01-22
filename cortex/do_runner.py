@@ -8,33 +8,25 @@ For new code, prefer importing directly from the package:
 """
 
 # Re-export everything from the modular package
-from cortex.do_runner import (
-    # Models
+from cortex.do_runner import (  # Diagnosis; Models; Verification; Managers; Handler; Database; Executor; Terminal
+    AutoFixer,
     CommandLog,
     CommandStatus,
+    ConflictDetector,
+    CortexUserManager,
+    DoHandler,
     DoRun,
+    DoRunDatabase,
+    ErrorDiagnoser,
+    FileUsefulnessAnalyzer,
+    ProtectedPathsManager,
     RunMode,
     TaskNode,
     TaskTree,
-    TaskType,
-    # Database
-    DoRunDatabase,
-    # Managers
-    CortexUserManager,
-    ProtectedPathsManager,
-    # Terminal
-    TerminalMonitor,
-    # Executor
     TaskTreeExecutor,
-    # Diagnosis
-    AutoFixer,
-    ErrorDiagnoser,
-    # Verification
-    ConflictDetector,
-    FileUsefulnessAnalyzer,
+    TaskType,
+    TerminalMonitor,
     VerificationRunner,
-    # Handler
-    DoHandler,
     get_do_handler,
     setup_cortex_user,
 )

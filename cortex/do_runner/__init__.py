@@ -15,6 +15,44 @@ This module is organized into the following submodules:
 - handler: Main DoHandler class
 """
 
+from .database import DoRunDatabase
+from .diagnosis import (
+    ALL_ERROR_PATTERNS,
+    LOGIN_REQUIREMENTS,
+    UBUNTU_PACKAGE_MAP,
+    UBUNTU_SERVICE_MAP,
+    AutoFixer,
+    ErrorDiagnoser,
+    LoginHandler,
+    LoginRequirement,
+    get_error_category,
+    get_severity,
+    is_critical_error,
+)
+
+# New structured diagnosis engine
+from .diagnosis_v2 import (
+    ERROR_PATTERNS,
+    DiagnosisEngine,
+    DiagnosisResult,
+    ErrorCategory,
+    ErrorStackEntry,
+    ExecutionResult,
+    FixCommand,
+    FixPlan,
+    VariableResolution,
+    get_diagnosis_engine,
+)
+from .executor import TaskTreeExecutor
+from .handler import (
+    DoHandler,
+    get_do_handler,
+    setup_cortex_user,
+)
+from .managers import (
+    CortexUserManager,
+    ProtectedPathsManager,
+)
 from .models import (
     CommandLog,
     CommandStatus,
@@ -24,56 +62,11 @@ from .models import (
     TaskTree,
     TaskType,
 )
-
-from .database import DoRunDatabase
-
-from .managers import (
-    CortexUserManager,
-    ProtectedPathsManager,
-)
-
 from .terminal import TerminalMonitor
-
-from .executor import TaskTreeExecutor
-
-from .diagnosis import (
-    AutoFixer,
-    ErrorDiagnoser,
-    LoginHandler,
-    LoginRequirement,
-    LOGIN_REQUIREMENTS,
-    UBUNTU_PACKAGE_MAP,
-    UBUNTU_SERVICE_MAP,
-    ALL_ERROR_PATTERNS,
-    get_error_category,
-    get_severity,
-    is_critical_error,
-)
-
-# New structured diagnosis engine
-from .diagnosis_v2 import (
-    DiagnosisEngine,
-    ErrorCategory,
-    DiagnosisResult,
-    FixCommand,
-    FixPlan,
-    VariableResolution,
-    ExecutionResult,
-    ErrorStackEntry,
-    ERROR_PATTERNS,
-    get_diagnosis_engine,
-)
-
 from .verification import (
     ConflictDetector,
     FileUsefulnessAnalyzer,
     VerificationRunner,
-)
-
-from .handler import (
-    DoHandler,
-    get_do_handler,
-    setup_cortex_user,
 )
 
 __all__ = [
@@ -126,4 +119,3 @@ __all__ = [
     "get_do_handler",
     "setup_cortex_user",
 ]
-

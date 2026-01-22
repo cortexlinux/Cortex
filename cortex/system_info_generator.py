@@ -6,13 +6,13 @@ All commands are validated against the CommandValidator to ensure they only read
 
 Usage:
     generator = SystemInfoGenerator(api_key="...", provider="claude")
-    
+
     # Simple info queries
     result = generator.get_info("What version of Python is installed?")
-    
+
     # Application-specific queries
     result = generator.get_app_info("nginx", "What's the current nginx configuration?")
-    
+
     # Structured info retrieval
     info = generator.get_structured_info("hardware", ["cpu", "memory", "disk"])
 """
@@ -36,6 +36,7 @@ console = Console()
 
 class InfoCategory(str, Enum):
     """Categories of system information."""
+
     HARDWARE = "hardware"
     SOFTWARE = "software"
     NETWORK = "network"
@@ -55,6 +56,7 @@ class InfoCategory(str, Enum):
 @dataclass
 class InfoCommand:
     """A single read-only command for gathering information."""
+
     command: str
     purpose: str
     category: InfoCategory = InfoCategory.CUSTOM
@@ -64,6 +66,7 @@ class InfoCommand:
 @dataclass
 class InfoResult:
     """Result of executing an info command."""
+
     command: str
     success: bool
     output: str
@@ -74,6 +77,7 @@ class InfoResult:
 @dataclass
 class SystemInfoResult:
     """Complete result of a system info query."""
+
     query: str
     answer: str
     commands_executed: list[InfoResult] = field(default_factory=list)
@@ -92,17 +96,22 @@ COMMON_INFO_COMMANDS: dict[str, list[InfoCommand]] = {
     ],
     "memory": [
         InfoCommand("free -h", "Get memory usage in human-readable format", InfoCategory.HARDWARE),
-        InfoCommand("head -20 /proc/meminfo", "Get detailed memory information", InfoCategory.HARDWARE),
+        InfoCommand(
+            "head -20 /proc/meminfo", "Get detailed memory information", InfoCategory.HARDWARE
+        ),
     ],
     "disk": [
         InfoCommand("df -h", "Get disk space usage", InfoCategory.STORAGE),
         InfoCommand("lsblk", "List block devices", InfoCategory.STORAGE),
     ],
     "gpu": [
-        InfoCommand("nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader", "Get NVIDIA GPU info", InfoCategory.HARDWARE),
+        InfoCommand(
+            "nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader",
+            "Get NVIDIA GPU info",
+            InfoCategory.HARDWARE,
+        ),
         InfoCommand("lspci", "List PCI devices including VGA", InfoCategory.HARDWARE),
     ],
-    
     # OS Information
     "os": [
         InfoCommand("cat /etc/os-release", "Get OS release information", InfoCategory.SOFTWARE),
@@ -113,7 +122,6 @@ COMMON_INFO_COMMANDS: dict[str, list[InfoCommand]] = {
         InfoCommand("uname -r", "Get kernel version", InfoCategory.SOFTWARE),
         InfoCommand("cat /proc/version", "Get detailed kernel version", InfoCategory.SOFTWARE),
     ],
-    
     # Network Information
     "network": [
         InfoCommand("ip addr show", "List network interfaces", InfoCategory.NETWORK),
@@ -124,26 +132,32 @@ COMMON_INFO_COMMANDS: dict[str, list[InfoCommand]] = {
         InfoCommand("cat /etc/resolv.conf", "Get DNS configuration", InfoCategory.NETWORK),
         InfoCommand("host google.com", "Test DNS resolution", InfoCategory.NETWORK),
     ],
-    
     # Services
     "services": [
-        InfoCommand("systemctl list-units --type=service --state=running --no-pager", "List running services", InfoCategory.SERVICES),
-        InfoCommand("systemctl list-units --type=service --state=failed --no-pager", "List failed services", InfoCategory.SERVICES),
+        InfoCommand(
+            "systemctl list-units --type=service --state=running --no-pager",
+            "List running services",
+            InfoCategory.SERVICES,
+        ),
+        InfoCommand(
+            "systemctl list-units --type=service --state=failed --no-pager",
+            "List failed services",
+            InfoCategory.SERVICES,
+        ),
     ],
-    
     # Security
     "security": [
         InfoCommand("ufw status", "Check firewall status", InfoCategory.SECURITY),
         InfoCommand("aa-status", "Check AppArmor status", InfoCategory.SECURITY),
         InfoCommand("wc -l /etc/passwd", "Count system users", InfoCategory.SECURITY),
     ],
-    
     # Processes
     "processes": [
-        InfoCommand("ps aux --sort=-%mem", "Top memory-consuming processes", InfoCategory.PROCESSES),
+        InfoCommand(
+            "ps aux --sort=-%mem", "Top memory-consuming processes", InfoCategory.PROCESSES
+        ),
         InfoCommand("ps aux --sort=-%cpu", "Top CPU-consuming processes", InfoCategory.PROCESSES),
     ],
-    
     # Environment
     "environment": [
         InfoCommand("env", "List environment variables", InfoCategory.CONFIGURATION),
@@ -157,16 +171,28 @@ COMMON_INFO_COMMANDS: dict[str, list[InfoCommand]] = {
 APP_INFO_TEMPLATES: dict[str, dict[str, list[InfoCommand]]] = {
     "nginx": {
         "status": [
-            InfoCommand("systemctl status nginx --no-pager", "Check nginx service status", InfoCategory.SERVICES),
+            InfoCommand(
+                "systemctl status nginx --no-pager",
+                "Check nginx service status",
+                InfoCategory.SERVICES,
+            ),
             InfoCommand("nginx -v", "Get nginx version", InfoCategory.SOFTWARE),
         ],
         "config": [
-            InfoCommand("cat /etc/nginx/nginx.conf", "Get nginx configuration", InfoCategory.CONFIGURATION),
-            InfoCommand("ls -la /etc/nginx/sites-enabled/", "List enabled sites", InfoCategory.CONFIGURATION),
+            InfoCommand(
+                "cat /etc/nginx/nginx.conf", "Get nginx configuration", InfoCategory.CONFIGURATION
+            ),
+            InfoCommand(
+                "ls -la /etc/nginx/sites-enabled/", "List enabled sites", InfoCategory.CONFIGURATION
+            ),
         ],
         "logs": [
-            InfoCommand("tail -50 /var/log/nginx/access.log", "Recent access logs", InfoCategory.LOGS),
-            InfoCommand("tail -50 /var/log/nginx/error.log", "Recent error logs", InfoCategory.LOGS),
+            InfoCommand(
+                "tail -50 /var/log/nginx/access.log", "Recent access logs", InfoCategory.LOGS
+            ),
+            InfoCommand(
+                "tail -50 /var/log/nginx/error.log", "Recent error logs", InfoCategory.LOGS
+            ),
         ],
     },
     "docker": {
@@ -179,27 +205,43 @@ APP_INFO_TEMPLATES: dict[str, dict[str, list[InfoCommand]]] = {
             InfoCommand("docker images", "List images", InfoCategory.APPLICATION),
         ],
         "resources": [
-            InfoCommand("docker stats --no-stream", "Container resource usage", InfoCategory.PERFORMANCE),
+            InfoCommand(
+                "docker stats --no-stream", "Container resource usage", InfoCategory.PERFORMANCE
+            ),
         ],
     },
     "postgresql": {
         "status": [
-            InfoCommand("systemctl status postgresql --no-pager", "Check PostgreSQL service", InfoCategory.SERVICES),
+            InfoCommand(
+                "systemctl status postgresql --no-pager",
+                "Check PostgreSQL service",
+                InfoCategory.SERVICES,
+            ),
             InfoCommand("psql --version", "Get PostgreSQL version", InfoCategory.SOFTWARE),
         ],
         "config": [
-            InfoCommand("head -50 /etc/postgresql/14/main/postgresql.conf", "PostgreSQL config", InfoCategory.CONFIGURATION),
+            InfoCommand(
+                "head -50 /etc/postgresql/14/main/postgresql.conf",
+                "PostgreSQL config",
+                InfoCategory.CONFIGURATION,
+            ),
         ],
     },
     "mysql": {
         "status": [
-            InfoCommand("systemctl status mysql --no-pager", "Check MySQL status", InfoCategory.SERVICES),
+            InfoCommand(
+                "systemctl status mysql --no-pager", "Check MySQL status", InfoCategory.SERVICES
+            ),
             InfoCommand("mysql --version", "Get MySQL version", InfoCategory.SOFTWARE),
         ],
     },
     "redis": {
         "status": [
-            InfoCommand("systemctl status redis-server --no-pager", "Check Redis status", InfoCategory.SERVICES),
+            InfoCommand(
+                "systemctl status redis-server --no-pager",
+                "Check Redis status",
+                InfoCategory.SERVICES,
+            ),
             InfoCommand("redis-cli --version", "Get Redis version", InfoCategory.SOFTWARE),
         ],
         "info": [
@@ -212,10 +254,14 @@ APP_INFO_TEMPLATES: dict[str, dict[str, list[InfoCommand]]] = {
             InfoCommand("which python3", "Find Python executable", InfoCategory.SOFTWARE),
         ],
         "packages": [
-            InfoCommand("pip3 list --format=freeze", "List installed packages", InfoCategory.PACKAGES),
+            InfoCommand(
+                "pip3 list --format=freeze", "List installed packages", InfoCategory.PACKAGES
+            ),
         ],
         "venv": [
-            InfoCommand("echo $VIRTUAL_ENV", "Check active virtual environment", InfoCategory.CONFIGURATION),
+            InfoCommand(
+                "echo $VIRTUAL_ENV", "Check active virtual environment", InfoCategory.CONFIGURATION
+            ),
         ],
     },
     "nodejs": {
@@ -232,24 +278,36 @@ APP_INFO_TEMPLATES: dict[str, dict[str, list[InfoCommand]]] = {
             InfoCommand("git --version", "Get Git version", InfoCategory.SOFTWARE),
         ],
         "config": [
-            InfoCommand("git config --global --list", "Git global config", InfoCategory.CONFIGURATION),
+            InfoCommand(
+                "git config --global --list", "Git global config", InfoCategory.CONFIGURATION
+            ),
         ],
     },
     "ssh": {
         "status": [
-            InfoCommand("systemctl status ssh --no-pager", "Check SSH service", InfoCategory.SERVICES),
+            InfoCommand(
+                "systemctl status ssh --no-pager", "Check SSH service", InfoCategory.SERVICES
+            ),
         ],
         "config": [
-            InfoCommand("head -50 /etc/ssh/sshd_config", "SSH server config", InfoCategory.CONFIGURATION),
+            InfoCommand(
+                "head -50 /etc/ssh/sshd_config", "SSH server config", InfoCategory.CONFIGURATION
+            ),
         ],
     },
     "systemd": {
         "status": [
             InfoCommand("systemctl --version", "Get systemd version", InfoCategory.SOFTWARE),
-            InfoCommand("systemctl list-units --state=failed --no-pager", "Failed units", InfoCategory.SERVICES),
+            InfoCommand(
+                "systemctl list-units --state=failed --no-pager",
+                "Failed units",
+                InfoCategory.SERVICES,
+            ),
         ],
         "timers": [
-            InfoCommand("systemctl list-timers --no-pager", "List active timers", InfoCategory.SERVICES),
+            InfoCommand(
+                "systemctl list-timers --no-pager", "List active timers", InfoCategory.SERVICES
+            ),
         ],
     },
 }
@@ -258,7 +316,7 @@ APP_INFO_TEMPLATES: dict[str, dict[str, list[InfoCommand]]] = {
 class SystemInfoGenerator:
     """
     Generates read-only commands to retrieve system and application information.
-    
+
     Uses LLM to generate appropriate commands based on natural language queries,
     while enforcing read-only access through CommandValidator.
     """
@@ -275,20 +333,22 @@ class SystemInfoGenerator:
     ):
         """
         Initialize the system info generator.
-        
+
         Args:
             api_key: API key for LLM provider (defaults to env var)
             provider: LLM provider ("claude", "openai", "ollama")
             model: Optional model override
             debug: Enable debug output
         """
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        self.api_key = (
+            api_key or os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        )
         self.provider = provider.lower()
         self.model = model or self._default_model()
         self.debug = debug
-        
+
         self._initialize_client()
-    
+
     def _default_model(self) -> str:
         if self.provider == "openai":
             return "gpt-4o"
@@ -297,18 +357,20 @@ class SystemInfoGenerator:
         elif self.provider == "ollama":
             return "llama3.2"
         return "gpt-4o"
-    
+
     def _initialize_client(self):
         """Initialize the LLM client."""
         if self.provider == "openai":
             try:
                 from openai import OpenAI
+
                 self.client = OpenAI(api_key=self.api_key)
             except ImportError:
                 raise ImportError("OpenAI package not installed. Run: pip install openai")
         elif self.provider == "claude":
             try:
                 from anthropic import Anthropic
+
                 self.client = Anthropic(api_key=self.api_key)
             except ImportError:
                 raise ImportError("Anthropic package not installed. Run: pip install anthropic")
@@ -322,7 +384,7 @@ class SystemInfoGenerator:
         """Get the system prompt for info command generation."""
         app_list = ", ".join(sorted(APP_INFO_TEMPLATES.keys()))
         category_list = ", ".join([c.value for c in InfoCategory])
-        
+
         prompt = f"""You are a Linux system information assistant that generates READ-ONLY shell commands.
 
 Your task is to generate shell commands that gather system information to answer the user's query.
@@ -386,8 +448,9 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
     def _execute_command(self, command: str, timeout: int = 30) -> InfoResult:
         """Execute a validated read-only command."""
         import time
+
         start_time = time.time()
-        
+
         # Validate command first
         is_valid, error = CommandValidator.validate_command(command)
         if not is_valid:
@@ -398,7 +461,7 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
                 error=f"Command blocked: {error}",
                 execution_time=time.time() - start_time,
             )
-        
+
         try:
             result = subprocess.run(
                 command,
@@ -454,6 +517,7 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
                 content = response.choices[0].message.content
             elif self.provider == "ollama":
                 import httpx
+
                 response = httpx.post(
                     f"{self.ollama_url}/api/chat",
                     json={
@@ -470,17 +534,21 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
                 content = response.json()["message"]["content"]
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
-            
+
             # Parse JSON from response
             json_match = re.search(r"\{[\s\S]*\}", content)
             if json_match:
                 return json.loads(json_match.group())
             raise ValueError("No JSON found in response")
-            
+
         except json.JSONDecodeError as e:
             if self.debug:
                 console.print(f"[red]JSON parse error: {e}[/red]")
-            return {"response_type": "answer", "answer": f"Error parsing LLM response: {e}", "reasoning": ""}
+            return {
+                "response_type": "answer",
+                "answer": f"Error parsing LLM response: {e}",
+                "reasoning": "",
+            }
         except Exception as e:
             if self.debug:
                 console.print(f"[red]LLM error: {e}[/red]")
@@ -489,30 +557,30 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
     def get_info(self, query: str, context: str = "") -> SystemInfoResult:
         """
         Get system information based on a natural language query.
-        
+
         Uses an agentic loop to:
         1. Generate commands to gather information
         2. Execute commands (read-only only)
         3. Analyze results
         4. Either generate more commands or provide final answer
-        
+
         Args:
             query: Natural language question about the system
             context: Optional additional context for the LLM
-            
+
         Returns:
             SystemInfoResult with answer and command execution details
         """
         system_prompt = self._get_system_prompt(context)
         commands_executed: list[InfoResult] = []
         history: list[dict[str, str]] = []
-        
+
         user_prompt = f"Query: {query}"
-        
+
         for iteration in range(self.MAX_ITERATIONS):
             if self.debug:
                 console.print(f"[dim]Iteration {iteration + 1}/{self.MAX_ITERATIONS}[/dim]")
-            
+
             # Build prompt with history
             full_prompt = user_prompt
             if history:
@@ -520,15 +588,15 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
                 for i, entry in enumerate(history, 1):
                     full_prompt += f"\n--- Command {i} ---\n"
                     full_prompt += f"Command: {entry['command']}\n"
-                    if entry['success']:
+                    if entry["success"]:
                         full_prompt += f"Output:\n{self._truncate_output(entry['output'])}\n"
                     else:
                         full_prompt += f"Error: {entry['error']}\n"
                 full_prompt += "\nBased on these results, either run another command or provide the final answer.\n"
-            
+
             # Call LLM
             response = self._call_llm(system_prompt, full_prompt)
-            
+
             if response.get("response_type") == "answer":
                 # Final answer
                 return SystemInfoResult(
@@ -537,31 +605,33 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
                     commands_executed=commands_executed,
                     raw_data={h["command"]: h["output"] for h in history if h.get("success")},
                 )
-            
+
             elif response.get("response_type") == "command":
                 command = response.get("command", "")
                 if not command:
                     continue
-                
+
                 if self.debug:
                     console.print(f"[cyan]Executing:[/cyan] {command}")
-                
+
                 result = self._execute_command(command)
                 commands_executed.append(result)
-                
-                history.append({
-                    "command": command,
-                    "success": result.success,
-                    "output": result.output,
-                    "error": result.error,
-                })
-                
+
+                history.append(
+                    {
+                        "command": command,
+                        "success": result.success,
+                        "output": result.output,
+                        "error": result.error,
+                    }
+                )
+
                 if self.debug:
                     if result.success:
-                        console.print(f"[green]✓ Success[/green]")
+                        console.print("[green]✓ Success[/green]")
                     else:
                         console.print(f"[red]✗ Failed: {result.error}[/red]")
-        
+
         # Max iterations reached
         return SystemInfoResult(
             query=query,
@@ -571,31 +641,31 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
         )
 
     def get_app_info(
-        self, 
-        app_name: str, 
+        self,
+        app_name: str,
         query: str | None = None,
         aspects: list[str] | None = None,
     ) -> SystemInfoResult:
         """
         Get information about a specific application.
-        
+
         Args:
             app_name: Application name (nginx, docker, postgresql, etc.)
             query: Optional natural language query about the app
             aspects: Optional list of aspects to check (status, config, logs, etc.)
-            
+
         Returns:
             SystemInfoResult with application information
         """
         app_lower = app_name.lower()
         commands_executed: list[InfoResult] = []
         raw_data: dict[str, Any] = {}
-        
+
         # Check if we have predefined commands for this app
         if app_lower in APP_INFO_TEMPLATES:
             templates = APP_INFO_TEMPLATES[app_lower]
             aspects_to_check = aspects or list(templates.keys())
-            
+
             for aspect in aspects_to_check:
                 if aspect in templates:
                     for cmd_info in templates[aspect]:
@@ -603,7 +673,7 @@ KNOWN APPLICATIONS with pre-defined info commands: {app_list}
                         commands_executed.append(result)
                         if result.success and result.output:
                             raw_data[f"{aspect}:{cmd_info.purpose}"] = result.output
-        
+
         # If there's a specific query, use LLM to analyze
         if query:
             context = f"""Application: {app_name}
@@ -611,18 +681,20 @@ Already gathered data:
 {json.dumps(raw_data, indent=2)[:2000]}
 
 Now answer the specific question about this application."""
-            
+
             result = self.get_info(query, context)
             result.commands_executed = commands_executed + result.commands_executed
             result.raw_data.update(raw_data)
             return result
-        
+
         # Generate summary answer from raw data
         answer_parts = [f"**{app_name.title()} Information**\n"]
         for key, value in raw_data.items():
             aspect, desc = key.split(":", 1)
-            answer_parts.append(f"\n**{aspect.title()}** ({desc}):\n```\n{value[:500]}{'...' if len(value) > 500 else ''}\n```")
-        
+            answer_parts.append(
+                f"\n**{aspect.title()}** ({desc}):\n```\n{value[:500]}{'...' if len(value) > 500 else ''}\n```"
+            )
+
         return SystemInfoResult(
             query=query or f"Get information about {app_name}",
             answer="\n".join(answer_parts) if raw_data else f"No information found for {app_name}",
@@ -638,11 +710,11 @@ Now answer the specific question about this application."""
     ) -> SystemInfoResult:
         """
         Get structured system information for a category.
-        
+
         Args:
             category: Info category (hardware, network, services, etc.)
             aspects: Optional specific aspects (cpu, memory, disk for hardware, etc.)
-            
+
         Returns:
             SystemInfoResult with structured information
         """
@@ -650,10 +722,10 @@ Now answer the specific question about this application."""
             category = category.lower()
         else:
             category = category.value
-        
+
         commands_executed: list[InfoResult] = []
         raw_data: dict[str, Any] = {}
-        
+
         # Map categories to common commands
         category_mapping = {
             "hardware": ["cpu", "memory", "disk", "gpu"],
@@ -666,9 +738,9 @@ Now answer the specific question about this application."""
             "performance": ["cpu", "memory", "processes"],
             "configuration": ["environment"],
         }
-        
+
         aspects_to_check = aspects or category_mapping.get(category, [])
-        
+
         for aspect in aspects_to_check:
             if aspect in COMMON_INFO_COMMANDS:
                 for cmd_info in COMMON_INFO_COMMANDS[aspect]:
@@ -676,33 +748,39 @@ Now answer the specific question about this application."""
                     commands_executed.append(result)
                     if result.success and result.output:
                         raw_data[f"{aspect}:{cmd_info.purpose}"] = result.output
-        
+
         # Generate structured answer
         answer_parts = [f"**{category.title()} Information**\n"]
         for key, value in raw_data.items():
             aspect, desc = key.split(":", 1)
-            answer_parts.append(f"\n**{aspect.upper()}** ({desc}):\n```\n{value[:800]}{'...' if len(value) > 800 else ''}\n```")
-        
+            answer_parts.append(
+                f"\n**{aspect.upper()}** ({desc}):\n```\n{value[:800]}{'...' if len(value) > 800 else ''}\n```"
+            )
+
         return SystemInfoResult(
             query=f"Get {category} information",
             answer="\n".join(answer_parts) if raw_data else f"No {category} information found",
             commands_executed=commands_executed,
             raw_data=raw_data,
-            category=InfoCategory(category) if category in [c.value for c in InfoCategory] else InfoCategory.CUSTOM,
+            category=(
+                InfoCategory(category)
+                if category in [c.value for c in InfoCategory]
+                else InfoCategory.CUSTOM
+            ),
         )
 
     def quick_info(self, info_type: str) -> str:
         """
         Quick lookup for common system information.
-        
+
         Args:
             info_type: Type of info (cpu, memory, disk, os, network, etc.)
-            
+
         Returns:
             String with the requested information
         """
         info_lower = info_type.lower()
-        
+
         if info_lower in COMMON_INFO_COMMANDS:
             outputs = []
             for cmd_info in COMMON_INFO_COMMANDS[info_lower]:
@@ -710,13 +788,15 @@ Now answer the specific question about this application."""
                 if result.success and result.output:
                     outputs.append(result.output)
             return "\n\n".join(outputs) if outputs else f"No {info_type} information available"
-        
+
         # Try as app info
         if info_lower in APP_INFO_TEMPLATES:
             result = self.get_app_info(info_lower, aspects=["status", "version"])
             return result.answer
-        
-        return f"Unknown info type: {info_type}. Available: {', '.join(COMMON_INFO_COMMANDS.keys())}"
+
+        return (
+            f"Unknown info type: {info_type}. Available: {', '.join(COMMON_INFO_COMMANDS.keys())}"
+        )
 
     def list_available_info(self) -> dict[str, list[str]]:
         """List all available pre-defined info types and applications."""
@@ -733,57 +813,57 @@ def get_system_info_generator(
 ) -> SystemInfoGenerator:
     """
     Factory function to create a SystemInfoGenerator with default configuration.
-    
+
     Args:
         provider: LLM provider to use
         debug: Enable debug output
-        
+
     Returns:
         Configured SystemInfoGenerator instance
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("No API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY")
-    
+
     return SystemInfoGenerator(api_key=api_key, provider=provider, debug=debug)
 
 
 # CLI helper for quick testing
 if __name__ == "__main__":
     import sys
-    
+
     if len(sys.argv) < 2:
         print("Usage: python system_info_generator.py <query>")
         print("       python system_info_generator.py --quick <info_type>")
         print("       python system_info_generator.py --app <app_name> [query]")
         print("       python system_info_generator.py --list")
         sys.exit(1)
-    
+
     try:
         generator = get_system_info_generator(debug=True)
-        
+
         if sys.argv[1] == "--list":
             available = generator.list_available_info()
             console.print("\n[bold]Available Information Types:[/bold]")
             console.print(f"System: {', '.join(available['system_info'])}")
             console.print(f"Apps: {', '.join(available['applications'])}")
             console.print(f"Categories: {', '.join(available['categories'])}")
-        
+
         elif sys.argv[1] == "--quick" and len(sys.argv) > 2:
             info = generator.quick_info(sys.argv[2])
             console.print(Panel(info, title=f"{sys.argv[2].title()} Info"))
-        
+
         elif sys.argv[1] == "--app" and len(sys.argv) > 2:
             app_name = sys.argv[2]
             query = " ".join(sys.argv[3:]) if len(sys.argv) > 3 else None
             result = generator.get_app_info(app_name, query)
             console.print(Panel(result.answer, title=f"{app_name.title()} Info"))
-        
+
         else:
             query = " ".join(sys.argv[1:])
             result = generator.get_info(query)
             console.print(Panel(result.answer, title="System Info"))
-            
+
             if result.commands_executed:
                 table = Table(title="Commands Executed")
                 table.add_column("Command", style="cyan")
@@ -793,8 +873,7 @@ if __name__ == "__main__":
                     status = "✓" if cmd.success else "✗"
                     table.add_row(cmd.command[:60], status, f"{cmd.execution_time:.2f}s")
                 console.print(table)
-                
+
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
         sys.exit(1)
-

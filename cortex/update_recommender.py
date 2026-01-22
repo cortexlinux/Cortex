@@ -319,16 +319,24 @@ class UpdateRecommender:
         """Fetch package description and changelog metadata."""
         description, changelog = "", ""
 
-        # Try APT
+        # Try APT: parse line-by-line to avoid complex regex issues
         output = self._run_pkg_cmd(["apt-cache", "show", package_name])
         if output:
-            desc_match = re.search(
-                r"^Description-(?:en|.*):\s*(.*?)(?=\n\S|$)", output, re.S | re.M
-            )
-            if desc_match:
-                description = desc_match.group(1).strip()
-            # Changelog for APT is harder to get without network,
-            # but sometimes present in /usr/share/doc/<pkg>/changelog.Debian.gz
+            desc_lines = []
+            capturing = False
+            for line in output.splitlines():
+                if line.startswith("Description"):
+                    capturing = True
+                    # Remove "Description-en: " or similar
+                    clean_line = re.sub(r"^Description(?:-[\w-]+)?:\s*", "", line)
+                    desc_lines.append(clean_line)
+                elif capturing:
+                    if line.startswith(" "):
+                        desc_lines.append(line.strip())
+                    else:
+                        break
+            if desc_lines:
+                description = " ".join(desc_lines).strip()
             return description, changelog
 
         # Try DNF
@@ -424,27 +432,33 @@ class UpdateRecommender:
         updates = []
         for line in output.strip().splitlines():
             parts = line.split()
-            if len(parts) >= 2:
-                full_name = parts[0]
-                new_ver = parts[1]
-                repo = parts[2] if len(parts) >= 3 else ""
+            if len(parts) < 2:
+                continue
 
-                # Resolve name: prefer full name if installed, then name without arch
-                name = full_name
-                if "." in full_name:
-                    name_no_arch = full_name.rsplit(".", 1)[0]
-                    if full_name in installed:
-                        name = full_name
-                    else:
-                        # Default to name without arch if not specifically found
-                        name = name_no_arch
+            full_name = parts[0]
+            new_ver = parts[1]
+            repo = parts[2] if len(parts) >= 3 else ""
 
-                current = installed.get(name)
-                old_ver = str(current) if current else "0.0.0"
-                updates.append(
-                    {"name": name, "old_version": old_ver, "new_version": new_ver, "repo": repo}
-                )
+            # Resolve name: prefer architecture-specific if installed
+            name = self._resolve_rpm_name(full_name, installed)
+            current = installed.get(name)
+            old_ver = str(current) if current else "0.0.0"
+
+            updates.append(
+                {"name": name, "old_version": old_ver, "new_version": new_ver, "repo": repo}
+            )
         return updates
+
+    def _resolve_rpm_name(self, full_name: str, installed: dict[str, PackageVersion]) -> str:
+        """Resolve RPM package name by handling architecture suffixes."""
+        if "." not in full_name:
+            return full_name
+
+        name_no_arch = full_name.rsplit(".", 1)[0]
+        if full_name in installed:
+            return full_name
+
+        return name_no_arch
 
     def analyze_change_type(self, current: PackageVersion, new: PackageVersion) -> ChangeType:
         """Classify the semantic version delta between current and new versions."""
@@ -517,47 +531,49 @@ class UpdateRecommender:
         return RiskLevel.LOW
 
     def _get_historical_risk_adjustment(self, package_name: str) -> tuple[int, list[str]]:
-        """
-        Query history and memory to refine risk scores based on past performance.
-        Returns (score_adjustment, notes).
-        """
-        adjustment = 0
-        notes = []
+        """Query history and memory to refine risk scores base on past performance."""
+        adj, notes = 0, []
 
         try:
-            # Check installation history for previous failures/rollbacks
-            if not self.history:
-                return adjustment, notes
+            h_adj, h_notes = self._check_history_risk(package_name)
+            adj += h_adj
+            notes.extend(h_notes)
 
-            past_records = self.history.get_history(limit=50)
-            for record in past_records:
-                if not record.packages:
-                    continue
-                if package_name not in record.packages:
-                    continue
-
-                # Check for critical status issues
-                if record.status in (InstallationStatus.FAILED, InstallationStatus.ROLLED_BACK):
-                    adjustment += 25
-                    notes.append(
-                        "Historical instability: previous updates failed or were rolled back"
-                    )
-                    break
-
-            # Check context memory for recurring issues
-            if self.memory:
-                memories = self.memory.get_similar_interactions(package_name, limit=5)
-                for m in memories:
-                    if not m.success:
-                        adjustment += 10
-                        notes.append(f"Memory: Previously caused issues during {m.action}")
-                        break
-
+            m_adj, m_notes = self._check_memory_risk(package_name)
+            adj += m_adj
+            notes.extend(m_notes)
         except (OSError, AttributeError) as e:
             if self.verbose:
                 logger.debug("Historical risk lookup failed: %s", e)
 
-        return adjustment, notes
+        return adj, notes
+
+    def _check_history_risk(self, package_name: str) -> tuple[int, list[str]]:
+        """Check installation history for previous failures."""
+        if not self.history:
+            return 0, []
+
+        past_records = self.history.get_history(limit=50)
+        for record in past_records:
+            if not record.packages or package_name not in record.packages:
+                continue
+
+            if record.status in (InstallationStatus.FAILED, InstallationStatus.ROLLED_BACK):
+                return 25, ["Historical instability: previous updates failed or were rolled back"]
+
+        return 0, []
+
+    def _check_memory_risk(self, package_name: str) -> tuple[int, list[str]]:
+        """Check context memory for recurring issues."""
+        if not self.memory:
+            return 0, []
+
+        memories = self.memory.get_similar_interactions(package_name, limit=5)
+        for m in memories:
+            if not m.success:
+                return 10, [f"Memory: Previously caused issues during {m.action}"]
+
+        return 0, []
 
     def is_security_update(
         self, package_name: str, changelog: str = "", description: str = "", repo: str = ""
@@ -647,11 +663,15 @@ class UpdateRecommender:
 
     def generate_recommendation_text(self, update: UpdateInfo) -> str:
         """Generate human-readable recommendation for an update."""
-        res = [
-            t(
-                f"update_recommend.recommendations.{'security_urgent' if update.category == UpdateCategory.SECURITY else 'safe_immediate' if update.category == UpdateCategory.IMMEDIATE else 'maintenance_window' if update.category == UpdateCategory.SCHEDULED else 'consider_deferring'}"
-            )
-        ]
+        # Use a mapping to avoid nested ternary expressions (SonarQube)
+        category_keys = {
+            UpdateCategory.SECURITY: "security_urgent",
+            UpdateCategory.IMMEDIATE: "safe_immediate",
+            UpdateCategory.SCHEDULED: "maintenance_window",
+            UpdateCategory.DEFERRED: "consider_deferring",
+        }
+        key = category_keys.get(update.category, "maintenance_window")
+        res = [t(f"update_recommend.recommendations.{key}")]
         if update.change_type == ChangeType.MAJOR:
             res.append(
                 t(

@@ -64,6 +64,7 @@ cortex install "tools for video compression"
 | Feature | Description |
 |---------|-------------|
 | **Natural Language** | Describe what you need in plain English |
+| **Voice Input** | Hands-free mode with Whisper speech recognition ([F9 to speak](docs/VOICE_INPUT.md)) |
 | **Dry-Run Default** | Preview all commands before execution |
 | **Sandboxed Execution** | Commands run in Firejail isolation |
 | **Full Rollback** | Undo any installation with `cortex rollback` |
@@ -72,6 +73,7 @@ cortex install "tools for video compression"
 | **Audit Trail** | Complete history in `~/.cortex/history.db` |
 | **Hardware-Aware** | Detects GPU, CPU, memory for optimized packages |
 | **Smart Update Recommendations** | AI-powered update recommendations and risk assessment |
+| **Predictive Error Prevention** | AI-driven checks for potential installation failures |
 | **Multi-LLM Support** | Works with Claude, GPT-4, or local Ollama models |
 
 ---
@@ -419,6 +421,7 @@ pip install -e .
 - [x] Dry-run preview mode
 - [x] Docker bind-mount permission fixer
 - [x] Automatic Role Discovery (AI-driven system context sensing)
+- [x] Predictive Error Prevention (pre-install compatibility checks)
 
 ### In Progress
 - [ ] Conflict resolution UI

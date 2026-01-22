@@ -36,6 +36,7 @@ cortex/
 │   ├── logging_system.py    # Logging & diagnostics
 │   ├── context_memory.py    # AI memory system
 │   └── update_recommender.py # AI-powered update recommendations
+│   └── predictive_prevention.py # Pre-install risk analysis
 ├── tests/
 │   └── test_*.py            # Unit tests
 ├── docs/
@@ -55,6 +56,8 @@ LLM Integration Layer (Claude API)
 Package Manager Wrapper (apt/yum/dnf)
     ↓
 Dependency Resolver
+    ↓
+Predictive Error Prevention (Risk Analysis)
     ↓
 Sandbox Executor (Firejail)
     ↓

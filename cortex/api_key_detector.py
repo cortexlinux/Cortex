@@ -123,8 +123,24 @@ class APIKeyDetector:
         return result or (False, None, None, None)
 
     def _check_environment_api_keys(self) -> tuple[bool, str, str, str] | None:
-        """Check for API keys in environment variables."""
-        for env_var, provider in ENV_VAR_PROVIDERS.items():
+        """Check for API keys in environment variables.
+
+        Respects CORTEX_PROVIDER when multiple keys exist and prefers OpenAI when unspecified.
+        """
+        explicit_provider = os.environ.get("CORTEX_PROVIDER", "").lower()
+
+        # If user explicitly set a provider, check that key first
+        if explicit_provider in ("anthropic", "claude"):
+            value = os.environ.get("ANTHROPIC_API_KEY")
+            if value:
+                return (True, value, "anthropic", "environment")
+        elif explicit_provider == "openai":
+            value = os.environ.get("OPENAI_API_KEY")
+            if value:
+                return (True, value, "openai", "environment")
+
+        # Fallback: prefer OpenAI first, then Anthropic
+        for env_var, provider in [("OPENAI_API_KEY", "openai"), ("ANTHROPIC_API_KEY", "anthropic")]:
             value = os.environ.get(env_var)
             if value:
                 return (True, value, provider, "environment")
@@ -141,7 +157,29 @@ class APIKeyDetector:
 
             env_mgr = get_env_manager()
 
-            # Check for API keys in encrypted storage
+            # If CORTEX_PROVIDER is explicitly set, check that provider's key first
+            explicit_provider = os.environ.get("CORTEX_PROVIDER", "").lower()
+            if explicit_provider in ["openai", "claude", "anthropic"]:
+                # Map provider names to env vars and canonical provider names
+                if explicit_provider == "openai":
+                    target_env_var = "OPENAI_API_KEY"
+                    target_provider = "openai"
+                else:  # claude or anthropic both map to ANTHROPIC_API_KEY
+                    target_env_var = "ANTHROPIC_API_KEY"
+                    target_provider = "anthropic"
+
+                value = env_mgr.get_variable(app="cortex", key=target_env_var, decrypt=True)
+                if value:
+                    os.environ[target_env_var] = value
+                    logger.debug(f"Loaded {target_env_var} from encrypted storage")
+                    return (
+                        True,
+                        value,
+                        target_provider,
+                        "encrypted storage (~/.cortex/environments/)",
+                    )
+
+            # Check for API keys in encrypted storage (default order)
             for env_var, provider in ENV_VAR_PROVIDERS.items():
                 value = env_mgr.get_variable(app="cortex", key=env_var, decrypt=True)
                 if value:
@@ -215,7 +253,19 @@ class APIKeyDetector:
         self, source: str | Path, env_vars: list[str]
     ) -> tuple[bool, str | None, str | None, str | None] | None:
         """Check a specific location for API keys."""
-        for env_var in env_vars:
+        # Respect preferred provider when multiple keys exist in a location
+        preferred_provider = os.environ.get("CORTEX_PROVIDER", "").lower()
+        if preferred_provider in ("openai", "anthropic", "claude"):
+            # Build ordered list with preferred env var first
+            preferred_var = (
+                "OPENAI_API_KEY" if preferred_provider == "openai" else "ANTHROPIC_API_KEY"
+            )
+            # Keep uniqueness and order: preferred first, then the rest
+            ordered_vars = [preferred_var] + [v for v in env_vars if v != preferred_var]
+        else:
+            ordered_vars = env_vars
+
+        for env_var in ordered_vars:
             if source == "environment":
                 result = self._check_environment_variable(env_var)
             elif isinstance(source, Path):
@@ -673,6 +723,7 @@ def setup_api_key() -> tuple[bool, str | None, str | None]:
         Tuple of (success, key, provider)
     """
     detector = APIKeyDetector()
+    silent = os.environ.get("CORTEX_SILENT_OUTPUT", "0") == "1"
 
     # Try auto-detection first
     found, key, provider, source = detector.detect()
@@ -680,10 +731,11 @@ def setup_api_key() -> tuple[bool, str | None, str | None]:
         # Only show "Found" message for non-default locations
         # ~/.cortex/.env is our canonical location, so no need to announce it
         default_location = str(Path.home() / CORTEX_DIR / CORTEX_ENV_FILE)
-        if source != default_location:
+        if not silent and source != default_location:
             display_name = PROVIDER_DISPLAY_NAMES.get(provider, provider.upper())
             cx_print(f"🔑 Found {display_name} API key in {source}", "success")
-        detector._maybe_save_found_key(key, provider, source)
+        if not silent:
+            detector._maybe_save_found_key(key, provider, source)
         return (True, key, provider)
 
     # Prompt for manual entry

@@ -312,6 +312,34 @@ class UpdateRecommender:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return None
 
+    def _get_package_metadata(self, package_name: str) -> tuple[str, str]:
+        """Fetch package description and changelog metadata."""
+        description, changelog = "", ""
+
+        # Try APT
+        output = self._run_pkg_cmd(["apt-cache", "show", package_name])
+        if output:
+            desc_match = re.search(
+                r"^Description-(?:en|.*):\s*(.*?)(?=\n\S|$)", output, re.S | re.M
+            )
+            if desc_match:
+                description = desc_match.group(1).strip()
+            # Changelog for APT is harder to get without network,
+            # but sometimes present in /usr/share/doc/<pkg>/changelog.Debian.gz
+            return description, changelog
+
+        # Try DNF
+        output = self._run_pkg_cmd(["dnf", "info", "-q", package_name])
+        if output:
+            lines = output.splitlines()
+            for i, line in enumerate(lines):
+                if line.startswith("Description  :"):
+                    description = " ".join(lines[i:]).replace("Description  :", "").strip()
+                    break
+            return description, changelog
+
+        return description, changelog
+
     def get_installed_packages(self) -> dict[str, PackageVersion]:
         """Get all installed packages with their versions."""
         packages = {}
@@ -334,7 +362,7 @@ class UpdateRecommender:
                     packages[parts[0]] = PackageVersion.parse(parts[1])
         return packages
 
-    def get_available_updates(self) -> list[tuple[str, str, str]]:
+    def get_available_updates(self) -> list[dict[str, Any]]:
         """Get list of packages with available updates."""
         updates = self._get_apt_updates()
         if updates:
@@ -342,10 +370,11 @@ class UpdateRecommender:
 
         return self._get_rpm_updates()
 
-    def _get_apt_updates(self) -> list[tuple[str, str, str]]:
+    def _get_apt_updates(self) -> list[dict[str, Any]]:
         """Helper to get updates via APT."""
         updates = []
         if self._run_pkg_cmd(["apt-get", "update", "-q"]) is None:
+            logger.warning("APT update check failed. Skipping APT updates.")
             return updates
 
         output = self._run_pkg_cmd(["apt", "list", "--upgradable"])
@@ -353,16 +382,19 @@ class UpdateRecommender:
             return updates
 
         for line in output.splitlines():
-            # Optimized regex to prevent backtracking (ReDoS)
+            # Pattern: package/suite new_version arch [upgradable from: old_version]
             match = re.search(
-                r"^([^/\s]+)/[^\s]+\s+([^\s]+)\s+[^\s]+\s+\[upgradable from:\s+([^\s]+)\]",
+                r"^([^/\s]+)/([^\s]+)\s+([^\s]+)\s+[^\s]+\s+\[upgradable from:\s+([^\s]+)\]",
                 line,
             )
             if match:
-                updates.append(match.groups())
+                pkg, suite, new_v, old_v = match.groups()
+                updates.append(
+                    {"name": pkg, "old_version": old_v, "new_version": new_v, "repo": suite}
+                )
         return updates
 
-    def _get_rpm_updates(self) -> list[tuple[str, str, str]]:
+    def _get_rpm_updates(self) -> list[dict[str, Any]]:
         """Helper to get updates via DNF/YUM."""
         updates = []
         for pm in ("dnf", "yum"):
@@ -384,7 +416,7 @@ class UpdateRecommender:
 
     def _parse_rpm_check_update(
         self, output: str, installed: dict[str, PackageVersion]
-    ) -> list[tuple[str, str, str]]:
+    ) -> list[dict[str, Any]]:
         """Helper to parse DNF/YUM check-update output."""
         updates = []
         for line in output.strip().splitlines():
@@ -392,9 +424,9 @@ class UpdateRecommender:
             if len(parts) >= 2:
                 full_name = parts[0]
                 new_ver = parts[1]
+                repo = parts[2] if len(parts) >= 3 else ""
 
-                # Resolve name: prefer full name if installed, then name without arch,
-                # then fallback to name without arch for consistency.
+                # Resolve name: prefer full name if installed, then name without arch
                 name = full_name
                 if "." in full_name:
                     name_no_arch = full_name.rsplit(".", 1)[0]
@@ -403,15 +435,17 @@ class UpdateRecommender:
                     elif name_no_arch in installed:
                         name = name_no_arch
                     else:
-                        # Fallback for systems where we might not have matched yet
                         name = name_no_arch
 
                 current = installed.get(name)
                 old_ver = str(current) if current else "0.0.0"
-                updates.append((name, old_ver, new_ver))
+                updates.append(
+                    {"name": name, "old_version": old_ver, "new_version": new_ver, "repo": repo}
+                )
         return updates
 
     def analyze_change_type(self, current: PackageVersion, new: PackageVersion) -> ChangeType:
+        """Classify the semantic version delta between current and new versions."""
         if new.major > current.major:
             return ChangeType.MAJOR
         if new.minor > current.minor:
@@ -474,9 +508,9 @@ class UpdateRecommender:
 
     def _map_score_to_risk(self, score: int) -> RiskLevel:
         """Map aggregate risk score to RiskLevel enum."""
-        if score >= 60:
-            return RiskLevel.HIGH
         if score >= 35:
+            return RiskLevel.HIGH
+        if score >= 15:
             return RiskLevel.MEDIUM
         return RiskLevel.LOW
 
@@ -524,7 +558,7 @@ class UpdateRecommender:
         return adjustment, notes
 
     def is_security_update(
-        self, package_name: str, changelog: str = "", description: str = ""
+        self, package_name: str, changelog: str = "", description: str = "", repo: str = ""
     ) -> bool:
         """
         Determine if an update is security-related.
@@ -533,11 +567,16 @@ class UpdateRecommender:
             package_name: Name of the package
             changelog: Changelog content
             description: Update description
+            repo: Origin repository or suite (e.g., 'jammy-security')
 
         Returns:
             True if this appears to be a security update
         """
-        combined_text = f"{package_name} {changelog} {description}".lower()
+        combined_text = f"{package_name} {changelog} {description} {repo}".lower()
+
+        # Check for repo origin signals (high confidence)
+        if "security" in repo.lower():
+            return True
 
         for indicator in self.SECURITY_INDICATORS:
             if indicator in combined_text:
@@ -710,12 +749,25 @@ Keep response concise (under 150 words)."""
         update_infos = []
         groups: dict[str, list[UpdateInfo]] = {}
 
-        for pkg_name, old_ver, new_ver in updates:
+        for update in updates:
+            pkg_name = update["name"]
+            old_ver = update["old_version"]
+            new_ver = update["new_version"]
+            repo = update.get("repo", "")
+
+            # Fetch extra metadata for better analysis
+            description, changelog = self._get_package_metadata(pkg_name)
+
             current, new = PackageVersion.parse(old_ver), PackageVersion.parse(new_ver)
             change_type = self.analyze_change_type(current, new)
-            risk_level, breaking_changes = self.assess_risk(pkg_name, current, new)
+            risk_level, breaking_changes = self.assess_risk(
+                pkg_name, current, new, changelog=changelog
+            )
             group = self.get_package_group(pkg_name)
-            is_security = self.is_security_update(pkg_name)
+            is_security = self.is_security_update(
+                pkg_name, changelog=changelog, description=description, repo=repo
+            )
+
             info = UpdateInfo(
                 pkg_name,
                 current,
@@ -723,6 +775,8 @@ Keep response concise (under 150 words)."""
                 change_type,
                 risk_level,
                 self.categorize_update(risk_level, is_security, change_type),
+                description=description,
+                changelog=changelog,
                 breaking_changes=breaking_changes,
                 group=group,
                 is_security=is_security,

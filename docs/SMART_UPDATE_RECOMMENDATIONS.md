@@ -23,7 +23,7 @@ cortex update recommend
 
 ### Example Output
 
-```
+```text
 📊 Update Analysis
 
 🔒 Security Updates (Apply ASAP):

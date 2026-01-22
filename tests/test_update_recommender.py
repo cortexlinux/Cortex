@@ -102,7 +102,7 @@ class TestUpdateRecommender:
         risk, warns = r.assess_risk(
             "some-pkg", PackageVersion.parse("1.0"), PackageVersion.parse("1.1-beta")
         )
-        assert risk == RiskLevel.MEDIUM
+        assert risk == RiskLevel.HIGH
 
         # Changelog keywords
         risk, warns = r.assess_risk(
@@ -111,7 +111,7 @@ class TestUpdateRecommender:
             PackageVersion.parse("1.0.1"),
             "Breaking change and deprecated",
         )
-        assert risk == RiskLevel.MEDIUM
+        assert risk == RiskLevel.HIGH
 
     def test_security_detection(self, r):
         assert r.is_security_update("pkg", "High CVE-2024-0001 fix")
@@ -187,6 +187,10 @@ class TestUpdateRecommender:
         ]
         updates = r.get_available_updates()
         assert len(updates) == 1
+        assert updates[0]["name"] == "nginx"
+        assert updates[0]["old_version"] == "1.24.0"
+        assert updates[0]["new_version"] == "1.25.0"
+        assert "jammy" in updates[0]["repo"]
 
         # Simulate DNF check-update (exit 100 indicates available updates)
         mock_run.side_effect = [
@@ -195,15 +199,20 @@ class TestUpdateRecommender:
             MagicMock(returncode=0, stdout="Version : 8.4.0"),  # dnf info
         ]
         updates = r.get_available_updates()
-        assert len(updates) == 1 and updates[0][0] == "curl"
+        assert len(updates) == 1 and updates[0]["name"] == "curl"
 
         # Handle command timeout or missing manager scenarios
         mock_run.side_effect = subprocess.TimeoutExpired(["cmd"], 30)
         assert r._run_pkg_cmd(["cmd"]) is None
 
+    @patch.object(UpdateRecommender, "_get_package_metadata")
     @patch.object(UpdateRecommender, "get_available_updates")
-    def test_get_recommendations_full(self, mock_get, r):
-        mock_get.return_value = [("nginx", "1.24.0", "1.25.0"), ("postgresql", "14.0", "15.0")]
+    def test_get_recommendations_full(self, mock_get, mock_meta, r):
+        mock_get.return_value = [
+            {"name": "nginx", "old_version": "1.24.0", "new_version": "1.25.0", "repo": "updates"},
+            {"name": "postgresql", "old_version": "14.0", "new_version": "15.0", "repo": "updates"},
+        ]
+        mock_meta.return_value = ("desc", "changelog")
         rec = r.get_recommendations(use_llm=False)
         assert rec.total_updates == 2
         assert rec.overall_risk == RiskLevel.HIGH

@@ -56,13 +56,15 @@ dependencies = [
     "cryptography>=42.0.0",
     # Terminal UI and formatting
     "rich>=13.0.0",
+    # System resource monitoring (required for cortex monitor)
+    "psutil>=6.1.0",
     # Type hints for older Python versions
     "typing-extensions>=4.0.0",
 ]
 
 [project.optional-dependencies]
 dashboard = [
-    "psutil>=5.9.0",
+    # GPU monitoring (optional, psutil is now a core dep)
     "nvidia-ml-py>=12.0.0",
 ]
 dev = [

@@ -863,6 +863,28 @@ class CortexCLI:
 
     # --- End Sandbox Commands ---
 
+    def monitor(self, args: argparse.Namespace) -> int:
+        """
+        Monitor system resource usage (CPU, RAM, Disk, Network) in real-time.
+
+        Args:
+            args: Parsed command-line arguments
+
+        Returns:
+            Exit code (0 for success)
+        """
+        from cortex.monitor.monitor_ui import run_standalone_monitor
+
+        duration = getattr(args, "duration", None)
+        interval = getattr(args, "interval", 1.0)
+        export_path = getattr(args, "export", None)
+
+        return run_standalone_monitor(
+            duration=duration,
+            interval=interval,
+            export_path=export_path,
+        )
+
     def ask(self, question: str, do_mode: bool = False) -> int:
         """Answer a natural language question about the system.
 
@@ -1543,11 +1565,11 @@ class CortexCLI:
         software: str,
         execute: bool = False,
         dry_run: bool = False,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        monitor: bool = False,
         parallel: bool = False,
         json_output: bool = False,
-        max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> int:
-        """Install software using the LLM-powered package manager."""
         # Initialize installation history
         history = InstallationHistory()
         install_id = None
@@ -1772,6 +1794,7 @@ class CortexCLI:
                     stop_on_error=True,
                     progress_callback=progress_callback,
                     max_retries=max_retries,
+                    enable_monitoring=monitor,
                 )
 
                 result = coordinator.execute()
@@ -1779,6 +1802,16 @@ class CortexCLI:
                 if result.success:
                     self._print_success(t("install.package_installed", package=software))
                     print(f"\n{t('progress.completed_in', seconds=f'{result.total_duration:.2f}')}")
+
+                    # Display peak usage if monitoring was enabled
+                    if monitor and result.peak_cpu is not None:
+                        cpu_str = f"{result.peak_cpu:.0f}%"
+                        ram_str = (
+                            f"{result.peak_ram_gb:.1f} GB"
+                            if result.peak_ram_gb is not None
+                            else "N/A"
+                        )
+                        print(f"\n📊 Peak usage: CPU {cpu_str}, RAM {ram_str}")
 
                     # Record successful installation
                     if install_id:
@@ -4926,6 +4959,42 @@ def main():
         action="store_true",
         help="Use voice input for software name (press F9 to record)",
     )
+    install_parser.add_argument(
+        "--monitor",
+        action="store_true",
+        help="Monitor system resources during installation",
+    )
+
+    # Monitor command - real-time system resource monitoring
+    # Note: Monitoring is client-side using psutil. Daemon integration is intentionally
+    # out of scope to keep the feature self-contained and avoid cortexd dependencies.
+    monitor_parser = subparsers.add_parser(
+        "monitor",
+        help="Monitor system resource usage",
+        description="Track CPU, RAM, Disk, and Network usage in real-time.",
+    )
+    monitor_parser.add_argument(
+        "--duration",
+        "-d",
+        type=int,
+        metavar="SECONDS",
+        help="Run for fixed duration (seconds); omit for continuous monitoring",
+    )
+    monitor_parser.add_argument(
+        "--interval",
+        "-i",
+        type=float,
+        default=1.0,
+        metavar="SECONDS",
+        help="Sampling interval in seconds (default: 1.0)",
+    )
+    monitor_parser.add_argument(
+        "--export",
+        "-e",
+        type=str,
+        metavar="FILE",
+        help="Export metrics to file (JSON or CSV). Experimental feature.",
+    )
 
     # Remove command - uninstall with impact analysis
     remove_parser = subparsers.add_parser(
@@ -5595,13 +5664,12 @@ def main():
                 mode=getattr(args, "mode", None),
                 verbose=getattr(args, "verbose", False),
             )
+        elif args.command == "monitor":
+            return cli.monitor(args)
         elif args.command == "printer":
             return cli.printer(
                 action=getattr(args, "action", "status"), verbose=getattr(args, "verbose", False)
             )
-        elif args.command == "voice":
-            model = getattr(args, "model", None)
-            return cli.voice(continuous=not getattr(args, "single", False), model=model)
         elif args.command == "ask":
             do_mode = getattr(args, "do", False)
             # Handle --mic flag for voice input
@@ -5670,7 +5738,7 @@ def main():
                 execute=args.execute,
                 dry_run=args.dry_run,
                 parallel=args.parallel,
-                json_output=args.json,
+                monitor=getattr(args, "monitor", False),
             )
         elif args.command == "remove":
             # Handle --execute flag to override default dry-run

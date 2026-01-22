@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -7,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cortex.utils.retry import (
     DEFAULT_MAX_RETRIES,
@@ -17,6 +19,9 @@ from cortex.utils.retry import (
     load_strategies_from_env,
 )
 from cortex.validators import DANGEROUS_PATTERNS
+
+if TYPE_CHECKING:
+    from cortex.monitor.sampler import PeakUsage, ResourceSampler
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +58,10 @@ class InstallationResult:
     total_duration: float
     failed_step: int | None = None
     error_message: str | None = None
+    # Monitoring data (optional)
+    peak_cpu: float | None = None
+    peak_ram_percent: float | None = None
+    peak_ram_gb: float | None = None
 
 
 class InstallationCoordinator:
@@ -68,14 +77,18 @@ class InstallationCoordinator:
         log_file: str | None = None,
         progress_callback: Callable[[int, int, InstallationStep], None] | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
+        enable_monitoring: bool = False,
     ):
-        """Initialize an installation run with optional logging and rollback."""
+        """Initialize an installation run with optional logging, rollback, and monitoring."""
         self.timeout = timeout
         self.stop_on_error = stop_on_error
         self.enable_rollback = enable_rollback
         self.log_file = log_file
         self.progress_callback = progress_callback
         self.max_retries = max_retries
+        self.enable_monitoring = enable_monitoring
+        self._sampler: ResourceSampler | None = None
+        self._peak_usage: PeakUsage | None = None
 
         if descriptions and len(descriptions) != len(commands):
             raise ValueError("Number of descriptions must match number of commands")
@@ -100,7 +113,8 @@ class InstallationCoordinator:
         log_file: str | None = None,
         progress_callback: Callable[[int, int, InstallationStep], None] | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
-    ) -> "InstallationCoordinator":
+        enable_monitoring: bool = False,
+    ) -> InstallationCoordinator:
         """Create a coordinator from a structured plan produced by an LLM.
 
         Each plan entry should contain at minimum a ``command`` key and
@@ -135,6 +149,7 @@ class InstallationCoordinator:
             log_file=log_file,
             progress_callback=progress_callback,
             max_retries=max_retries,
+            enable_monitoring=enable_monitoring,
         )
 
         for rollback_cmd in rollback_commands:
@@ -263,12 +278,43 @@ class InstallationCoordinator:
         """Register a rollback command executed if a step fails."""
         self.rollback_commands.append(command)
 
+    def _stop_monitoring_and_get_peaks(self) -> tuple[float | None, float | None, float | None]:
+        """Stop the sampler and return (peak_cpu, peak_ram_percent, peak_ram_gb)."""
+        if not self._sampler:
+            return None, None, None
+        self._sampler.stop()
+        self._peak_usage = self._sampler.get_peak_usage()
+        return (
+            self._peak_usage.cpu_percent,
+            self._peak_usage.ram_percent,
+            self._peak_usage.ram_used_gb,
+        )
+
     def execute(self) -> InstallationResult:
         """Run each installation step and capture structured results."""
         start_time = time.time()
         failed_step_index = None
 
         self._log(f"Starting installation with {len(self.steps)} steps")
+
+        # Start monitoring if enabled
+        if self.enable_monitoring:
+            try:
+                from cortex.monitor.sampler import ResourceSampler
+
+                self._sampler = ResourceSampler(interval=1.0)
+                self._sampler.start()
+                # Only log if sampler actually started
+                if self._sampler.is_running:
+                    self._log("Resource monitoring started")
+                else:
+                    self._sampler = None
+            except ImportError:
+                self._log("Monitor module not available, skipping monitoring")
+                self._sampler = None
+            except Exception as e:
+                self._log(f"Failed to start monitoring: {e}")
+                self._sampler = None
 
         for i, step in enumerate(self.steps):
             if self.progress_callback:
@@ -285,6 +331,9 @@ class InstallationCoordinator:
                     if self.enable_rollback:
                         self._rollback()
 
+                    # Stop monitoring on failure
+                    peak_cpu, peak_ram_percent, peak_ram_gb = self._stop_monitoring_and_get_peaks()
+
                     total_duration = time.time() - start_time
                     self._log(f"Installation failed at step {i + 1}")
 
@@ -294,10 +343,20 @@ class InstallationCoordinator:
                         total_duration=total_duration,
                         failed_step=i,
                         error_message=step.error or "Command failed",
+                        peak_cpu=peak_cpu,
+                        peak_ram_percent=peak_ram_percent,
+                        peak_ram_gb=peak_ram_gb,
                     )
 
         total_duration = time.time() - start_time
         all_success = all(s.status == StepStatus.SUCCESS for s in self.steps)
+
+        # Stop monitoring and capture peak usage
+        peak_cpu, peak_ram_percent, peak_ram_gb = self._stop_monitoring_and_get_peaks()
+        if peak_cpu is not None:
+            self._log(
+                f"Monitoring stopped. Peak CPU: {peak_cpu:.1f}%, Peak RAM: {peak_ram_gb:.1f}GB"
+            )
 
         if all_success:
             self._log("Installation completed successfully")
@@ -312,6 +371,9 @@ class InstallationCoordinator:
             error_message=(
                 self.steps[failed_step_index].error if failed_step_index is not None else None
             ),
+            peak_cpu=peak_cpu,
+            peak_ram_percent=peak_ram_percent,
+            peak_ram_gb=peak_ram_gb,
         )
 
     def verify_installation(self, verify_commands: list[str]) -> dict[str, bool]:

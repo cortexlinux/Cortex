@@ -160,6 +160,8 @@ class PackageVersion:
             return True
         if not self.prerelease and other.prerelease:
             return False
+        if self.prerelease and other.prerelease:
+            return self.prerelease < other.prerelease
 
         return False
 
@@ -294,14 +296,15 @@ class UpdateRecommender:
         # Graceful initialization of subsystems
         try:
             self.history = history or InstallationHistory()
-        except Exception as e:
-            logger.warning(f"Installation history unavailable: {e}")
+        except (RuntimeError, OSError, ImportError) as e:
+            logger.warning("Installation history unavailable: %s", e)
             self.history = None
 
         try:
             self.memory = memory or ContextMemory()
-        except Exception as e:
-            logger.warning(f"Context memory unavailable: {e}")
+        except (RuntimeError, OSError, ImportError) as e:
+            # We use lazy logging formatting to satisfy SonarQube
+            logger.warning("Context memory unavailable: %s", e)
             self.memory = None
 
     def _run_pkg_cmd(self, cmd: list[str]) -> str | None:
@@ -410,7 +413,7 @@ class UpdateRecommender:
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 continue
             except subprocess.SubprocessError as e:
-                logger.warning(f"Package manager check failed: {e}")
+                logger.warning("Package manager check failed: %s", e)
                 continue
         return updates
 
@@ -432,9 +435,8 @@ class UpdateRecommender:
                     name_no_arch = full_name.rsplit(".", 1)[0]
                     if full_name in installed:
                         name = full_name
-                    elif name_no_arch in installed:
-                        name = name_no_arch
                     else:
+                        # Default to name without arch if not specifically found
                         name = name_no_arch
 
                 current = installed.get(name)
@@ -553,7 +555,7 @@ class UpdateRecommender:
 
         except (OSError, AttributeError) as e:
             if self.verbose:
-                logger.debug(f"Historical risk lookup failed: {e}")
+                logger.debug("Historical risk lookup failed: %s", e)
 
         return adjustment, notes
 
@@ -721,10 +723,10 @@ Keep response concise (under 150 words)."""
             return response.content
 
         except (ImportError, RuntimeError, ConnectionError) as e:
-            logger.warning(f"LLM analysis context error: {e}")
+            logger.warning("LLM analysis context error: %s", e)
             return ""
         except Exception as e:
-            logger.error(f"Unexpected LLM analysis error: {e}")
+            logger.error("Unexpected LLM analysis error: %s", e, exc_info=True)
             return ""
 
     def get_recommendations(self, use_llm: bool = True) -> UpdateRecommendation:
@@ -958,8 +960,8 @@ def recommend_updates(
                 from cortex.llm_router import LLMRouter
 
                 llm_router = LLMRouter()
-            except Exception as e:
-                logger.debug(f"LLM router not available: {e}")
+            except (ImportError, RuntimeError) as e:
+                logger.debug("LLM router not available: %s", e)
 
         recommender = UpdateRecommender(
             llm_router=llm_router,

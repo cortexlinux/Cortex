@@ -2632,8 +2632,6 @@ class CortexCLI:
             output_json = getattr(args, "json", False)
 
             if output_json:
-                import json as json_module
-
                 llm_router = None
                 if use_llm:
                     try:
@@ -2642,14 +2640,14 @@ class CortexCLI:
                         llm_router = LLMRouter()
                     except ImportError:
                         pass
-                    except Exception as e:
+                    except (RuntimeError, ConnectionError) as e:
                         if self.verbose:
                             logger.debug(f"LLM router initialization failed: {e}")
 
                 recommender = UpdateRecommender(llm_router=llm_router, verbose=self.verbose)
                 recommendation = recommender.get_recommendations(use_llm=use_llm)
 
-                print(json_module.dumps(recommendation.to_dict(), indent=2))
+                print(json.dumps(recommendation.to_dict(), indent=2))
                 return 0
             else:
                 cx_print(t("update_recommend.checking"), "thinking")

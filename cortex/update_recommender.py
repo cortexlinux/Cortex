@@ -337,17 +337,30 @@ class UpdateRecommender:
                         break
             if desc_lines:
                 description = " ".join(desc_lines).strip()
+
+            # Fetch changelog (best-effort, trimmed)
+            changelog_out = self._run_pkg_cmd(["apt-get", "changelog", package_name])
+            if changelog_out:
+                changelog = "\n".join(changelog_out.splitlines()[:200])
+
             return description, changelog
 
-        # Try DNF
-        output = self._run_pkg_cmd(["dnf", "info", "-q", package_name])
-        if output:
-            lines = output.splitlines()
-            for i, line in enumerate(lines):
-                if line.startswith("Description  :"):
-                    description = " ".join(lines[i:]).replace("Description  :", "").strip()
-                    break
-            return description, changelog
+        # Try DNF/YUM
+        for pm in ("dnf", "yum"):
+            output = self._run_pkg_cmd([pm, "info", "-q", package_name])
+            if output:
+                lines = output.splitlines()
+                for i, line in enumerate(lines):
+                    if line.startswith("Description  :"):
+                        description = " ".join(lines[i:]).replace("Description  :", "").strip()
+                        break
+
+                # Fetch changelog (best-effort, trimmed)
+                changelog_out = self._run_pkg_cmd([pm, "repoquery", "--changelog", package_name])
+                if changelog_out:
+                    changelog = "\n".join(changelog_out.splitlines()[:200])
+
+                return description, changelog
 
         return description, changelog
 

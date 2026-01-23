@@ -90,6 +90,47 @@ class TestUpdateRecommender:
             r.analyze_change_type(PackageVersion.parse(curr), PackageVersion.parse(new)) == expected
         )
 
+    @patch("cortex.update_recommender.subprocess.run")
+    def test_get_package_metadata(self, mock_run, r):
+        # Test APT success path
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="Description: A test package\n Full description here."),
+            MagicMock(returncode=0, stdout="* v1.1.0: fixed security hole\n" + "* line\n" * 250),
+        ]
+        desc, changelog = r._get_package_metadata("test-pkg")
+        assert "A test package" in desc
+        assert "fixed security hole" in changelog
+        assert len(changelog.splitlines()) == 200  # Truncation check
+        assert mock_run.call_args_list[0][0][0] == ["apt-cache", "show", "test-pkg"]
+        assert mock_run.call_args_list[1][0][0] == ["apt-get", "changelog", "test-pkg"]
+
+        mock_run.reset_mock()
+        # Test DNF success path (APT fails)
+        mock_run.side_effect = [
+            MagicMock(returncode=1),  # apt-cache show fail
+            MagicMock(returncode=0, stdout="Description  : A DNF test package"),
+            MagicMock(returncode=0, stdout="* Mon Jan 01 2024 User - 1.0.1-1\n- Breaking change"),
+        ]
+        desc, changelog = r._get_package_metadata("test-pkg")
+        assert "A DNF test package" in desc
+        assert "Breaking change" in changelog
+        assert mock_run.call_args_list[1][0][0] == ["dnf", "info", "-q", "test-pkg"]
+        assert mock_run.call_args_list[2][0][0] == ["dnf", "repoquery", "--changelog", "test-pkg"]
+
+        mock_run.reset_mock()
+        # Test YUM fallback path (APT and DNF fail)
+        mock_run.side_effect = [
+            MagicMock(returncode=1),  # apt-cache show fail
+            MagicMock(returncode=1),  # dnf info fail
+            MagicMock(returncode=0, stdout="Description  : A YUM test package"),
+            MagicMock(returncode=0, stdout="* Mon Jan 01 2024 User - 1.0.1-1\n- Breaking change"),
+        ]
+        desc, changelog = r._get_package_metadata("test-pkg")
+        assert "A YUM test package" in desc
+        assert "Breaking change" in changelog
+        assert mock_run.call_args_list[2][0][0] == ["yum", "info", "-q", "test-pkg"]
+        assert mock_run.call_args_list[3][0][0] == ["yum", "repoquery", "--changelog", "test-pkg"]
+
     def test_risk_assessment_branches(self, r):
         # High risk package + major version
         risk, warns = r.assess_risk(

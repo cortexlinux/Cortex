@@ -448,6 +448,10 @@ class UpdateRecommender:
             if len(parts) < 2:
                 continue
 
+            # Skip non-package/status lines (e.g., metadata expiration notices)
+            if not re.search(r"\d", parts[1]):
+                continue
+
             full_name = parts[0]
             new_ver = parts[1]
             repo = parts[2] if len(parts) >= 3 else ""

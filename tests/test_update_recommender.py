@@ -237,7 +237,10 @@ class TestUpdateRecommender:
         # Simulate DNF check-update (exit 100 indicates available updates)
         mock_run.side_effect = [
             MagicMock(returncode=1),  # apt update fail
-            MagicMock(returncode=100, stdout="curl.x86_64 8.5.0 updates"),  # dnf check-update
+            MagicMock(
+                returncode=100,
+                stdout="Last metadata expiration check: 1:00:00 ago\ncurl.x86_64 8.5.0 updates",
+            ),  # dnf check-update
             MagicMock(returncode=0, stdout="Version : 8.4.0"),  # dnf info
         ]
         updates = r.get_available_updates()

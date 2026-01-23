@@ -38,6 +38,7 @@ class TestPackageVersion:
             ("abc:1.2.3", (1, 2, 3, 0, "")),  # Invalid epoch
             ("1.2", (1, 2, 0, 0, "")),
             ("1", (1, 0, 0, 0, "")),
+            ("1.2.3~rc1", (1, 2, 3, 0, "~rc1")),
         ],
     )
     def test_parse(self, version_str, expected):

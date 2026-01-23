@@ -95,7 +95,7 @@ class PackageVersion:
         # Parse major.minor.patch
         major, minor, patch = cls._parse_components(core_ver)
 
-        pr_match = re.search(r"[-+](alpha|beta|rc|dev|pre)[\d.]*", raw_str, re.I)
+        pr_match = re.search(r"[-+~](alpha|beta|rc|dev|pre)[\d.]*", raw_str, re.I)
         pr = pr_match.group(0) if pr_match else ""
 
         return cls(raw_str, major, minor, patch, pr, epoch)
@@ -280,7 +280,7 @@ class UpdateRecommender:
         history: InstallationHistory | None = None,
         memory: ContextMemory | None = None,
         verbose: bool = False,
-    ):
+    ) -> None:
         """
         Initialize the Update Recommender.
 

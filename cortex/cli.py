@@ -5428,6 +5428,29 @@ def main():
         help="Enable verbose output",
     )
 
+    # Netplan Validator
+    netplan_parser = subparsers.add_parser(
+        "netplan", help="Validate and manage Netplan network configuration"
+    )
+    netplan_parser.add_argument(
+        "action", choices=["validate", "diff", "apply", "dry-run"], help="Action to perform"
+    )
+    netplan_parser.add_argument(
+        "config_file", nargs="?", help="Path to netplan config file (auto-detects if not provided)"
+    )
+    netplan_parser.add_argument(
+        "--new-config", help="Path to new config file for diff/apply operations"
+    )
+    netplan_parser.add_argument(
+        "--timeout",
+        type=int,
+        default=60,
+        help="Auto-revert timeout in seconds for dry-run mode (default: 60)",
+    )
+    netplan_parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable verbose output"
+    )
+
     args = parser.parse_args()
 
     # Configure logging based on parsed arguments
@@ -5646,6 +5669,70 @@ def main():
                 action=getattr(args, "action", "check"),
                 verbose=getattr(args, "verbose", False),
             )
+        elif args.command == "netplan":
+            from cortex.netplan_validator import NetplanValidator
+
+            try:
+                validator = NetplanValidator(args.config_file)
+
+                if args.action == "validate":
+                    # Validate configuration
+                    result = validator.validate_file()
+                    validator.print_validation_results(result)
+                    return 0 if result.is_valid else 1
+
+                elif args.action == "diff":
+                    # Show diff between current and new config
+                    if not args.new_config:
+                        console.print("[red]Error: --new-config required for diff[/red]")
+                        return 1
+                    validator.show_diff(args.new_config)
+                    return 0
+
+                elif args.action == "apply":
+                    # Apply new configuration
+                    if not args.new_config:
+                        console.print("[red]Error: --new-config required for apply[/red]")
+                        return 1
+
+                    # Show diff first
+                    validator.show_diff(args.new_config)
+                    console.print()
+
+                    # Confirm with user
+                    from rich.prompt import Confirm
+
+                    if not Confirm.ask("[yellow]Apply this configuration?[/yellow]"):
+                        console.print("[yellow]Cancelled[/yellow]")
+                        return 0
+
+                    success, message = validator.apply_config(args.new_config)
+                    if success:
+                        console.print(f"[green]✓[/green] {message}")
+                        return 0
+                    else:
+                        console.print(f"[red]✗[/red] {message}")
+                        return 1
+
+                elif args.action == "dry-run":
+                    # Dry-run with auto-revert
+                    if not args.new_config:
+                        console.print("[red]Error: --new-config required for dry-run[/red]")
+                        return 1
+
+                    confirmed = validator.dry_run_with_revert(args.new_config, args.timeout)
+                    return 0 if confirmed else 1
+
+            except FileNotFoundError as e:
+                console.print(f"[red]Error:[/red] {str(e)}")
+                return 1
+            except Exception as e:
+                console.print(f"[red]Unexpected error:[/red] {str(e)}")
+                if args.verbose:
+                    import traceback
+
+                    traceback.print_exc()
+                return 1
         else:
             parser.print_help()
             return 1

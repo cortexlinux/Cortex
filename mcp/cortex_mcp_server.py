@@ -203,9 +203,7 @@ class CortexMCPServer:
         try:
             # Use async file reading via asyncio
             loop = asyncio.get_running_loop()
-            content = await loop.run_in_executor(
-                None, lambda: open("/proc/cpuinfo").read()
-            )
+            content = await loop.run_in_executor(None, lambda: open("/proc/cpuinfo").read())
             for line in content.split("\n"):
                 if line.startswith("model name"):
                     hardware["cpu"] = line.split(":")[1].strip()

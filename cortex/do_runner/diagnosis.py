@@ -26,10 +26,35 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from rich.console import Console
 
 console = Console()
+
+
+def _extract_hostname(text: str) -> str | None:
+    """Extract hostname from URL-like string. Returns None if parsing fails."""
+    # Try to extract URL from command (e.g., "docker pull ghcr.io/image")
+    # Look for patterns that look like URLs
+    for part in text.split():
+        if "." in part and not part.startswith("-"):
+            # Likely a URL or hostname
+            try:
+                # Add scheme if missing to help urlparse
+                if not part.startswith(("http://", "https://")):
+                    # Check if it looks like a hostname (contains .io, .com, etc.)
+                    if "." in part:
+                        parsed = urlparse(f"//{part}")
+                        if parsed.hostname:
+                            return parsed.hostname.lower()
+                else:
+                    parsed = urlparse(part)
+                    if parsed.hostname:
+                        return parsed.hostname.lower()
+            except Exception:
+                continue
+    return None
 
 
 # ============================================================================
@@ -2919,9 +2944,18 @@ class LoginHandler:
 
         # Check for specific registries in docker commands
         if "docker" in cmd_lower:
-            if "ghcr.io" in cmd_lower or "ghcr.io" in stderr_lower:
+            # Use proper URL parsing to extract hostname (CodeQL compliance)
+            hostname = _extract_hostname(cmd)
+            if hostname:
+                # Check if hostname ends with registry domain (not substring match)
+                if hostname.endswith("ghcr.io"):
+                    return LOGIN_REQUIREMENTS.get("ghcr")
+                if hostname.endswith("gcr.io"):
+                    return LOGIN_REQUIREMENTS.get("gcloud")
+            # Fallback to substring check for stderr
+            if "ghcr.io" in stderr_lower:
                 return LOGIN_REQUIREMENTS.get("ghcr")
-            if "gcr.io" in cmd_lower or "gcr.io" in stderr_lower:
+            if "gcr.io" in stderr_lower:
                 return LOGIN_REQUIREMENTS.get("gcloud")
             return LOGIN_REQUIREMENTS.get("docker")
 

@@ -12,12 +12,13 @@ import json
 import logging
 import os
 import sqlite3
-import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+from cortex.utils.commands import run_command
 
 logger = logging.getLogger(__name__)
 
@@ -619,9 +620,16 @@ class UndoManager:
                 continue  # Skip comments
 
             try:
-                proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-                if proc.returncode != 0:
-                    errors.append(f"{cmd}: {proc.stderr}")
+                # Detect if shell features are needed (pipes, redirects, etc.)
+                needs_shell = any(shell_feature in cmd for shell_feature in ["|", ">", "<", ">>", "2>", "&&", "||"])
+
+                # Use safe run_command - rollback commands are pre-registered by the system,
+                # so we skip the strict allowlist validation (validate=False) but still
+                # get sanitization and safe execution
+                cmd_result = run_command(cmd, validate=False, use_shell=needs_shell)
+
+                if not cmd_result.success:
+                    errors.append(f"{cmd}: {cmd_result.stderr}")
             except Exception as e:
                 errors.append(f"{cmd}: {str(e)}")
 

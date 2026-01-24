@@ -1,7 +1,5 @@
 import json
 import logging
-import re
-import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from cortex.utils.commands import CommandResult, run_command
 from cortex.utils.retry import (
     DEFAULT_MAX_RETRIES,
     ErrorCategory,
@@ -16,7 +15,6 @@ from cortex.utils.retry import (
     SmartRetry,
     load_strategies_from_env,
 )
-from cortex.validators import DANGEROUS_PATTERNS
 
 logger = logging.getLogger(__name__)
 
@@ -153,91 +151,68 @@ class InstallationCoordinator:
             except Exception:
                 pass
 
-    def _validate_command(self, command: str) -> tuple:
-        """Validate command for security before execution.
-
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        if not command or not command.strip():
-            return False, "Empty command"
-
-        # Check for dangerous patterns
-        for pattern in DANGEROUS_PATTERNS:
-            if re.search(pattern, command, re.IGNORECASE):
-                logger.warning(f"Dangerous command pattern blocked: {pattern}")
-                return False, "Command blocked: matches dangerous pattern"
-
-        return True, None
-
     def _execute_command(self, step: InstallationStep) -> bool:
         step.status = StepStatus.RUNNING
         step.start_time = time.time()
 
         self._log(f"Executing: {step.command}")
 
-        # Validate command before execution
-        is_valid, error = self._validate_command(step.command)
-        if not is_valid:
-            step.status = StepStatus.FAILED
-            step.error = error
-            step.end_time = time.time()
-            self._log(f"Command blocked: {step.command} - {error}")
-            return False
-
-        def run_cmd() -> subprocess.CompletedProcess[str]:
-            # Use shell=True carefully - commands are validated first
-            # For complex shell commands (pipes, redirects), shell=True is needed
-            # Simple commands could use shlex.split() with shell=False
-            return subprocess.run(
-                step.command, shell=True, capture_output=True, text=True, timeout=self.timeout
-            )
-
-        def status_callback(msg: str) -> None:
-            self._log(msg)
-            # Only print to stdout if no progress callback is configured to avoid duplicates
-            if self.progress_callback is None:
-                print(msg)
-
-        # Load strategies and apply CLI override for network errors
-        strategies = load_strategies_from_env()
-        if ErrorCategory.NETWORK_ERROR in strategies:
-            # Create a new instance to avoid mutating the shared default object
-            original_strategy = strategies[ErrorCategory.NETWORK_ERROR]
-            strategies[ErrorCategory.NETWORK_ERROR] = RetryStrategy(
-                max_retries=self.max_retries,
-                backoff_factor=original_strategy.backoff_factor,
-                description=original_strategy.description,
-            )
-
-        retry_handler = SmartRetry(
-            strategies=strategies,
-            status_callback=status_callback,
-        )
+        # Check if command requires shell features (pipes, redirects)
+        shell_chars = ['|', '>', '<', '&', ';', '$(', '`']
+        needs_shell = any(char in step.command for char in shell_chars)
 
         try:
+            def run_cmd() -> CommandResult:
+                """Execute command using safe utilities."""
+                # Coordinator executes user/LLM-generated commands, so we don't enforce
+                # strict allowlist checking. But we do sanitize and use safe shell=False
+                # when possible.
+                return run_command(
+                    step.command,
+                    timeout=self.timeout,
+                    validate=True,  # Always check dangerous patterns
+                    use_shell=needs_shell,
+                    strict=False,  # Don't enforce allowlist (coordinator runs arbitrary commands)
+                    capture_output=True,
+                )
+
+            def status_callback(msg: str) -> None:
+                self._log(msg)
+                # Only print to stdout if no progress callback is configured to avoid duplicates
+                if self.progress_callback is None:
+                    print(msg)
+
+            # Load strategies and apply CLI override for network errors
+            strategies = load_strategies_from_env()
+            if ErrorCategory.NETWORK_ERROR in strategies:
+                # Create a new instance to avoid mutating the shared default object
+                original_strategy = strategies[ErrorCategory.NETWORK_ERROR]
+                strategies[ErrorCategory.NETWORK_ERROR] = RetryStrategy(
+                    max_retries=self.max_retries,
+                    backoff_factor=original_strategy.backoff_factor,
+                    description=original_strategy.description,
+                )
+
+            retry_handler = SmartRetry(
+                strategies=strategies,
+                status_callback=status_callback,
+            )
+
             result = retry_handler.run(run_cmd)
 
-            step.return_code = result.returncode
+            step.return_code = result.return_code
             step.output = result.stdout
             step.error = result.stderr
             step.end_time = time.time()
 
-            if result.returncode == 0:
+            if result.success:
                 step.status = StepStatus.SUCCESS
                 self._log(f"Success: {step.command}")
                 return True
             else:
                 step.status = StepStatus.FAILED
-                self._log(f"Failed: {step.command} (exit code: {result.returncode})")
+                self._log(f"Failed: {step.command} (exit code: {result.return_code})")
                 return False
-
-        except subprocess.TimeoutExpired:
-            step.status = StepStatus.FAILED
-            step.error = f"Command timed out after {self.timeout} seconds"
-            step.end_time = time.time()
-            self._log(f"Timeout: {step.command}")
-            return False
 
         except Exception as e:
             step.status = StepStatus.FAILED
@@ -255,7 +230,11 @@ class InstallationCoordinator:
         for cmd in reversed(self.rollback_commands):
             try:
                 self._log(f"Rollback: {cmd}")
-                subprocess.run(cmd, shell=True, capture_output=True, timeout=self.timeout)
+                # Rollback commands are pre-registered by the user, skip validation
+                # but still use safe execution (sanitize, shell detection)
+                result = run_command(cmd, timeout=self.timeout, validate=False)
+                if not result.success:
+                    self._log(f"Rollback command failed: {cmd} - {result.stderr}")
             except Exception as e:
                 self._log(f"Rollback failed: {cmd} - {str(e)}")
 
@@ -322,10 +301,10 @@ class InstallationCoordinator:
 
         for cmd in verify_commands:
             try:
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-                success = result.returncode == 0
-                verification_results[cmd] = success
-                self._log(f"Verification {cmd}: {'PASS' if success else 'FAIL'}")
+                # Verification commands are simple checks, skip strict validation
+                result = run_command(cmd, timeout=30, validate=False)
+                verification_results[cmd] = result.success
+                self._log(f"Verification {cmd}: {'PASS' if result.success else 'FAIL'}")
             except Exception as e:
                 verification_results[cmd] = False
                 self._log(f"Verification {cmd}: ERROR - {str(e)}")

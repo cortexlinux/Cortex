@@ -23,6 +23,7 @@ from cortex.transaction_history import (
     show_history,
     undo_last,
 )
+from cortex.utils.commands import CommandResult
 
 
 class TestPackageState:
@@ -156,10 +157,10 @@ class TestTransactionHistory:
         assert id1.startswith("tx_")
         assert id1 != id2
 
-    @patch("subprocess.run")
-    def test_begin_transaction(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_begin_transaction(self, mock_run_cmd, history):
         """Test beginning a transaction."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "cortex install nginx")
 
@@ -168,10 +169,10 @@ class TestTransactionHistory:
         assert tx.packages == ["nginx"]
         assert tx.status == TransactionStatus.IN_PROGRESS
 
-    @patch("subprocess.run")
-    def test_complete_transaction_success(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_complete_transaction_success(self, mock_run_cmd, history):
         """Test completing a transaction successfully."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
 
@@ -180,10 +181,10 @@ class TestTransactionHistory:
         assert tx.status == TransactionStatus.COMPLETED
         assert tx.duration_seconds > 0
 
-    @patch("subprocess.run")
-    def test_complete_transaction_failure(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_complete_transaction_failure(self, mock_run_cmd, history):
         """Test completing a failed transaction."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
 
@@ -192,10 +193,10 @@ class TestTransactionHistory:
         assert tx.status == TransactionStatus.FAILED
         assert tx.error_message == "Download failed"
 
-    @patch("subprocess.run")
-    def test_get_transaction(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_get_transaction(self, mock_run_cmd, history):
         """Test retrieving a transaction by ID."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
 
@@ -210,10 +211,10 @@ class TestTransactionHistory:
         result = history.get_transaction("nonexistent_id")
         assert result is None
 
-    @patch("subprocess.run")
-    def test_get_recent(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_get_recent(self, mock_run_cmd, history):
         """Test getting recent transactions."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         # Create multiple transactions
         for pkg in ["nginx", "redis", "postgresql"]:
@@ -226,10 +227,10 @@ class TestTransactionHistory:
         # Most recent should be first
         assert "postgresql" in recent[0].packages
 
-    @patch("subprocess.run")
-    def test_get_recent_with_filter(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_get_recent_with_filter(self, mock_run_cmd, history):
         """Test getting recent with status filter."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx1 = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         history.complete_transaction(tx1, success=True)
@@ -243,10 +244,10 @@ class TestTransactionHistory:
         assert all(t.status == TransactionStatus.COMPLETED for t in completed)
         assert all(t.status == TransactionStatus.FAILED for t in failed)
 
-    @patch("subprocess.run")
-    def test_search_by_package(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_search_by_package(self, mock_run_cmd, history):
         """Test searching by package name."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx1 = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         history.complete_transaction(tx1, success=True)
@@ -259,10 +260,10 @@ class TestTransactionHistory:
         assert len(results) >= 1
         assert all("nginx" in t.packages for t in results)
 
-    @patch("subprocess.run")
-    def test_search_by_type(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_search_by_type(self, mock_run_cmd, history):
         """Test searching by transaction type."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx1 = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         history.complete_transaction(tx1, success=True)
@@ -276,10 +277,10 @@ class TestTransactionHistory:
         assert all(t.transaction_type == TransactionType.INSTALL for t in installs)
         assert all(t.transaction_type == TransactionType.REMOVE for t in removes)
 
-    @patch("subprocess.run")
-    def test_get_stats(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_get_stats(self, mock_run_cmd, history):
         """Test getting statistics."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         history.complete_transaction(tx, success=True)
@@ -319,10 +320,10 @@ class TestUndoManager:
         history = TransactionHistory(tmp_path / "test_history.db")
         return UndoManager(history)
 
-    @patch("subprocess.run")
-    def test_can_undo_completed(self, mock_run, manager):
+    @patch("cortex.transaction_history.run_command")
+    def test_can_undo_completed(self, mock_run_cmd, manager):
         """Test can_undo for completed transaction."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = manager.history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         manager.history.complete_transaction(tx, success=True)
@@ -340,10 +341,10 @@ class TestUndoManager:
         assert can_undo is False
         assert "not found" in reason.lower()
 
-    @patch("subprocess.run")
-    def test_can_undo_failed(self, mock_run, manager):
+    @patch("cortex.transaction_history.run_command")
+    def test_can_undo_failed(self, mock_run_cmd, manager):
         """Test can_undo for failed transaction."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = manager.history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         manager.history.complete_transaction(tx, success=False, error_message="Error")
@@ -352,10 +353,10 @@ class TestUndoManager:
 
         assert can_undo is False
 
-    @patch("subprocess.run")
-    def test_preview_undo(self, mock_run, manager):
+    @patch("cortex.transaction_history.run_command")
+    def test_preview_undo(self, mock_run_cmd, manager):
         """Test previewing an undo operation."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = manager.history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         manager.history.complete_transaction(tx, success=True)
@@ -372,10 +373,10 @@ class TestUndoManager:
 
         assert "error" in preview
 
-    @patch("subprocess.run")
-    def test_undo_dry_run(self, mock_run, manager):
+    @patch("cortex.transaction_history.run_command")
+    def test_undo_dry_run(self, mock_run_cmd, manager):
         """Test undo in dry run mode."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = manager.history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         # Manually add rollback commands
@@ -387,18 +388,18 @@ class TestUndoManager:
         assert result["dry_run"] is True
         assert result["success"] is True
 
-    @patch("subprocess.run")
-    def test_undo_not_found(self, mock_run, manager):
+    @patch("cortex.transaction_history.run_command")
+    def test_undo_not_found(self, mock_run_cmd, manager):
         """Test undo for non-existent transaction."""
         result = manager.undo("nonexistent")
 
         assert result["success"] is False
         assert "not found" in result["error"].lower()
 
-    @patch("subprocess.run")
-    def test_undo_last(self, mock_run, manager):
+    @patch("cortex.transaction_history.run_command")
+    def test_undo_last(self, mock_run_cmd, manager):
         """Test undoing the last transaction."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = manager.history.begin_transaction(TransactionType.INSTALL, ["nginx"], "")
         tx.rollback_commands = ["sudo apt remove -y nginx"]
@@ -479,20 +480,20 @@ class TestGlobalFunctions:
 
         assert m1 is m2
 
-    @patch("subprocess.run")
-    def test_record_install(self, mock_run):
+    @patch("cortex.transaction_history.run_command")
+    def test_record_install(self, mock_run_cmd):
         """Test record_install convenience function."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = record_install(["nginx"], "cortex install nginx")
 
         assert tx is not None
         assert tx.transaction_type == TransactionType.INSTALL
 
-    @patch("subprocess.run")
-    def test_record_remove(self, mock_run):
+    @patch("cortex.transaction_history.run_command")
+    def test_record_remove(self, mock_run_cmd):
         """Test record_remove convenience function."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx = record_remove(["nginx"], "cortex remove nginx")
 
@@ -526,10 +527,10 @@ class TestEdgeCases:
         assert tx.packages == []
         assert tx.before_state == {}
 
-    @patch("subprocess.run")
-    def test_many_packages(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_many_packages(self, mock_run_cmd, history):
         """Test transaction with many packages."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         packages = [f"package_{i}" for i in range(100)]
         tx = history.begin_transaction(TransactionType.INSTALL, packages, "")
@@ -544,10 +545,10 @@ class TestEdgeCases:
 
         assert len(tx.packages) == 3
 
-    @patch("subprocess.run")
-    def test_concurrent_transactions(self, mock_run, history):
+    @patch("cortex.transaction_history.run_command")
+    def test_concurrent_transactions(self, mock_run_cmd, history):
         """Test handling concurrent transactions."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         tx1 = history.begin_transaction(TransactionType.INSTALL, ["pkg1"], "")
         tx2 = history.begin_transaction(TransactionType.INSTALL, ["pkg2"], "")
@@ -573,11 +574,11 @@ class TestIntegration:
         manager = UndoManager(history)
         return history, manager
 
-    @patch("subprocess.run")
-    def test_full_install_undo_workflow(self, mock_run, setup):
+    @patch("cortex.transaction_history.run_command")
+    def test_full_install_undo_workflow(self, mock_run_cmd, setup):
         """Test complete install and undo workflow."""
         history, manager = setup
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=True, stdout="", stderr="", return_code=0, command="test")
 
         # Step 1: Install
         tx = history.begin_transaction(TransactionType.INSTALL, ["nginx"], "cortex install nginx")
@@ -603,11 +604,11 @@ class TestIntegration:
             TransactionStatus.PARTIALLY_COMPLETED,
         ]
 
-    @patch("subprocess.run")
-    def test_batch_operations(self, mock_run, setup):
+    @patch("cortex.transaction_history.run_command")
+    def test_batch_operations(self, mock_run_cmd, setup):
         """Test batch operations."""
         history, manager = setup
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_run_cmd.return_value = CommandResult(success=False, stdout="", stderr="error", return_code=1, command="test")
 
         packages = ["nginx", "redis", "postgresql", "mongodb"]
 

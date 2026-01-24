@@ -1460,25 +1460,18 @@ Respond with ONLY the value, nothing else. If you cannot determine the value, re
             elif "npm" in command.lower():
                 login_cmd = "npm login"
             elif "pip" in command.lower() or "pypi" in host.lower():
-                login_cmd = f"pip config set global.index-url https://{username}:{{password}}@pypi.org/simple/"
+                # SECURITY FIX: Use environment variable instead of embedding password in command
+                # This prevents password exposure in process list
+                index_url = f"https://{username}:{password}@pypi.org/simple/"
+                env = os.environ.copy()
+                env["PIP_INDEX_URL"] = index_url
 
-            if login_cmd:
-                console.print(f"[dim]   Running: {login_cmd}[/dim]")
-
-                # Execute login with password via stdin if needed
-                if "{password}" in login_cmd:
-                    login_cmd = login_cmd.replace("{password}", password)
-                    result = subprocess.run(login_cmd, shell=True, capture_output=True, text=True)
-                else:
-                    # Interactive login
-                    result = subprocess.run(
-                        login_cmd,
-                        shell=True,
-                        input=f"{username}\n{password}\n",
-                        capture_output=True,
-                        text=True,
-                    )
-
+                result = subprocess.run(
+                    ["pip", "config", "set", "global.index-url", index_url],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
                 if result.returncode == 0:
                     # Offer to save credentials
                     if self._login_handler and Confirm.ask(

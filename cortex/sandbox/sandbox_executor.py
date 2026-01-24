@@ -29,6 +29,7 @@ except ImportError:  # pragma: no cover
 from datetime import datetime
 from typing import Any
 
+from cortex.utils.commands import redact_secrets
 from cortex.validators import DANGEROUS_PATTERNS
 
 try:
@@ -582,7 +583,7 @@ class SandboxExecutor:
         try:
             firejail_cmd = self._create_firejail_command(command)
 
-            self.logger.info(f"Executing: {command}")
+            self.logger.info(f"Executing: {redact_secrets(command)}")
 
             # Set resource limits if not using Firejail
             preexec_fn = None
@@ -669,14 +670,14 @@ class SandboxExecutor:
         log_entry = result.to_dict()
         log_entry["type"] = "execution"
         self.audit_log.append(log_entry)
-        self.logger.info(f"Command executed: {result.command} (exit_code={result.exit_code})")
+        self.logger.info(f"Command executed: {redact_secrets(result.command)} (exit_code={result.exit_code})")
 
     def _log_security_event(self, result: ExecutionResult):
         """Log security violation."""
         log_entry = result.to_dict()
         log_entry["type"] = "security_violation"
         self.audit_log.append(log_entry)
-        self.logger.warning(f"Security violation: {result.command} - {result.violation}")
+        self.logger.warning(f"Security violation: {redact_secrets(result.command)} - {result.violation}")
 
     def get_audit_log(self, limit: int | None = None) -> list[dict[str, Any]]:
         """

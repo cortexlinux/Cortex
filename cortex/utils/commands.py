@@ -218,6 +218,89 @@ def sanitize_command(command: str) -> str:
     return command
 
 
+# Patterns to match secrets in commands
+_SECRET_PATTERNS = [
+    # API key environment variables (case-insensitive)
+    r"(?i)\b([a-z0-9_-]*(?:api[-_]?key|apikey|secret|token|password|passwd|pwd|auth|credential)[a-z0-9_-]*=)([^\s'\"&|;]*)",
+    # Common auth token patterns
+    r"(?i)(Bearer\s+)([a-zA-Z0-9_\-\.]+)",
+    # GitHub/GitLab personal access tokens
+    r"(?i)(gh[pr]_|[gx]-.{30,})",
+    # AWS access keys
+    r"(?i)(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}",
+    # Generic high-entropy strings that look like keys (after known prefixes)
+    r"(?i)(--token|--api-key|--password|--secret|--auth|-p\s+)[^\s'\"&|;]{16,}",
+    # URL credentials (https://user:pass@host)
+    r"(?i)(https?://)([^:]+):([^@]+)@",
+    # OpenAI/Anthropic specific
+    r"(?i)(sk-[a-zA-Z0-9]{20,})",
+    r"(?i)(sk-antapi03-[a-zA-Z0-9\-_]{20,})",
+]
+
+
+def redact_secrets(command: str) -> str:
+    """
+    Redact secrets from a command string for safe logging.
+
+    This function identifies and replaces sensitive data like API keys,
+    passwords, tokens, and other credentials with [REDACTED] markers.
+
+    Args:
+        command: The command string that may contain secrets
+
+    Returns:
+        Command string with secrets replaced by [REDACTED]
+    """
+    redacted = command
+
+    # Redact API key env vars
+    redacted = re.sub(
+        r"(?i)(ANTHROPIC_API_KEY|OPENAI_API_KEY|GITHUB_TOKEN|AWS_SECRET)=(\S+)",
+        r"\1=[REDACTED]",
+        redacted,
+    )
+
+    # Redact Bearer tokens
+    redacted = re.sub(r"(?i)Bearer\s+([a-zA-Z0-9_\-\.]+)", r"Bearer [REDACTED]", redacted)
+
+    # Redact common credential flags (--token VALUE, --password=VALUE, etc.)
+    redacted = re.sub(
+        r"(?i)(--?(?:token|api[-_]?key|password|secret|pwd|auth|pass|credential|key)[=\s])([^\s'\"&|;]{4,})",
+        r"\1[REDACTED]",
+        redacted,
+    )
+
+    # Redact MySQL-style -pPASSWORD (password immediately after -p)
+    redacted = re.sub(
+        r"(?i)(-p)([a-zA-Z0-9@#_!$%^*(){}.,~]{4,})(?=\s|$|'|\"|;|/)",
+        r"\1[REDACTED]",
+        redacted,
+    )
+
+    # Redact env var assignments with sensitive names
+    redacted = re.sub(
+        r"(?i)\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY|AUTH|CREDENTIAL|API)[A-Z0-9_]*=)([^\s'\"&|;]+)",
+        r"\1[REDACTED]",
+        redacted,
+    )
+
+    # Redact URL credentials
+    redacted = re.sub(
+        r"(?i)(https?://)([^:@]+):([^@]+)@",
+        r"\1\2:[REDACTED]@",
+        redacted,
+    )
+
+    # Redact OpenAI/Anthropic style keys
+    redacted = re.sub(r"(?i)(sk-[a-zA-Z0-9]{20,})", r"[REDACTED]", redacted)
+    redacted = re.sub(r"(?i)(sk-antapi03-[a-zA-Z0-9\-_]{20,})", r"[REDACTED]", redacted)
+
+    # Redact generic high-entropy strings (32+ chars of mixed case + numbers)
+    redacted = re.sub(r"[A-Za-z0-9+\/]{32,}", "[REDACTED]", redacted)
+
+    return redacted
+
+
 def run_command(
     command: str,
     timeout: int = 300,
@@ -225,6 +308,7 @@ def run_command(
     use_shell: bool = False,
     capture_output: bool = True,
     cwd: str | None = None,
+    strict: bool | None = None,
 ) -> CommandResult:
     """
     Execute a command safely with validation.
@@ -236,6 +320,7 @@ def run_command(
         use_shell: Use shell execution (less secure, only for complex commands)
         capture_output: Capture stdout/stderr
         cwd: Working directory for command execution
+        strict: If True, command must start with allowed prefix. Defaults to validate value.
 
     Returns:
         CommandResult with execution details
@@ -246,9 +331,13 @@ def run_command(
     # Sanitize input
     command = sanitize_command(command)
 
+    # Default strict to validate if not specified
+    if strict is None:
+        strict = validate
+
     # Validate if requested
     if validate:
-        is_valid, error = validate_command(command, strict=True)
+        is_valid, error = validate_command(command, strict=strict)
         if not is_valid:
             raise CommandValidationError(f"Command validation failed: {error}")
 

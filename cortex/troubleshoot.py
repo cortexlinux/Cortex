@@ -27,6 +27,7 @@ from cortex.api_key_detector import auto_detect_api_key
 from cortex.ask import AskHandler
 from cortex.logging_system import CortexLogger
 from cortex.resolutions import ResolutionManager
+from cortex.utils.commands import redact_secrets
 
 console = Console()
 
@@ -136,13 +137,8 @@ class Troubleshooter:
         If Firejail is available, the command is executed in a sandbox
         for additional security since AI-suggested commands are untrusted.
         """
-        # Log the command execution for audit
-        redacted = re.sub(
-            r"(?i)(--?(?:token|api[-_]?key|password|secret)\s+)(\S+)",
-            r"\1***",
-            cmd,
-        )
-        self.logger.info(f"Executing command: {redacted}")
+        # Log the command execution for audit (with secrets redacted)
+        self.logger.info(f"Executing command: {redact_secrets(cmd)}")
 
         # Check if Firejail is available for sandboxing
         use_sandbox = shutil.which("firejail") is not None

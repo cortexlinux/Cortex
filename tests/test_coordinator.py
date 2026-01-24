@@ -14,6 +14,9 @@ from cortex.coordinator import (
     install_docker,
 )
 
+# Import the safe command execution utilities
+from cortex.utils.commands import CommandResult, run_command
+
 
 class TestInstallationStep(unittest.TestCase):
     def test_step_creation(self):
@@ -70,13 +73,12 @@ class TestInstallationCoordinator(unittest.TestCase):
         with self.assertRaises(ValueError):
             InstallationCoordinator(commands, descriptions)
 
-    @patch("subprocess.run")
-    def test_execute_single_success(self, mock_run, mock_sleep):
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "success"
-        mock_result.stderr = ""
-        mock_run.return_value = mock_result
+    @patch("cortex.coordinator.run_command")
+    def test_execute_single_success(self, mock_run_cmd, mock_sleep):
+        mock_result = CommandResult(
+            success=True, stdout="success", stderr="", return_code=0, command="echo test"
+        )
+        mock_run_cmd.return_value = mock_result
 
         coordinator = InstallationCoordinator(["echo test"])
         result = coordinator.execute()
@@ -85,13 +87,12 @@ class TestInstallationCoordinator(unittest.TestCase):
         self.assertEqual(len(result.steps), 1)
         self.assertEqual(result.steps[0].status, StepStatus.SUCCESS)
 
-    @patch("subprocess.run")
-    def test_execute_single_failure(self, mock_run, mock_sleep):
-        mock_result = Mock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "error"
-        mock_run.return_value = mock_result
+    @patch("cortex.coordinator.run_command")
+    def test_execute_single_failure(self, mock_run_cmd, mock_sleep):
+        mock_result = CommandResult(
+            success=False, stdout="", stderr="error", return_code=1, command="false"
+        )
+        mock_run_cmd.return_value = mock_result
 
         coordinator = InstallationCoordinator(["false"])
         result = coordinator.execute()
@@ -100,13 +101,12 @@ class TestInstallationCoordinator(unittest.TestCase):
         self.assertEqual(result.failed_step, 0)
         self.assertEqual(result.steps[0].status, StepStatus.FAILED)
 
-    @patch("subprocess.run")
-    def test_execute_multiple_success(self, mock_run, mock_sleep):
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "success"
-        mock_result.stderr = ""
-        mock_run.return_value = mock_result
+    @patch("cortex.coordinator.run_command")
+    def test_execute_multiple_success(self, mock_run_cmd, mock_sleep):
+        mock_result = CommandResult(
+            success=True, stdout="success", stderr="", return_code=0, command="echo test"
+        )
+        mock_run_cmd.return_value = mock_result
 
         coordinator = InstallationCoordinator(["echo 1", "echo 2", "echo 3"])
         result = coordinator.execute()
@@ -115,24 +115,15 @@ class TestInstallationCoordinator(unittest.TestCase):
         self.assertEqual(len(result.steps), 3)
         self.assertTrue(all(s.status == StepStatus.SUCCESS for s in result.steps))
 
-    @patch("subprocess.run")
-    def test_execute_stop_on_error(self, mock_run, mock_sleep):
-        def side_effect(*args, **kwargs):
-            cmd = args[0] if args else kwargs.get("shell")
-            if "fail" in str(cmd):
-                result = Mock()
-                result.returncode = 1
-                result.stdout = ""
-                result.stderr = "error"
-                return result
+    @patch("cortex.coordinator.run_command")
+    def test_execute_stop_on_error(self, mock_run_cmd, mock_sleep):
+        def side_effect(cmd, *args, **kwargs):
+            if "fail" in cmd:
+                return CommandResult(success=False, stdout="", stderr="error", return_code=1, command=cmd)
             else:
-                result = Mock()
-                result.returncode = 0
-                result.stdout = "success"
-                result.stderr = ""
-                return result
+                return CommandResult(success=True, stdout="success", stderr="", return_code=0, command=cmd)
 
-        mock_run.side_effect = side_effect
+        mock_run_cmd.side_effect = side_effect
 
         coordinator = InstallationCoordinator(["echo 1", "fail", "echo 3"], stop_on_error=True)
         result = coordinator.execute()
@@ -143,24 +134,15 @@ class TestInstallationCoordinator(unittest.TestCase):
         self.assertEqual(result.steps[1].status, StepStatus.FAILED)
         self.assertEqual(result.steps[2].status, StepStatus.SKIPPED)
 
-    @patch("subprocess.run")
-    def test_execute_continue_on_error(self, mock_run, mock_sleep):
-        def side_effect(*args, **kwargs):
-            cmd = args[0] if args else kwargs.get("shell")
-            if "fail" in str(cmd):
-                result = Mock()
-                result.returncode = 1
-                result.stdout = ""
-                result.stderr = "error"
-                return result
+    @patch("cortex.coordinator.run_command")
+    def test_execute_continue_on_error(self, mock_run_cmd, mock_sleep):
+        def side_effect(cmd, *args, **kwargs):
+            if "fail" in cmd:
+                return CommandResult(success=False, stdout="", stderr="error", return_code=1, command=cmd)
             else:
-                result = Mock()
-                result.returncode = 0
-                result.stdout = "success"
-                result.stderr = ""
-                return result
+                return CommandResult(success=True, stdout="success", stderr="", return_code=0, command=cmd)
 
-        mock_run.side_effect = side_effect
+        mock_run_cmd.side_effect = side_effect
 
         coordinator = InstallationCoordinator(["echo 1", "fail", "echo 3"], stop_on_error=False)
         result = coordinator.execute()
@@ -170,9 +152,9 @@ class TestInstallationCoordinator(unittest.TestCase):
         self.assertEqual(result.steps[1].status, StepStatus.FAILED)
         self.assertEqual(result.steps[2].status, StepStatus.SUCCESS)
 
-    @patch("subprocess.run")
-    def test_timeout_handling(self, mock_run, mock_sleep):
-        mock_run.side_effect = Exception("Timeout")
+    @patch("cortex.coordinator.run_command")
+    def test_timeout_handling(self, mock_run_cmd, mock_sleep):
+        mock_run_cmd.side_effect = Exception("Timeout")
 
         coordinator = InstallationCoordinator(["sleep 1000"], timeout=1)
         result = coordinator.execute()
@@ -186,11 +168,10 @@ class TestInstallationCoordinator(unittest.TestCase):
         def callback(current, total, step):
             callback_calls.append((current, total, step.command))
 
-        with patch("subprocess.run") as mock_run:
-            mock_result = Mock()
-            mock_result.returncode = 0
-            mock_result.stdout = "success"
-            mock_result.stderr = ""
+        with patch("cortex.coordinator.run_command") as mock_run:
+            mock_result = CommandResult(
+                success=True, stdout="success", stderr="", return_code=0, command="echo test"
+            )
             mock_run.return_value = mock_result
 
             coordinator = InstallationCoordinator(["echo 1", "echo 2"], progress_callback=callback)
@@ -205,11 +186,10 @@ class TestInstallationCoordinator(unittest.TestCase):
             log_file = f.name
 
         try:
-            with patch("subprocess.run") as mock_run:
-                mock_result = Mock()
-                mock_result.returncode = 0
-                mock_result.stdout = "success"
-                mock_result.stderr = ""
+            with patch("cortex.coordinator.run_command") as mock_run:
+                mock_result = CommandResult(
+                    success=True, stdout="success", stderr="", return_code=0, command="echo test"
+                )
                 mock_run.return_value = mock_result
 
                 coordinator = InstallationCoordinator(["echo test"], log_file=log_file)
@@ -223,28 +203,26 @@ class TestInstallationCoordinator(unittest.TestCase):
             if os.path.exists(log_file):
                 os.unlink(log_file)
 
-    @patch("subprocess.run")
-    def test_rollback(self, mock_run, mock_sleep):
-        mock_result = Mock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "error"
-        mock_run.return_value = mock_result
+    @patch("cortex.coordinator.run_command")
+    def test_rollback(self, mock_run_cmd, mock_sleep):
+        mock_result = CommandResult(
+            success=False, stdout="", stderr="error", return_code=1, command="fail"
+        )
+        mock_run_cmd.return_value = mock_result
 
         coordinator = InstallationCoordinator(["fail"], enable_rollback=True)
         coordinator.add_rollback_command("echo rollback")
         result = coordinator.execute()
 
         self.assertFalse(result.success)
-        self.assertGreaterEqual(mock_run.call_count, 2)
+        self.assertGreaterEqual(mock_run_cmd.call_count, 2)
 
-    @patch("subprocess.run")
-    def test_verify_installation(self, mock_run, mock_sleep):
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Docker version 20.10.0"
-        mock_result.stderr = ""
-        mock_run.return_value = mock_result
+    @patch("cortex.coordinator.run_command")
+    def test_verify_installation(self, mock_run_cmd, mock_sleep):
+        mock_result = CommandResult(
+            success=True, stdout="Docker version 20.10.0", stderr="", return_code=0, command="docker --version"
+        )
+        mock_run_cmd.return_value = mock_result
 
         coordinator = InstallationCoordinator(["echo test"])
         coordinator.execute()
@@ -254,11 +232,10 @@ class TestInstallationCoordinator(unittest.TestCase):
         self.assertTrue(verify_results["docker --version"])
 
     def test_get_summary(self, mock_sleep):
-        with patch("subprocess.run") as mock_run:
-            mock_result = Mock()
-            mock_result.returncode = 0
-            mock_result.stdout = "success"
-            mock_result.stderr = ""
+        with patch("cortex.coordinator.run_command") as mock_run:
+            mock_result = CommandResult(
+                success=True, stdout="success", stderr="", return_code=0, command="echo test"
+            )
             mock_run.return_value = mock_result
 
             coordinator = InstallationCoordinator(["echo 1", "echo 2"])
@@ -276,11 +253,10 @@ class TestInstallationCoordinator(unittest.TestCase):
             export_file = f.name
 
         try:
-            with patch("subprocess.run") as mock_run:
-                mock_result = Mock()
-                mock_result.returncode = 0
-                mock_result.stdout = "success"
-                mock_result.stderr = ""
+            with patch("cortex.coordinator.run_command") as mock_run:
+                mock_result = CommandResult(
+                    success=True, stdout="success", stderr="", return_code=0, command="echo test"
+                )
                 mock_run.return_value = mock_result
 
                 coordinator = InstallationCoordinator(["echo test"])
@@ -299,13 +275,12 @@ class TestInstallationCoordinator(unittest.TestCase):
             if os.path.exists(export_file):
                 os.unlink(export_file)
 
-    @patch("subprocess.run")
-    def test_step_timing(self, mock_run, mock_sleep):
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "success"
-        mock_result.stderr = ""
-        mock_run.return_value = mock_result
+    @patch("cortex.coordinator.run_command")
+    def test_step_timing(self, mock_run_cmd, mock_sleep):
+        mock_result = CommandResult(
+            success=True, stdout="success", stderr="", return_code=0, command="echo test"
+        )
+        mock_run_cmd.return_value = mock_result
 
         coordinator = InstallationCoordinator(["echo test"])
         result = coordinator.execute()
@@ -319,26 +294,24 @@ class TestInstallationCoordinator(unittest.TestCase):
 
 
 class TestInstallDocker(unittest.TestCase):
-    @patch("subprocess.run")
-    def test_install_docker_success(self, mock_run):
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "success"
-        mock_result.stderr = ""
-        mock_run.return_value = mock_result
+    @patch("cortex.coordinator.run_command")
+    def test_install_docker_success(self, mock_run_cmd):
+        mock_result = CommandResult(
+            success=True, stdout="success", stderr="", return_code=0, command="apt update"
+        )
+        mock_run_cmd.return_value = mock_result
 
         result = install_docker()
 
         self.assertTrue(result.success)
         self.assertEqual(len(result.steps), 10)
 
-    @patch("subprocess.run")
-    def test_install_docker_failure(self, mock_run):
-        mock_result = Mock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "error"
-        mock_run.return_value = mock_result
+    @patch("cortex.coordinator.run_command")
+    def test_install_docker_failure(self, mock_run_cmd):
+        mock_result = CommandResult(
+            success=False, stdout="", stderr="error", return_code=1, command="apt update"
+        )
+        mock_run_cmd.return_value = mock_result
 
         result = install_docker()
 

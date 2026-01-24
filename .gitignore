@@ -79,3 +79,4 @@ htmlcov/
 *.log
 logs/
 coverage.xml
+uv.lock

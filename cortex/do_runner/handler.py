@@ -2,6 +2,7 @@
 
 import datetime
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -53,6 +54,7 @@ from .verification import (
     FileUsefulnessAnalyzer,
     VerificationRunner,
 )
+from cortex.utils.commands import redact_secrets, sanitize_command, validate_command
 
 console = Console()
 
@@ -177,10 +179,12 @@ class DoHandler:
     def _track_command_complete(
         self, command: str, success: bool, output: str = "", error: str = ""
     ):
-        """Track when a command completes."""
+        """Track when a command completes. Secrets are redacted for safe logging."""
+        # Redact secrets before storing to prevent credential exposure in logs
+        redacted_command = redact_secrets(command)
         self._executed_commands.append(
             {
-                "command": command,
+                "command": redacted_command,
                 "success": success,
                 "output": output[:500] if output else "",
                 "error": error[:200] if error else "",
@@ -577,9 +581,16 @@ class DoHandler:
                     bufsize=1,  # Line buffered
                 )
             else:
+                # Sanitize and validate command before execution
+                sanitized_cmd = sanitize_command(cmd)
+                is_valid, error_msg = validate_command(sanitized_cmd, strict=False)
+                if not is_valid:
+                    return False, "", f"Command validation failed: {error_msg}"
+
+                # Parse command safely using shlex.split() to prevent shell injection
+                cmd_list = shlex.split(sanitized_cmd)
                 process = subprocess.Popen(
-                    cmd,
-                    shell=True,
+                    cmd_list,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -734,9 +745,17 @@ class DoHandler:
                     text=True,
                 )
             else:
+                # Sanitize and validate command before execution
+                sanitized_cmd = sanitize_command(cmd)
+                is_valid, error_msg = validate_command(sanitized_cmd, strict=False)
+                if not is_valid:
+                    self._track_command_complete(cmd, False, "", f"Command validation failed: {error_msg}")
+                    return False, "", f"Command validation failed: {error_msg}"
+
+                # Parse command safely using shlex.split() to prevent shell injection
+                cmd_list = shlex.split(sanitized_cmd)
                 process = subprocess.Popen(
-                    cmd,
-                    shell=True,
+                    cmd_list,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -797,20 +816,27 @@ class DoHandler:
 
         full_cmd = f"sudo {cmd}" if needs_sudo else cmd
 
-        # Try to detect if we can open a new terminal
+        # Validate the command before executing in terminal
+        sanitized_full_cmd = sanitize_command(full_cmd)
+        is_valid, error_msg = validate_command(sanitized_full_cmd, strict=False)
+        if not is_valid:
+            console.print(f"[{RED}]   Command validation failed: {error_msg}[/{RED}]")
+            return False, "", f"Command validation failed: {error_msg}"
+
+        # Use list-based commands to avoid shell injection
         terminal_cmds = [
             (
                 "gnome-terminal",
-                f'gnome-terminal -- bash -c "{full_cmd}; echo; echo Press Enter to close...; read"',
+                ["gnome-terminal", "--", "bash", "-c", f"{sanitized_full_cmd}; echo; echo Press Enter to close...; read"],
             ),
             (
                 "konsole",
-                f'konsole -e bash -c "{full_cmd}; echo; echo Press Enter to close...; read"',
+                ["konsole", "-e", "bash", "-c", f"{sanitized_full_cmd}; echo; echo Press Enter to close...; read"],
             ),
-            ("xterm", f'xterm -e bash -c "{full_cmd}; echo; echo Press Enter to close...; read"'),
+            ("xterm", ["xterm", "-e", "bash", "-c", f"{sanitized_full_cmd}; echo; echo Press Enter to close...; read"]),
             (
                 "x-terminal-emulator",
-                f'x-terminal-emulator -e bash -c "{full_cmd}; echo; echo Press Enter to close...; read"',
+                ["x-terminal-emulator", "-e", "bash", "-c", f"{sanitized_full_cmd}; echo; echo Press Enter to close...; read"],
             ),
         ]
 
@@ -824,10 +850,9 @@ class DoHandler:
                 console.print()
 
                 try:
-                    # Start the terminal in background
+                    # Start the terminal in background (list-based to avoid shell injection)
                     subprocess.Popen(
                         term_cmd,
-                        shell=True,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )

@@ -502,9 +502,13 @@ mod tests {
     #[test]
     fn test_privacy_config_default() {
         let config = PrivacyConfig::default();
+        // All privacy filters should be ON by default for maximum protection
         assert!(config.filter_passwords);
         assert!(config.filter_tokens);
-        assert!(!config.filter_ip_addresses);
+        assert!(config.filter_ip_addresses);
+        assert!(config.filter_emails);
+        assert!(config.anonymize_usernames);
+        assert!(config.anonymize_hostnames);
     }
 
     #[test]

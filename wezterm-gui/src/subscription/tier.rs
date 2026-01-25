@@ -1,6 +1,6 @@
 //! Subscription tier definitions and limits
 //!
-//! CX Terminal is bundled with Cortex Linux subscriptions.
+//! CX Terminal is bundled with CX Linux subscriptions.
 //! Pricing aligns with cxlinux.ai/pricing:
 //! - Core (Free): 1 system, basic features
 //! - Pro ($19/system): Unlimited systems, commercial use

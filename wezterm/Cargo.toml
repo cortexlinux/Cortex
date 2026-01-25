@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["CX Linux <support@cxlinux.com>"]
 edition = "2018"
 publish = false
-description = "CX Terminal - AI-native terminal for Cortex Linux"
+description = "CX Terminal - AI-native terminal for CX Linux"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

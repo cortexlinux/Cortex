@@ -130,6 +130,7 @@ impl OllamaProvider {
     }
 
     /// Get the tags endpoint URL (for listing models)
+    #[allow(dead_code)]
     fn tags_endpoint(&self) -> String {
         let base = self.config.endpoint.trim_end_matches('/');
         format!("{}/api/tags", base)
@@ -192,6 +193,7 @@ impl OllamaProvider {
     }
 
     /// Check if Ollama server is running
+    #[allow(dead_code)]
     pub async fn check_health(&self) -> Result<bool, AIError> {
         let response = self
             .client
@@ -204,6 +206,7 @@ impl OllamaProvider {
     }
 
     /// List available models
+    #[allow(dead_code)]
     pub async fn list_models(&self) -> Result<Vec<OllamaModel>, AIError> {
         let response = self
             .client
@@ -244,6 +247,7 @@ impl OllamaProvider {
 }
 
 /// Ollama model info
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct OllamaModel {
     pub name: String,

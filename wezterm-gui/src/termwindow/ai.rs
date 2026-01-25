@@ -174,7 +174,7 @@ impl crate::TermWindow {
             .iter()
             .cloned()
             .collect();
-        let system_prompt = Some(action.system_prompt().to_string());
+        let _system_prompt = Some(action.system_prompt().to_string());
         drop(panel);
 
         // For now, we'll need to spawn this async
@@ -240,7 +240,7 @@ impl crate::TermWindow {
             None => return,
         };
 
-        let pane = match mux.get_pane(pane_id) {
+        let _pane = match mux.get_pane(pane_id) {
             Some(p) => p,
             None => return,
         };
@@ -284,7 +284,7 @@ impl crate::TermWindow {
     }
 
     /// Update AI configuration from Lua config
-    pub fn update_ai_config(&mut self, config: &config::ConfigHandle) {
+    pub fn update_ai_config(&mut self, _config: &config::ConfigHandle) {
         // TODO: Read AI config from Lua config
         // For now, use defaults or environment
         let api_key = std::env::var("ANTHROPIC_API_KEY").ok();

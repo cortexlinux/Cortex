@@ -34,6 +34,7 @@ use wezterm_term::color::{ColorAttribute, ColorPalette};
 use wezterm_term::{CellAttributes, Line, StableRowIndex};
 use window::color::LinearRgba;
 
+pub mod blocks;
 pub mod borders;
 pub mod corners;
 pub mod draw;

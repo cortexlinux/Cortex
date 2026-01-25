@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 /// Capabilities that an agent can provide
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AgentCapability {
     /// Can execute shell commands
@@ -22,6 +23,7 @@ pub enum AgentCapability {
 }
 
 /// A request to an agent
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct AgentRequest {
     /// The agent to handle this request
@@ -34,6 +36,7 @@ pub struct AgentRequest {
     pub require_confirmation: bool,
 }
 
+#[allow(dead_code)]
 impl AgentRequest {
     pub fn new(agent: &str, command: &str) -> Self {
         Self {
@@ -56,6 +59,7 @@ impl AgentRequest {
 }
 
 /// A response from an agent
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct AgentResponse {
     /// Whether the operation succeeded
@@ -70,6 +74,7 @@ pub struct AgentResponse {
     pub suggestions: Vec<String>,
 }
 
+#[allow(dead_code)]
 impl AgentResponse {
     pub fn success(result: String) -> Self {
         Self {
@@ -103,6 +108,7 @@ impl AgentResponse {
 }
 
 /// Trait for implementing agents
+#[allow(dead_code)]
 pub trait Agent: Send + Sync {
     /// Get the agent's name
     fn name(&self) -> &str;

@@ -576,6 +576,7 @@ impl Default for BlockRenderer {
 }
 
 /// Information needed to render a block header
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BlockHeaderRenderInfo {
     /// The block being rendered
@@ -598,6 +599,7 @@ pub struct BlockHeaderRenderInfo {
     pub layout: BlockLayout,
 }
 
+#[allow(dead_code)]
 impl BlockHeaderRenderInfo {
     /// Create render info from a block and its layout
     pub fn from_block_and_layout(block: &Block, layout: BlockLayout) -> Self {
@@ -620,6 +622,7 @@ impl BlockHeaderRenderInfo {
 }
 
 /// Generate render info for all visible blocks
+#[allow(dead_code)]
 pub fn collect_render_info(manager: &BlockManager, renderer: &BlockRenderer) -> Vec<BlockHeaderRenderInfo> {
     let mut result = Vec::new();
 

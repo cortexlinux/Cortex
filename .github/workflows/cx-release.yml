@@ -1,0 +1,205 @@
+name: CX Terminal Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: CX Terminal ${{ steps.get_version.outputs.version }}
+          draft: true
+          prerelease: false
+          body: |
+            ## CX Terminal ${{ steps.get_version.outputs.version }}
+
+            ### Downloads
+            - **Linux (x86_64)**: cx-terminal-linux-x86_64.tar.gz
+            - **macOS (Intel)**: cx-terminal-macos-x86_64.tar.gz
+            - **macOS (Apple Silicon)**: cx-terminal-macos-aarch64.tar.gz
+
+            ### Installation
+            ```bash
+            # Linux
+            tar -xzf cx-terminal-linux-x86_64.tar.gz
+            sudo install -Dm755 cx-terminal /usr/bin/cx-terminal
+            sudo install -Dm755 cx-terminal-gui /usr/bin/cx-terminal-gui
+
+            # macOS
+            tar -xzf cx-terminal-macos-*.tar.gz
+            cp cx-terminal cx-terminal-gui /usr/local/bin/
+            ```
+
+            ### Changes
+            See [CHANGELOG.md](https://github.com/cortexlinux/cortex-terminal/blob/main/docs/changelog.md) for details.
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-22.04
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxcb-keysyms1-dev \
+            libxcb-icccm4-dev \
+            libxcb-image0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            libssl-dev \
+            libegl1-mesa-dev
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/wezterm dist/cx-terminal
+          cp target/release/wezterm-gui dist/cx-terminal-gui
+          cp target/release/wezterm-mux-server dist/cx-mux-server
+          cp -r shell-integration dist/
+          cp -r examples dist/
+          cp README.md LICENSE.md dist/
+          tar -czvf cx-terminal-linux-x86_64.tar.gz -C dist .
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./cx-terminal-linux-x86_64.tar.gz
+          asset_name: cx-terminal-linux-x86_64.tar.gz
+          asset_content_type: application/gzip
+
+  build-macos-intel:
+    name: Build macOS (Intel)
+    runs-on: macos-13
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/wezterm dist/cx-terminal
+          cp target/release/wezterm-gui dist/cx-terminal-gui
+          cp target/release/wezterm-mux-server dist/cx-mux-server
+          cp -r shell-integration dist/
+          cp -r examples dist/
+          cp README.md LICENSE.md dist/
+          tar -czvf cx-terminal-macos-x86_64.tar.gz -C dist .
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./cx-terminal-macos-x86_64.tar.gz
+          asset_name: cx-terminal-macos-x86_64.tar.gz
+          asset_content_type: application/gzip
+
+  build-macos-arm:
+    name: Build macOS (Apple Silicon)
+    runs-on: macos-14
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/wezterm dist/cx-terminal
+          cp target/release/wezterm-gui dist/cx-terminal-gui
+          cp target/release/wezterm-mux-server dist/cx-mux-server
+          cp -r shell-integration dist/
+          cp -r examples dist/
+          cp README.md LICENSE.md dist/
+          tar -czvf cx-terminal-macos-aarch64.tar.gz -C dist .
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./cx-terminal-macos-aarch64.tar.gz
+          asset_name: cx-terminal-macos-aarch64.tar.gz
+          asset_content_type: application/gzip
+
+  publish-release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [create-release, build-linux, build-macos-intel, build-macos-arm]
+    steps:
+      - name: Publish release
+        uses: eregon/publish-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          release_id: ${{ needs.create-release.outputs.release_id }}

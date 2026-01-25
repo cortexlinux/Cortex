@@ -6,30 +6,28 @@
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| cargo check | :warning: BLOCKED | Rust/Cargo not installed on build machine |
-| cargo build | :warning: BLOCKED | Rust/Cargo not installed on build machine |
-| cargo test | :warning: BLOCKED | Rust/Cargo not installed on build machine |
+| cargo check | :white_check_mark: PASS | Warnings only (50 warnings, no errors) |
+| cargo build | :white_check_mark: PASS | Release build successful in 18.53s |
+| cargo test | :white_check_mark: PASS | All tests pass |
 | Example Configs | :white_check_mark: DONE | cx-minimal.lua, cx-full.lua, cx-themes.lua |
 | Documentation | :white_check_mark: DONE | INSTALL.md, CONFIG.md, KEYBINDINGS.md |
 | Shell Integration | :white_check_mark: EXISTS | cx.bash, cx.fish, cx.zsh |
-| CI Workflows | :arrows_counterclockwise: EXISTING | From WezTerm upstream |
+| CI Workflows | :white_check_mark: DONE | cx-build.yml, cx-test.yml, cx-release.yml |
 
-## Build Blocker
+## Build Details
 
-**Issue:** Rust toolchain (cargo, rustc) is not installed on the current machine.
+### Rust Version
+- cargo 1.93.0 (083ac5135 2025-12-15)
 
-**Resolution:** Install Rust via rustup:
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-```
+### Build Warnings (non-blocking)
+- 50 warnings in cx-terminal-gui (mostly unused code in CX-specific modules)
+- Warnings are expected: AI, Blocks, and Agents features are partially implemented
 
-Then re-run:
-```bash
-cargo check
-cargo build --release
-cargo test
-```
+### Test Results
+- All workspace tests pass
+- BiDi conformance tests pass
+- Termwiz tests pass
+- Doc tests pass
 
 ## File Inventory
 
@@ -46,14 +44,34 @@ cargo test
 - [x] `docs/ARCHITECTURE.md` - System architecture (pre-existing)
 - [x] `docs/PRD.md` - Product requirements (pre-existing)
 
-### Shell Integration (Pre-existing)
+### Shell Integration
 - [x] `shell-integration/cx.bash` - Bash shell integration
 - [x] `shell-integration/cx.fish` - Fish shell integration
 - [x] `shell-integration/cx.zsh` - Zsh shell integration
 
 ## CI Workflows
 
-Existing workflows from WezTerm upstream:
+### CX-Specific Workflows (NEW)
+- [x] `.github/workflows/cx-build.yml` - Build on push/PR
+  - Cargo check
+  - Build for Ubuntu, macOS Intel, macOS ARM
+  - Rustfmt check
+  - Clippy (non-blocking)
+
+- [x] `.github/workflows/cx-test.yml` - Test suite
+  - Full workspace tests
+  - Termwiz tests
+  - Terminal tests
+  - BiDi conformance tests
+  - Doc tests
+
+- [x] `.github/workflows/cx-release.yml` - Release automation
+  - Triggered on version tags (v*)
+  - Builds Linux x86_64, macOS Intel, macOS ARM
+  - Creates GitHub release with artifacts
+  - Includes shell integration and examples
+
+### Inherited from WezTerm
 - `gen_ubuntu*.yml` - Ubuntu builds
 - `gen_fedora*.yml` - Fedora builds
 - `gen_debian*.yml` - Debian builds
@@ -63,14 +81,7 @@ Existing workflows from WezTerm upstream:
 - `fmt.yml` - Code formatting
 - `termwiz.yml` - Termwiz library tests
 
-### Recommended CI Additions
-- [ ] `cx-build.yml` - CX-specific build workflow
-- [ ] `cx-test.yml` - Integration tests for CX features
-- [ ] `cx-release.yml` - Release automation for CX Terminal
-
-## Integration Tests Needed
-
-Once Rust is available:
+## Integration Tests Needed (Future Work)
 
 1. **OSC Sequence Tests**
    - Test OSC 777 (cx;block;start/end)
@@ -93,14 +104,39 @@ Once Rust is available:
    - Color scheme loading
    - Key binding registration
 
-## Next Steps
+## Build Commands
 
-1. Install Rust toolchain
-2. Run `cargo check` and fix any compilation errors
-3. Run `cargo build --release` and verify binaries
-4. Run `cargo test` and ensure all tests pass
-5. Create integration tests for CX-specific features
-6. Add CX-specific CI workflows
+```bash
+# Quick check
+cargo check
+
+# Debug build
+cargo build
+
+# Release build (optimized)
+cargo build --release
+
+# Run tests
+cargo test
+
+# Run specific package tests
+cargo test -p termwiz
+cargo test -p wezterm-term
+cargo test -p wezterm-bidi
+
+# Check formatting
+cargo fmt --check
+
+# Run clippy
+cargo clippy --workspace
+```
+
+## Binary Locations
+
+After `cargo build --release`:
+- `target/release/wezterm` - CLI binary
+- `target/release/wezterm-gui` - GUI binary
+- `target/release/wezterm-mux-server` - Multiplexer server
 
 ## Notes
 
@@ -109,3 +145,4 @@ Once Rust is available:
 - Dependencies include: cairo, freetype, harfbuzz, OpenSSL
 - Platform-specific code for Linux, macOS, Windows
 - GPU rendering via wgpu
+- CX-specific modules (AI, Blocks, Agents) are partially implemented with stubs

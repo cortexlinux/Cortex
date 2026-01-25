@@ -7,7 +7,7 @@ use crate::blocks::{
     BlockAction, BlockActionResult, BlockId, BlockManager, BlockRenderer, BlockUIElement,
     CXSequence,
 };
-use mux::pane::{CachePolicy, PaneId};
+use mux::pane::PaneId;
 use mux::Mux;
 
 impl crate::TermWindow {

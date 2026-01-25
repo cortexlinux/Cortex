@@ -1,3 +1,4 @@
+use crate::blocks::{BlockActionResult, BlockUIElement};
 use crate::tabbar::TabBarItem;
 use crate::termwindow::{
     GuiWin, MouseCapture, PositionedSplit, ScrollHit, TermWindowNotif, UIItem, UIItemType, TMB,
@@ -6,7 +7,7 @@ use ::window::{
     MouseButtons as WMB, MouseCursor, MouseEvent, MouseEventKind as WMEK, MousePress,
     WindowDecorations, WindowOps, WindowState,
 };
-use config::keyassignment::{KeyAssignment, MouseEventTrigger, SpawnTabDomain};
+use config::keyassignment::{ClipboardCopyDestination, KeyAssignment, MouseEventTrigger, SpawnTabDomain};
 use config::MouseEventAltScreen;
 use mux::pane::{Pane, WithPaneLines};
 use mux::tab::SplitDirection;
@@ -225,6 +226,12 @@ impl super::TermWindow {
             self.current_mouse_capture,
             None | Some(MouseCapture::TerminalPane(_))
         ) {
+            // Check for block interactions before processing terminal mouse events
+            if self.handle_block_mouse_event(&pane, &event, context) {
+                // Block handled the event, don't pass to terminal
+                return;
+            }
+
             self.mouse_event_terminal(
                 pane,
                 ClickPosition {
@@ -247,6 +254,8 @@ impl super::TermWindow {
     pub fn mouse_leave_impl(&mut self, context: &dyn WindowOps) {
         self.current_mouse_event = None;
         self.update_title();
+        // Clear block hover state
+        self.block_renderer.borrow_mut().clear_hover();
         context.set_cursor(Some(MouseCursor::Arrow));
         context.invalidate();
     }
@@ -1040,6 +1049,138 @@ impl super::TermWindow {
             _ => {
                 context.invalidate();
             }
+        }
+    }
+
+    /// Handle mouse events for command blocks
+    ///
+    /// Returns true if the event was consumed by block handling and should not
+    /// be passed to the terminal.
+    fn handle_block_mouse_event(
+        &mut self,
+        pane: &Arc<dyn Pane>,
+        event: &MouseEvent,
+        context: &dyn WindowOps,
+    ) -> bool {
+        let pane_id = pane.pane_id();
+
+        // Get pixel coordinates for hit testing
+        let x = event.coords.x as f32;
+        let y = event.coords.y as f32;
+
+        // Hit test against block UI elements
+        let hit_element = {
+            let renderer = self.block_renderer.borrow();
+            renderer.hit_test(x, y).cloned()
+        };
+
+        let hit_element = match hit_element {
+            Some(element) => element,
+            None => {
+                // No block element hit - update hover state and continue
+                let hover_changed = self.block_renderer.borrow_mut().update_hover(x, y);
+                if hover_changed {
+                    context.invalidate();
+                }
+                return false;
+            }
+        };
+
+        // Update hover state
+        {
+            let hover_changed = self.block_renderer.borrow_mut().update_hover(x, y);
+            if hover_changed {
+                context.invalidate();
+            }
+        }
+
+        // Handle mouse events based on element type
+        match event.kind {
+            WMEK::Press(MousePress::Left) => {
+                // Handle left click on block elements
+                match &hit_element {
+                    BlockUIElement::CollapseToggle(block_id) => {
+                        // Toggle collapse state
+                        self.toggle_block_collapse(pane_id, *block_id);
+                        context.invalidate();
+                        true
+                    }
+                    BlockUIElement::CopyCommand(_) => {
+                        // Copy command to clipboard
+                        if let Some(result) = self.handle_block_click(pane_id, &hit_element) {
+                            match result {
+                                BlockActionResult::CopyToClipboard(text) => {
+                                    self.copy_to_clipboard(ClipboardCopyDestination::Clipboard, text);
+                                }
+                                _ => {}
+                            }
+                        }
+                        context.invalidate();
+                        true
+                    }
+                    BlockUIElement::RerunButton(_) => {
+                        // Re-run the command
+                        if let Some(result) = self.handle_block_click(pane_id, &hit_element) {
+                            match result {
+                                BlockActionResult::ExecuteCommand(cmd) => {
+                                    // Send command to pane
+                                    let _ = pane.send_paste(&format!("{}\n", cmd));
+                                }
+                                _ => {}
+                            }
+                        }
+                        context.invalidate();
+                        true
+                    }
+                    BlockUIElement::ExplainButton(_) => {
+                        // Send to AI panel for explanation
+                        if let Some(result) = self.handle_block_click(pane_id, &hit_element) {
+                            match result {
+                                BlockActionResult::SendToAI(text) => {
+                                    // TODO: Route to AI panel
+                                    log::info!("AI Explain: {}", text);
+                                }
+                                _ => {}
+                            }
+                        }
+                        context.invalidate();
+                        true
+                    }
+                    BlockUIElement::Header(block_id) => {
+                        // Select the block
+                        self.select_block(pane_id, *block_id);
+                        context.invalidate();
+                        // Don't consume - allow text selection within header area
+                        false
+                    }
+                    BlockUIElement::StatusIndicator(_) => {
+                        // Status indicator click - could show details popup
+                        // For now, don't consume
+                        false
+                    }
+                    BlockUIElement::Content(_) | BlockUIElement::Border(_) => {
+                        // Content area clicks pass through to terminal
+                        false
+                    }
+                }
+            }
+            WMEK::Move => {
+                // Update cursor based on hovered element
+                let cursor = match &hit_element {
+                    BlockUIElement::CollapseToggle(_)
+                    | BlockUIElement::CopyCommand(_)
+                    | BlockUIElement::RerunButton(_)
+                    | BlockUIElement::ExplainButton(_) => MouseCursor::Hand,
+                    BlockUIElement::Header(_) | BlockUIElement::StatusIndicator(_) => {
+                        MouseCursor::Arrow
+                    }
+                    BlockUIElement::Content(_) | BlockUIElement::Border(_) => MouseCursor::Text,
+                };
+                context.set_cursor(Some(cursor));
+                // Don't consume move events - allow terminal hover behavior
+                false
+            }
+            _ => false,
         }
     }
 }

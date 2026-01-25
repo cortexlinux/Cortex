@@ -255,6 +255,7 @@ impl crate::TermWindow {
                 }
             }
             self.paint_pane(&pos, &mut layers).context("paint_pane")?;
+            self.paint_blocks(&pos, &mut layers).context("paint_blocks")?;
         }
 
         if let Some(pane) = self.get_active_pane_or_overlay() {

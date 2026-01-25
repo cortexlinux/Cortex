@@ -1279,7 +1279,7 @@ impl TermWindow {
 
                 // CX Terminal: Handle command block alerts
                 MuxNotification::Alert {
-                    alert: Alert::CXBlockStart { command, timestamp },
+                    alert: Alert::CXBlockStart { command, timestamp: _ },
                     pane_id,
                 } => {
                     if self.window_contains_pane(pane_id) {

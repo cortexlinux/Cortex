@@ -14,11 +14,11 @@ mod ollama;
 mod widget;
 
 pub use panel::{AIPanel, AIPanelState, TerminalContext, EnvironmentInfo};
-pub use provider::{AIProvider, AIProviderConfig, AIResponse, AIResponseStream, AIError};
+pub use provider::{AIProvider, AIProviderConfig};
 pub use chat::{ChatMessage, ChatRole, ChatHistory};
 pub use claude::ClaudeProvider;
-pub use ollama::{OllamaProvider, OllamaModel, create_local_provider, DEFAULT_OLLAMA_ENDPOINT};
-pub use widget::{AIPanelWidget, AIPanelColors, RenderedLine, AIPanelUIItem, AIPanelHitTest};
+pub use ollama::{OllamaProvider, create_local_provider};
+pub use widget::{AIPanelWidget, RenderedLine, AIPanelUIItem};
 
 /// AI Panel configuration
 #[derive(Debug, Clone)]

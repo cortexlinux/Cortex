@@ -6,10 +6,14 @@
 mod runtime;
 mod traits;
 
+// Re-exports are available for external use but currently internal-only
+#[allow(unused_imports)]
 pub use runtime::AgentRuntime;
+#[allow(unused_imports)]
 pub use traits::{Agent, AgentCapability, AgentRequest, AgentResponse};
 
 /// Available built-in agents
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinAgent {
     /// System information and management
@@ -28,6 +32,7 @@ pub enum BuiltinAgent {
     Docker,
 }
 
+#[allow(dead_code)]
 impl BuiltinAgent {
     pub fn name(&self) -> &'static str {
         match self {
@@ -92,6 +97,7 @@ impl BuiltinAgent {
 }
 
 /// Example agent commands
+#[allow(dead_code)]
 pub mod examples {
     use super::BuiltinAgent;
 

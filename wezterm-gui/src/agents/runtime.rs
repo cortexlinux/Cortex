@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Runtime for managing agents
+#[allow(dead_code)]
 pub struct AgentRuntime {
     /// Registered agents
     agents: HashMap<String, Arc<dyn Agent>>,
@@ -12,6 +13,7 @@ pub struct AgentRuntime {
     enabled: bool,
 }
 
+#[allow(dead_code)]
 impl AgentRuntime {
     /// Create a new agent runtime
     pub fn new() -> Self {
@@ -93,7 +95,7 @@ impl AgentRuntime {
 
         // Try to match against known agent keywords
         let input_lower = input.to_lowercase();
-        for (name, agent) in &self.agents {
+        for (name, _agent) in &self.agents {
             // Check if the input starts with the agent name
             if input_lower.starts_with(&name.to_lowercase()) {
                 let command = input[name.len()..].trim();

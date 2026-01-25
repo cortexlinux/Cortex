@@ -3,10 +3,10 @@
 //! Renders the AI panel UI as a side panel in the terminal window.
 //! Handles display of chat messages, input field, and loading states.
 
-use super::{AIPanel, AIPanelState, ChatMessage, ChatRole};
+use super::{AIPanel, AIPanelState, ChatRole};
 use config::RgbColor;
 use termwiz::cell::{Cell, CellAttributes};
-use termwiz::color::{AnsiColor, ColorSpec};
+use termwiz::color::ColorSpec;
 
 // CX Terminal: AI Panel Widget implementation
 
@@ -527,7 +527,7 @@ impl AIPanelWidget {
     /// Perform hit testing for mouse events
     pub fn hit_test(
         &self,
-        panel: &AIPanel,
+        _panel: &AIPanel,
         panel_x: usize,
         panel_y: usize,
         panel_width: usize,

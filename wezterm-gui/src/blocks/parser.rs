@@ -1,5 +1,7 @@
 //! OSC Sequence Parser for CX Terminal block markers
 
+// markers module available for reference but currently unused
+#[allow(unused_imports)]
 use super::markers;
 
 /// Parsed CX Terminal OSC sequence
@@ -41,8 +43,10 @@ pub enum CXSequence {
 }
 
 /// Parser for CX Terminal OSC sequences
+#[allow(dead_code)]
 pub struct BlockParser;
 
+#[allow(dead_code)]
 impl BlockParser {
     /// Parse a CX Terminal OSC sequence
     /// Input format: "777;cx;type;key=value;key=value..."
@@ -89,7 +93,7 @@ impl BlockParser {
     }
 
     fn parse_block(params: &std::collections::HashMap<String, String>) -> Option<CXSequence> {
-        let action = params.get("start").or_else(|| params.get("end"));
+        let _action = params.get("start").or_else(|| params.get("end"));
 
         if params.contains_key("start") || params.get("").map(|s| s.as_str()) == Some("start") {
             // Try to get command from either format

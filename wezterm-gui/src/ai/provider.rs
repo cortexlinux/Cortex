@@ -15,6 +15,7 @@ pub struct AIResponse {
 /// Configuration for AI provider
 #[derive(Debug, Clone)]
 pub struct AIProviderConfig {
+    #[allow(dead_code)]
     pub provider_type: AIProviderType,
     pub endpoint: String,
     pub api_key: Option<String>,
@@ -130,6 +131,7 @@ impl std::fmt::Display for AIError {
 impl std::error::Error for AIError {}
 
 /// Format messages for Claude API
+#[allow(dead_code)]
 pub fn format_for_claude(messages: &[ChatMessage], system: Option<&str>) -> serde_json::Value {
     let msgs: Vec<serde_json::Value> = messages
         .iter()
@@ -158,6 +160,7 @@ pub fn format_for_claude(messages: &[ChatMessage], system: Option<&str>) -> serd
 }
 
 /// Format messages for OpenAI API
+#[allow(dead_code)]
 pub fn format_for_openai(messages: &[ChatMessage], system: Option<&str>) -> serde_json::Value {
     let mut msgs: Vec<serde_json::Value> = Vec::new();
 
@@ -185,6 +188,7 @@ pub fn format_for_openai(messages: &[ChatMessage], system: Option<&str>) -> serd
 }
 
 /// Format for Ollama/local LLM
+#[allow(dead_code)]
 pub fn format_for_ollama(messages: &[ChatMessage], system: Option<&str>) -> serde_json::Value {
     // Ollama uses a simpler format
     let prompt = messages

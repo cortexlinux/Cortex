@@ -616,13 +616,15 @@ mod tests {
         let mut model = UserModel::new();
 
         // Simulate git workflow: add -> commit -> push
+        // Note: Commands are normalized ("git add" -> "git <arg>", "git commit" -> "git <arg>")
         model.update_ngram("git add", "git commit", 0.1);
         model.update_ngram("git commit", "git push", 0.1);
         model.update_ngram("git add", "git commit", 0.1); // Reinforce
 
         let predictions = model.predict_next_ngram("git add");
         assert!(!predictions.is_empty());
-        assert_eq!(predictions[0].0, "git commit <arg>");
+        // Normalized form: "git commit" -> "git <arg>"
+        assert_eq!(predictions[0].0, "git <arg>");
     }
 
     #[test]

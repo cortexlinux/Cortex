@@ -49,10 +49,10 @@ impl Default for PrivacyConfig {
             filter_tokens: true,
             filter_ssh_keys: true,
             filter_sensitive_paths: true,
-            filter_ip_addresses: true,  // ON by default for privacy
-            filter_emails: true,        // ON by default for privacy
-            anonymize_usernames: true,  // ON by default for privacy
-            anonymize_hostnames: true,  // ON by default for privacy
+            filter_ip_addresses: true, // ON by default for privacy
+            filter_emails: true,       // ON by default for privacy
+            anonymize_usernames: true, // ON by default for privacy
+            anonymize_hostnames: true, // ON by default for privacy
             custom_patterns: Vec::new(),
             sensitive_dirs: vec![
                 ".ssh".to_string(),
@@ -160,11 +160,9 @@ impl PrivacyFilter {
             }
 
             // AWS keys
-            if let Some(p) = SensitivePattern::new(
-                "aws_key",
-                r"AKIA[0-9A-Z]{16}",
-                "[AWS_KEY_FILTERED]",
-            ) {
+            if let Some(p) =
+                SensitivePattern::new("aws_key", r"AKIA[0-9A-Z]{16}", "[AWS_KEY_FILTERED]")
+            {
                 self.patterns.push(p);
             }
 
@@ -187,11 +185,9 @@ impl PrivacyFilter {
             }
 
             // Generic long hex strings (likely tokens)
-            if let Some(p) = SensitivePattern::new(
-                "hex_token",
-                r"\b[a-fA-F0-9]{32,}\b",
-                "[TOKEN_FILTERED]",
-            ) {
+            if let Some(p) =
+                SensitivePattern::new("hex_token", r"\b[a-fA-F0-9]{32,}\b", "[TOKEN_FILTERED]")
+            {
                 self.patterns.push(p);
             }
         }
@@ -434,7 +430,12 @@ impl PrivacyFilter {
             return true;
         }
 
-        if cmd_lower.contains("export") && self.sensitive_env_vars.iter().any(|v| cmd_lower.contains(&v.to_lowercase())) {
+        if cmd_lower.contains("export")
+            && self
+                .sensitive_env_vars
+                .iter()
+                .any(|v| cmd_lower.contains(&v.to_lowercase()))
+        {
             return true;
         }
 

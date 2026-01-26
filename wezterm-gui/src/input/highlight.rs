@@ -85,29 +85,79 @@ struct Token {
 
 /// Shell keywords
 const KEYWORDS: &[&str] = &[
-    "if", "then", "else", "elif", "fi",
-    "case", "esac", "for", "in", "do", "done",
-    "while", "until", "function", "select",
-    "time", "coproc", "return", "exit",
-    "break", "continue", "local", "export",
-    "declare", "typeset", "readonly", "unset",
+    "if", "then", "else", "elif", "fi", "case", "esac", "for", "in", "do", "done", "while",
+    "until", "function", "select", "time", "coproc", "return", "exit", "break", "continue",
+    "local", "export", "declare", "typeset", "readonly", "unset",
 ];
 
 /// Common command names (partial list for highlighting first command)
 const COMMON_COMMANDS: &[&str] = &[
-    "ls", "cd", "pwd", "mkdir", "rmdir", "rm", "cp", "mv",
-    "cat", "less", "more", "head", "tail", "grep", "find",
-    "echo", "printf", "read", "source", ".", "exec",
-    "git", "docker", "npm", "cargo", "python", "node",
-    "sudo", "su", "ssh", "scp", "rsync",
-    "vim", "nano", "emacs", "code",
-    "make", "cmake", "gcc", "clang",
-    "curl", "wget", "ping", "nc", "telnet",
-    "ps", "top", "htop", "kill", "killall",
-    "tar", "gzip", "gunzip", "zip", "unzip",
-    "chmod", "chown", "chgrp",
-    "apt", "yum", "dnf", "pacman", "brew",
-    "systemctl", "service", "journalctl",
+    "ls",
+    "cd",
+    "pwd",
+    "mkdir",
+    "rmdir",
+    "rm",
+    "cp",
+    "mv",
+    "cat",
+    "less",
+    "more",
+    "head",
+    "tail",
+    "grep",
+    "find",
+    "echo",
+    "printf",
+    "read",
+    "source",
+    ".",
+    "exec",
+    "git",
+    "docker",
+    "npm",
+    "cargo",
+    "python",
+    "node",
+    "sudo",
+    "su",
+    "ssh",
+    "scp",
+    "rsync",
+    "vim",
+    "nano",
+    "emacs",
+    "code",
+    "make",
+    "cmake",
+    "gcc",
+    "clang",
+    "curl",
+    "wget",
+    "ping",
+    "nc",
+    "telnet",
+    "ps",
+    "top",
+    "htop",
+    "kill",
+    "killall",
+    "tar",
+    "gzip",
+    "gunzip",
+    "zip",
+    "unzip",
+    "chmod",
+    "chown",
+    "chgrp",
+    "apt",
+    "yum",
+    "dnf",
+    "pacman",
+    "brew",
+    "systemctl",
+    "service",
+    "journalctl",
 ];
 
 /// Syntax highlighter for shell commands
@@ -288,8 +338,8 @@ impl SyntaxHighlighter {
                     pos += 1;
 
                     // Check if it looks like a flag
-                    let is_flag = pos < chars.len()
-                        && (chars[pos].is_alphanumeric() || chars[pos] == '-');
+                    let is_flag =
+                        pos < chars.len() && (chars[pos].is_alphanumeric() || chars[pos] == '-');
 
                     while pos < chars.len()
                         && !chars[pos].is_whitespace()
@@ -409,8 +459,7 @@ impl SyntaxHighlighter {
             };
 
             // Update first_word tracking
-            if token.token_type != TokenType::Whitespace
-                && token.token_type != TokenType::Operator
+            if token.token_type != TokenType::Whitespace && token.token_type != TokenType::Operator
             {
                 is_first_word = false;
             }
@@ -450,17 +499,17 @@ impl HighlightStyle {
     /// Get RGB color for this style (r, g, b)
     pub fn to_rgb(&self) -> (u8, u8, u8) {
         match self {
-            HighlightStyle::Default => (204, 204, 204),    // Light gray
-            HighlightStyle::Command => (129, 199, 132),     // Green
-            HighlightStyle::Argument => (204, 204, 204),    // Light gray
-            HighlightStyle::Flag => (77, 208, 225),         // Cyan
-            HighlightStyle::String => (255, 213, 79),       // Yellow
-            HighlightStyle::Path => (100, 181, 246),        // Blue
-            HighlightStyle::Variable => (206, 147, 216),    // Magenta
-            HighlightStyle::Comment => (128, 128, 128),     // Gray
-            HighlightStyle::Operator => (255, 255, 255),    // White
-            HighlightStyle::Error => (239, 83, 80),         // Red
-            HighlightStyle::Keyword => (186, 104, 200),     // Purple
+            HighlightStyle::Default => (204, 204, 204),  // Light gray
+            HighlightStyle::Command => (129, 199, 132),  // Green
+            HighlightStyle::Argument => (204, 204, 204), // Light gray
+            HighlightStyle::Flag => (77, 208, 225),      // Cyan
+            HighlightStyle::String => (255, 213, 79),    // Yellow
+            HighlightStyle::Path => (100, 181, 246),     // Blue
+            HighlightStyle::Variable => (206, 147, 216), // Magenta
+            HighlightStyle::Comment => (128, 128, 128),  // Gray
+            HighlightStyle::Operator => (255, 255, 255), // White
+            HighlightStyle::Error => (239, 83, 80),      // Red
+            HighlightStyle::Keyword => (186, 104, 200),  // Purple
         }
     }
 
@@ -468,9 +517,7 @@ impl HighlightStyle {
     pub fn is_bold(&self) -> bool {
         matches!(
             self,
-            HighlightStyle::Command
-                | HighlightStyle::Keyword
-                | HighlightStyle::Operator
+            HighlightStyle::Command | HighlightStyle::Keyword | HighlightStyle::Operator
         )
     }
 }

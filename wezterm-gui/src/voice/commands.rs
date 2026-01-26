@@ -158,17 +158,8 @@ impl Default for CommandTriggers {
     fn default() -> Self {
         Self {
             execute: vec![
-                "run",
-                "execute",
-                "do",
-                "perform",
-                "launch",
-                "start",
-                "open",
-                "show",
-                "list",
-                "get",
-                "check",
+                "run", "execute", "do", "perform", "launch", "start", "open", "show", "list",
+                "get", "check",
             ],
             explain: vec![
                 "explain",
@@ -279,10 +270,7 @@ impl VoiceCommandHandler {
 
         // Check for agent routing
         if let Some((agent, query)) = self.extract_agent(&text) {
-            return Some(VoiceCommand::Agent {
-                name: agent,
-                query,
-            });
+            return Some(VoiceCommand::Agent { name: agent, query });
         }
 
         // Check for direct command execution
@@ -357,8 +345,9 @@ impl VoiceCommandHandler {
     /// Execute a voice command
     pub fn execute(&self, command: &VoiceCommand) -> VoiceCommandResult {
         match command {
-            VoiceCommand::Execute(cmd) => VoiceCommandResult::success("Command ready to execute")
-                .with_command(cmd.clone()),
+            VoiceCommand::Execute(cmd) => {
+                VoiceCommandResult::success("Command ready to execute").with_command(cmd.clone())
+            }
 
             VoiceCommand::Explain(topic) => {
                 VoiceCommandResult::success(format!("Explaining: {}", topic))
@@ -372,10 +361,9 @@ impl VoiceCommandHandler {
                 VoiceCommandResult::success(format!("Finding suggestions for: {}", task))
             }
 
-            VoiceCommand::Agent { name, query } => VoiceCommandResult::success(format!(
-                "Routing to {} agent: {}",
-                name, query
-            )),
+            VoiceCommand::Agent { name, query } => {
+                VoiceCommandResult::success(format!("Routing to {} agent: {}", name, query))
+            }
 
             VoiceCommand::ToggleAI => VoiceCommandResult::success("Toggling AI panel"),
 

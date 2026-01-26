@@ -14,13 +14,13 @@ pub mod protocol;
 
 pub use agent_router::DaemonAgentRouter;
 pub use client::{
-    CXDaemonClient, ConnectionState, ConnectionStateEvent, ReconnectConfig,
-    AIResponse as DaemonAIResponse, AgentResponse as DaemonAgentResponse,
-    AgentResult, DaemonStatus, SystemInfo,
+    AIResponse as DaemonAIResponse, AgentResponse as DaemonAgentResponse, AgentResult,
+    CXDaemonClient, ConnectionState, ConnectionStateEvent, DaemonStatus, ReconnectConfig,
+    SystemInfo,
 };
 pub use protocol::{
-    AgentTask, ContextType, DaemonError, DaemonRequest, DaemonResponse,
-    TerminalContext, EnvironmentInfo, GitInfo,
+    AgentTask, ContextType, DaemonError, DaemonRequest, DaemonResponse, EnvironmentInfo, GitInfo,
+    TerminalContext,
 };
 
 /// Default socket path for the CX daemon

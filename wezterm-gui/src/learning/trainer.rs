@@ -243,10 +243,7 @@ impl LocalTrainer {
 
         for cmd in commands {
             let hour = cmd.timestamp.hour();
-            by_hour
-                .entry(hour)
-                .or_default()
-                .push(cmd.command.clone());
+            by_hour.entry(hour).or_default().push(cmd.command.clone());
         }
 
         // Update time patterns in model
@@ -270,10 +267,7 @@ impl LocalTrainer {
                 // Extract project root (first 2-3 path components after home)
                 let project_key = self.extract_project_key(dir);
                 if let Some(key) = project_key {
-                    by_project
-                        .entry(key)
-                        .or_default()
-                        .push(cmd.command.clone());
+                    by_project.entry(key).or_default().push(cmd.command.clone());
                 }
             }
         }
@@ -302,8 +296,7 @@ impl LocalTrainer {
         }
 
         // Fall back to last directory component
-        path.file_name()
-            .map(|n| n.to_string_lossy().to_string())
+        path.file_name().map(|n| n.to_string_lossy().to_string())
     }
 
     /// Learn error patterns
@@ -425,7 +418,10 @@ impl LocalTrainer {
                 // Only learn if commands seem related
                 if prev_base == curr_base
                     || curr.command.contains(prev_base)
-                    || prev.command.len() < 50 && curr.command.contains(&prev.command[..prev.command.len().min(20)])
+                    || prev.command.len() < 50
+                        && curr
+                            .command
+                            .contains(&prev.command[..prev.command.len().min(20)])
                 {
                     let error_msg = prev
                         .output

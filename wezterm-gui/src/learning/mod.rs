@@ -214,7 +214,10 @@ impl LearningSystem {
         let filtered_error = self.privacy_filter.filter_output(error);
         let filtered_command = command.map(|c| self.privacy_filter.filter_command(c));
 
-        if let Err(e) = self.collector.record_error(&filtered_error, filtered_command.as_deref()) {
+        if let Err(e) = self
+            .collector
+            .record_error(&filtered_error, filtered_command.as_deref())
+        {
             log::warn!("Failed to record error: {}", e);
         }
     }
@@ -294,8 +297,8 @@ impl LearningSystem {
 
     /// Clean up old data
     fn cleanup_old_data(&self) {
-        let cutoff = chrono::Utc::now()
-            - chrono::Duration::days(self.config.max_data_age_days as i64);
+        let cutoff =
+            chrono::Utc::now() - chrono::Duration::days(self.config.max_data_age_days as i64);
 
         if let Err(e) = self.collector.cleanup_before(cutoff) {
             log::warn!("Failed to cleanup old data: {}", e);

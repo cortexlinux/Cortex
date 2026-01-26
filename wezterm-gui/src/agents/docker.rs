@@ -66,7 +66,11 @@ pub enum DockerCommand {
     /// Remove a container
     Remove { container: String, force: bool },
     /// View container logs
-    Logs { container: String, tail: Option<usize>, follow: bool },
+    Logs {
+        container: String,
+        tail: Option<usize>,
+        follow: bool,
+    },
     /// Execute command in container
     Exec { container: String, command: String },
     /// Inspect container
@@ -80,7 +84,12 @@ pub enum DockerCommand {
     /// Build image
     Build { tag: Option<String>, path: String },
     /// Run a new container
-    Run { image: String, name: Option<String>, ports: Vec<String>, detach: bool },
+    Run {
+        image: String,
+        name: Option<String>,
+        ports: Vec<String>,
+        detach: bool,
+    },
     /// Show container stats
     Stats,
     /// Prune unused resources
@@ -105,7 +114,8 @@ impl DockerCommand {
 
         // List containers
         if input_lower.contains("container") && input_lower.contains("list")
-            || input_lower == "ps" || input_lower.contains("docker ps")
+            || input_lower == "ps"
+            || input_lower.contains("docker ps")
         {
             let all = input_lower.contains("all") || input_lower.contains("-a");
             return Self::ListContainers { all };
@@ -116,7 +126,8 @@ impl DockerCommand {
             if input_lower.contains("down") {
                 return Self::ComposeDown;
             }
-            let detach = input_lower.contains("-d") || input_lower.contains("detach")
+            let detach = input_lower.contains("-d")
+                || input_lower.contains("detach")
                 || input_lower.contains("background");
             return Self::ComposeUp { detach };
         }
@@ -155,11 +166,13 @@ impl DockerCommand {
         // Logs
         if input_lower.contains("log") {
             let follow = input_lower.contains("follow") || input_lower.contains("-f");
-            let tail = words.iter()
-                .filter_map(|w| w.parse::<usize>().ok())
-                .next();
+            let tail = words.iter().filter_map(|w| w.parse::<usize>().ok()).next();
             if let Some(container) = Self::extract_container_name(&words, "logs") {
-                return Self::Logs { container, tail, follow };
+                return Self::Logs {
+                    container,
+                    tail,
+                    follow,
+                };
             }
         }
 
@@ -170,14 +183,22 @@ impl DockerCommand {
                     "/bin/sh".to_string()
                 } else {
                     // Try to extract command after container name
-                    words.iter()
-                        .skip_while(|&w| w.to_lowercase() != "exec" && w.to_lowercase() != container.to_lowercase())
+                    words
+                        .iter()
+                        .skip_while(|&w| {
+                            w.to_lowercase() != "exec"
+                                && w.to_lowercase() != container.to_lowercase()
+                        })
                         .skip(2)
                         .map(|s| *s)
                         .collect::<Vec<_>>()
                         .join(" ")
                 };
-                let command = if command.is_empty() { "/bin/sh".to_string() } else { command };
+                let command = if command.is_empty() {
+                    "/bin/sh".to_string()
+                } else {
+                    command
+                };
                 return Self::Exec { container, command };
             }
         }
@@ -190,8 +211,7 @@ impl DockerCommand {
         }
 
         // List images
-        if input_lower.contains("image") && input_lower.contains("list")
-            || input_lower == "images"
+        if input_lower.contains("image") && input_lower.contains("list") || input_lower == "images"
         {
             return Self::ListImages;
         }
@@ -215,11 +235,13 @@ impl DockerCommand {
 
         // Build
         if input_lower.contains("build") {
-            let tag = words.iter()
+            let tag = words
+                .iter()
                 .position(|&w| w == "-t" || w == "--tag")
                 .and_then(|i| words.get(i + 1))
                 .map(|s| s.to_string());
-            let path = words.last()
+            let path = words
+                .last()
                 .filter(|w| w.starts_with('.') || w.starts_with('/'))
                 .map(|s| s.to_string())
                 .unwrap_or(".".to_string());
@@ -228,9 +250,11 @@ impl DockerCommand {
 
         // Run
         if input_lower.contains("run") {
-            let detach = input_lower.contains("-d") || input_lower.contains("detach")
+            let detach = input_lower.contains("-d")
+                || input_lower.contains("detach")
                 || input_lower.contains("background");
-            let name = words.iter()
+            let name = words
+                .iter()
                 .position(|&w| w == "--name")
                 .and_then(|i| words.get(i + 1))
                 .map(|s| s.to_string());
@@ -250,7 +274,12 @@ impl DockerCommand {
             }
 
             if let Some(image) = Self::extract_image_name(&words, "run") {
-                return Self::Run { image, name, ports, detach };
+                return Self::Run {
+                    image,
+                    name,
+                    ports,
+                    detach,
+                };
             }
         }
 
@@ -272,7 +301,9 @@ impl DockerCommand {
             } else {
                 "system"
             };
-            return Self::Prune { what: what.to_string() };
+            return Self::Prune {
+                what: what.to_string(),
+            };
         }
 
         // Networks
@@ -295,7 +326,8 @@ impl DockerCommand {
 
     /// Extract container name from words
     fn extract_container_name(words: &[&str], after_keyword: &str) -> Option<String> {
-        words.iter()
+        words
+            .iter()
             .skip_while(|&w| w.to_lowercase() != after_keyword)
             .nth(1)
             .or_else(|| words.last())
@@ -304,7 +336,8 @@ impl DockerCommand {
 
     /// Extract image name from words
     fn extract_image_name(words: &[&str], after_keyword: &str) -> Option<String> {
-        words.iter()
+        words
+            .iter()
             .skip_while(|&w| w.to_lowercase() != after_keyword)
             .nth(1)
             .filter(|w| !w.starts_with('-'))
@@ -341,7 +374,10 @@ impl DockerAgent {
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.is_empty() {
-                        Err(format!("Command failed with exit code: {:?}", output.status.code()))
+                        Err(format!(
+                            "Command failed with exit code: {:?}",
+                            output.status.code()
+                        ))
                     } else {
                         Err(stderr.to_string())
                     }
@@ -362,14 +398,22 @@ impl DockerAgent {
             return AgentResponse::error("No container runtime found (docker/podman)".to_string());
         }
 
-        let mut args = vec!["ps", "--format", "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}"];
+        let mut args = vec![
+            "ps",
+            "--format",
+            "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}",
+        ];
         if all {
             args.insert(1, "-a");
         }
 
         match self.execute_docker(&args) {
             Ok(output) => {
-                let cmd = format!("{} ps{}", self.runtime.command(), if all { " -a" } else { "" });
+                let cmd = format!(
+                    "{} ps{}",
+                    self.runtime.command(),
+                    if all { " -a" } else { "" }
+                );
                 let result = if output.trim().is_empty() || output.lines().count() <= 1 {
                     "No containers found".to_string()
                 } else {
@@ -393,14 +437,16 @@ impl DockerAgent {
         }
 
         match self.execute_docker(&["start", container]) {
-            Ok(_) => {
-                AgentResponse::success(format!("Started container: {}", container))
-                    .with_commands(vec![format!("{} start {}", self.runtime.command(), container)])
-                    .with_suggestions(vec![
-                        format!("logs {}", container),
-                        "list containers".to_string(),
-                    ])
-            }
+            Ok(_) => AgentResponse::success(format!("Started container: {}", container))
+                .with_commands(vec![format!(
+                    "{} start {}",
+                    self.runtime.command(),
+                    container
+                )])
+                .with_suggestions(vec![
+                    format!("logs {}", container),
+                    "list containers".to_string(),
+                ]),
             Err(e) => AgentResponse::error(e),
         }
     }
@@ -413,8 +459,9 @@ impl DockerAgent {
 
         match self.execute_docker(&["stop", container]) {
             Ok(_) => {
-                AgentResponse::success(format!("Stopped container: {}", container))
-                    .with_commands(vec![format!("{} stop {}", self.runtime.command(), container)])
+                AgentResponse::success(format!("Stopped container: {}", container)).with_commands(
+                    vec![format!("{} stop {}", self.runtime.command(), container)],
+                )
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -428,8 +475,9 @@ impl DockerAgent {
 
         match self.execute_docker(&["restart", container]) {
             Ok(_) => {
-                AgentResponse::success(format!("Restarted container: {}", container))
-                    .with_commands(vec![format!("{} restart {}", self.runtime.command(), container)])
+                AgentResponse::success(format!("Restarted container: {}", container)).with_commands(
+                    vec![format!("{} restart {}", self.runtime.command(), container)],
+                )
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -477,8 +525,7 @@ impl DockerAgent {
         match self.execute_docker(&args) {
             Ok(output) => {
                 let cmd = format!("{} {}", self.runtime.command(), args.join(" "));
-                AgentResponse::success(output)
-                    .with_commands(vec![cmd])
+                AgentResponse::success(output).with_commands(vec![cmd])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -490,7 +537,12 @@ impl DockerAgent {
             return AgentResponse::error("No container runtime found".to_string());
         }
 
-        let cmd = format!("{} exec -it {} {}", self.runtime.command(), container, command);
+        let cmd = format!(
+            "{} exec -it {} {}",
+            self.runtime.command(),
+            container,
+            command
+        );
 
         AgentResponse::success(format!(
             "To execute in container '{}', run:\n\n  {}\n\nThis opens an interactive session.",
@@ -508,8 +560,7 @@ impl DockerAgent {
         match self.execute_docker(&["inspect", container]) {
             Ok(output) => {
                 let cmd = format!("{} inspect {}", self.runtime.command(), container);
-                AgentResponse::success(output)
-                    .with_commands(vec![cmd])
+                AgentResponse::success(output).with_commands(vec![cmd])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -521,7 +572,11 @@ impl DockerAgent {
             return AgentResponse::error("No container runtime found".to_string());
         }
 
-        match self.execute_docker(&["images", "--format", "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.ID}}"]) {
+        match self.execute_docker(&[
+            "images",
+            "--format",
+            "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.ID}}",
+        ]) {
             Ok(output) => {
                 let cmd = format!("{} images", self.runtime.command());
                 AgentResponse::success(output)
@@ -589,7 +644,13 @@ impl DockerAgent {
     }
 
     /// Run a container
-    fn run_container(&self, image: &str, name: Option<&str>, ports: &[String], detach: bool) -> AgentResponse {
+    fn run_container(
+        &self,
+        image: &str,
+        name: Option<&str>,
+        ports: &[String],
+        detach: bool,
+    ) -> AgentResponse {
         if !self.is_available() {
             return AgentResponse::error("No container runtime found".to_string());
         }
@@ -620,11 +681,15 @@ impl DockerAgent {
         }
 
         // Use --no-stream to get a single snapshot
-        match self.execute_docker(&["stats", "--no-stream", "--format", "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}"]) {
+        match self.execute_docker(&[
+            "stats",
+            "--no-stream",
+            "--format",
+            "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}",
+        ]) {
             Ok(output) => {
                 let cmd = format!("{} stats --no-stream", self.runtime.command());
-                AgentResponse::success(output)
-                    .with_commands(vec![cmd])
+                AgentResponse::success(output).with_commands(vec![cmd])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -660,8 +725,7 @@ impl DockerAgent {
         match self.execute_docker(&["network", "ls"]) {
             Ok(output) => {
                 let cmd = format!("{} network ls", self.runtime.command());
-                AgentResponse::success(output)
-                    .with_commands(vec![cmd])
+                AgentResponse::success(output).with_commands(vec![cmd])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -676,8 +740,7 @@ impl DockerAgent {
         match self.execute_docker(&["volume", "ls"]) {
             Ok(output) => {
                 let cmd = format!("{} volume ls", self.runtime.command());
-                AgentResponse::success(output)
-                    .with_commands(vec![cmd])
+                AgentResponse::success(output).with_commands(vec![cmd])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -746,9 +809,7 @@ impl Agent for DockerAgent {
 
     fn can_handle(&self, request: &AgentRequest) -> bool {
         // Handle if explicitly targeted at docker agent
-        if request.agent == "docker" || request.agent == "container"
-            || request.agent == "podman"
-        {
+        if request.agent == "docker" || request.agent == "container" || request.agent == "podman" {
             return true;
         }
 
@@ -770,18 +831,25 @@ impl Agent for DockerAgent {
             DockerCommand::Stop { container } => self.stop_container(&container),
             DockerCommand::Restart { container } => self.restart_container(&container),
             DockerCommand::Remove { container, force } => self.remove_container(&container, force),
-            DockerCommand::Logs { container, tail, follow } => {
-                self.container_logs(&container, tail, follow)
+            DockerCommand::Logs {
+                container,
+                tail,
+                follow,
+            } => self.container_logs(&container, tail, follow),
+            DockerCommand::Exec { container, command } => {
+                self.exec_in_container(&container, &command)
             }
-            DockerCommand::Exec { container, command } => self.exec_in_container(&container, &command),
             DockerCommand::Inspect { container } => self.inspect_container(&container),
             DockerCommand::ListImages => self.list_images(),
             DockerCommand::Pull { image } => self.pull_image(&image),
             DockerCommand::RemoveImage { image, force } => self.remove_image(&image, force),
             DockerCommand::Build { tag, path } => self.build_image(tag.as_deref(), &path),
-            DockerCommand::Run { image, name, ports, detach } => {
-                self.run_container(&image, name.as_deref(), &ports, detach)
-            }
+            DockerCommand::Run {
+                image,
+                name,
+                ports,
+                detach,
+            } => self.run_container(&image, name.as_deref(), &ports, detach),
             DockerCommand::Stats => self.container_stats(),
             DockerCommand::Prune { what } => self.prune(&what),
             DockerCommand::ListNetworks => self.list_networks(),

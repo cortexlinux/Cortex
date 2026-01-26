@@ -104,7 +104,8 @@ impl PackageCommand {
 
         // Search
         if input_lower.contains("search") || input_lower.contains("find package") {
-            let query = words.iter()
+            let query = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "search" && w.to_lowercase() != "for")
                 .nth(1)
                 .map(|s| s.to_string())
@@ -115,7 +116,8 @@ impl PackageCommand {
 
         // Install
         if input_lower.contains("install") {
-            let package = words.iter()
+            let package = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "install")
                 .nth(1)
                 .map(|s| s.to_string())
@@ -126,7 +128,8 @@ impl PackageCommand {
 
         // Remove/uninstall
         if input_lower.contains("remove") || input_lower.contains("uninstall") {
-            let package = words.iter()
+            let package = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "remove" && w.to_lowercase() != "uninstall")
                 .nth(1)
                 .map(|s| s.to_string())
@@ -137,7 +140,8 @@ impl PackageCommand {
 
         // List installed
         if input_lower.contains("list") && input_lower.contains("install") {
-            let filter = words.iter()
+            let filter = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "installed")
                 .nth(1)
                 .map(|s| s.to_string());
@@ -158,10 +162,12 @@ impl PackageCommand {
         }
 
         // Package info
-        if input_lower.contains("info") || input_lower.contains("details")
+        if input_lower.contains("info")
+            || input_lower.contains("details")
             || input_lower.contains("about")
         {
-            let package = words.iter()
+            let package = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "info" && w.to_lowercase() != "about")
                 .nth(1)
                 .map(|s| s.to_string())
@@ -178,7 +184,8 @@ impl PackageCommand {
 
         // Who owns
         if input_lower.contains("owns") || input_lower.contains("which package") {
-            let file = words.iter()
+            let file = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "owns" && w.to_lowercase() != "package")
                 .nth(1)
                 .map(|s| s.to_string())
@@ -206,10 +213,7 @@ impl PackageAgent {
     /// Create a new package agent
     pub fn new() -> Self {
         Self {
-            capabilities: vec![
-                AgentCapability::PackageManage,
-                AgentCapability::Execute,
-            ],
+            capabilities: vec![AgentCapability::PackageManage, AgentCapability::Execute],
             package_manager: PackageManager::detect(),
         }
     }
@@ -223,7 +227,10 @@ impl PackageAgent {
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.is_empty() {
-                        Err(format!("Command failed with exit code: {:?}", output.status.code()))
+                        Err(format!(
+                            "Command failed with exit code: {:?}",
+                            output.status.code()
+                        ))
                     } else {
                         Err(stderr.to_string())
                     }
@@ -340,8 +347,7 @@ impl PackageAgent {
                 };
 
                 let cmd_str = format!("{} {}", cmd, args.join(" "));
-                AgentResponse::success(filtered_output)
-                    .with_commands(vec![cmd_str])
+                AgentResponse::success(filtered_output).with_commands(vec![cmd_str])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -424,9 +430,7 @@ impl PackageAgent {
                 let cmd_str = format!("{} {}", cmd, args.join(" "));
                 AgentResponse::success(output)
                     .with_commands(vec![cmd_str])
-                    .with_suggestions(vec![
-                        format!("install {}", package),
-                    ])
+                    .with_suggestions(vec![format!("install {}", package)])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -442,7 +446,9 @@ impl PackageAgent {
             PackageManager::Zypper => ("rpm", vec!["-ql", package]),
             PackageManager::Brew => ("brew", vec!["list", "--verbose", package]),
             PackageManager::Nix => {
-                return AgentResponse::error("Nix doesn't support listing package files directly".to_string());
+                return AgentResponse::error(
+                    "Nix doesn't support listing package files directly".to_string(),
+                );
             }
             PackageManager::Unknown => {
                 return AgentResponse::error("No package manager detected".to_string());
@@ -467,7 +473,9 @@ impl PackageAgent {
             PackageManager::Yum => ("rpm", vec!["-qf", file]),
             PackageManager::Zypper => ("rpm", vec!["-qf", file]),
             PackageManager::Brew => {
-                return AgentResponse::error("Homebrew doesn't support 'which package owns' directly".to_string());
+                return AgentResponse::error(
+                    "Homebrew doesn't support 'which package owns' directly".to_string(),
+                );
             }
             PackageManager::Nix => {
                 return AgentResponse::error("Use 'nix-locate' for this functionality".to_string());
@@ -545,9 +553,12 @@ impl Agent for PackageAgent {
 
     fn can_handle(&self, request: &AgentRequest) -> bool {
         // Handle if explicitly targeted at package agent
-        if request.agent == "package" || request.agent == "pkg"
-            || request.agent == "apt" || request.agent == "dnf"
-            || request.agent == "pacman" || request.agent == "brew"
+        if request.agent == "package"
+            || request.agent == "pkg"
+            || request.agent == "apt"
+            || request.agent == "dnf"
+            || request.agent == "pacman"
+            || request.agent == "brew"
         {
             return true;
         }

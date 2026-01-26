@@ -118,9 +118,7 @@ impl DaemonAgentRouter {
             .as_ref()
             .ok_or_else(|| DaemonError::NotAvailable("Daemon not connected".to_string()))?;
 
-        client
-            .execute_agent(&request.agent, &request.command)
-            .await
+        client.execute_agent(&request.agent, &request.command).await
     }
 
     /// Handle request via local runtime

@@ -347,7 +347,12 @@ impl AIPanelWidget {
                 AIPanelState::Suggestions => "What do you want to do?",
                 _ => "Type a message...",
             };
-            self.write_text(&mut input_cells, text_start, placeholder, &self.colors.placeholder);
+            self.write_text(
+                &mut input_cells,
+                text_start,
+                placeholder,
+                &self.colors.placeholder,
+            );
         } else {
             // Show input with cursor
             let visible_width = width.saturating_sub(text_start + 1);

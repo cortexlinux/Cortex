@@ -516,7 +516,9 @@ impl LicenseValidator {
             .map_err(|e| LicenseError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(LicenseError::InvalidKey("Failed to activate license".into()));
+            return Err(LicenseError::InvalidKey(
+                "Failed to activate license".into(),
+            ));
         }
 
         let license: License = response

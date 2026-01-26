@@ -6,19 +6,19 @@
 //! - Command suggestions
 //! - Natural language to command conversion
 
-mod panel;
-mod provider;
 mod chat;
 mod claude;
 mod ollama;
+mod panel;
+mod provider;
 mod widget;
 
-pub use panel::{AIPanel, AIPanelState, TerminalContext, EnvironmentInfo};
-pub use provider::{AIProvider, AIProviderConfig, AIError};
-pub use chat::{ChatMessage, ChatRole, ChatHistory};
+pub use chat::{ChatHistory, ChatMessage, ChatRole};
 pub use claude::ClaudeProvider;
-pub use ollama::{OllamaProvider, create_local_provider};
-pub use widget::{AIPanelWidget, RenderedLine, AIPanelUIItem};
+pub use ollama::{create_local_provider, OllamaProvider};
+pub use panel::{AIPanel, AIPanelState, EnvironmentInfo, TerminalContext};
+pub use provider::{AIError, AIProvider, AIProviderConfig};
+pub use widget::{AIPanelUIItem, AIPanelWidget, RenderedLine};
 
 /// AI Panel configuration
 #[derive(Debug, Clone)]

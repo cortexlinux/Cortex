@@ -46,7 +46,8 @@ impl SystemCommand {
         let words: Vec<&str> = input_lower.split_whitespace().collect();
 
         // Check for specific patterns
-        if input_lower.contains("system info") || input_lower.contains("sysinfo")
+        if input_lower.contains("system info")
+            || input_lower.contains("sysinfo")
             || input_lower.contains("uname")
         {
             return Self::SystemInfo;
@@ -61,11 +62,13 @@ impl SystemCommand {
         }
 
         if input_lower.contains("process") || input_lower.contains("ps aux") {
-            if input_lower.contains("top") || input_lower.contains("heavy")
+            if input_lower.contains("top")
+                || input_lower.contains("heavy")
                 || input_lower.contains("most")
             {
                 // Try to extract count
-                let count = words.iter()
+                let count = words
+                    .iter()
                     .filter_map(|w| w.parse::<usize>().ok())
                     .next()
                     .unwrap_or(10);
@@ -75,7 +78,8 @@ impl SystemCommand {
         }
 
         if input_lower.contains("top") && !input_lower.contains("stop") {
-            let count = words.iter()
+            let count = words
+                .iter()
                 .filter_map(|w| w.parse::<usize>().ok())
                 .next()
                 .unwrap_or(10);
@@ -90,31 +94,46 @@ impl SystemCommand {
             if let Some(idx) = words.iter().position(|&w| w == "service" || w == "status") {
                 if let Some(service) = words.get(idx + 1) {
                     return Self::ServiceStatus {
-                        service: service.to_string()
+                        service: service.to_string(),
                     };
                 }
             }
             // Look for common service names
             for word in &words {
-                if ["nginx", "apache", "mysql", "postgresql", "redis", "docker",
-                    "ssh", "sshd", "systemd", "cron", "cups"].contains(word)
+                if [
+                    "nginx",
+                    "apache",
+                    "mysql",
+                    "postgresql",
+                    "redis",
+                    "docker",
+                    "ssh",
+                    "sshd",
+                    "systemd",
+                    "cron",
+                    "cups",
+                ]
+                .contains(word)
                 {
                     return Self::ServiceStatus {
-                        service: word.to_string()
+                        service: word.to_string(),
                     };
                 }
             }
             return Self::ListServices;
         }
 
-        if input_lower.contains("disk") || input_lower.contains("storage")
+        if input_lower.contains("disk")
+            || input_lower.contains("storage")
             || input_lower.contains("df")
         {
             return Self::DiskUsage;
         }
 
-        if input_lower.contains("memory") || input_lower.contains("mem")
-            || input_lower.contains("ram") || input_lower.contains("free")
+        if input_lower.contains("memory")
+            || input_lower.contains("mem")
+            || input_lower.contains("ram")
+            || input_lower.contains("free")
         {
             return Self::MemoryUsage;
         }
@@ -157,7 +176,10 @@ impl SystemAgent {
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.is_empty() {
-                        Err(format!("Command failed with exit code: {:?}", output.status.code()))
+                        Err(format!(
+                            "Command failed with exit code: {:?}",
+                            output.status.code()
+                        ))
                     } else {
                         Err(stderr.to_string())
                     }
@@ -245,8 +267,9 @@ impl SystemAgent {
                     "find process using port 8080".to_string(),
                 ]),
             Err(_) => match self.execute_command("ps", &["-ef"]) {
-                Ok(output) => AgentResponse::success(output)
-                    .with_commands(vec!["ps -ef".to_string()]),
+                Ok(output) => {
+                    AgentResponse::success(output).with_commands(vec!["ps -ef".to_string()])
+                }
                 Err(e) => AgentResponse::error(e),
             },
         }
@@ -270,8 +293,7 @@ impl SystemAgent {
                 // macOS fallback
                 let cmd = format!("ps aux | head -n {}", count + 1);
                 match self.execute_command("sh", &["-c", &cmd]) {
-                    Ok(output) => AgentResponse::success(output)
-                        .with_commands(vec![cmd]),
+                    Ok(output) => AgentResponse::success(output).with_commands(vec![cmd]),
                     Err(e) => AgentResponse::error(e),
                 }
             }
@@ -331,8 +353,9 @@ impl SystemAgent {
 
         // Try launchctl on macOS
         match self.execute_command("launchctl", &["list"]) {
-            Ok(output) => AgentResponse::success(output)
-                .with_commands(vec!["launchctl list".to_string()]),
+            Ok(output) => {
+                AgentResponse::success(output).with_commands(vec!["launchctl list".to_string()])
+            }
             Err(e) => AgentResponse::error(format!("Could not list services: {}", e)),
         }
     }
@@ -364,8 +387,7 @@ impl SystemAgent {
 
         // macOS fallback - use vm_stat
         if let Ok(output) = self.execute_command("vm_stat", &[]) {
-            return AgentResponse::success(output)
-                .with_commands(vec!["vm_stat".to_string()]);
+            return AgentResponse::success(output).with_commands(vec!["vm_stat".to_string()]);
         }
 
         AgentResponse::error("Could not get memory usage".to_string())
@@ -375,8 +397,7 @@ impl SystemAgent {
     fn cpu_info(&self) -> AgentResponse {
         // Try lscpu first (Linux)
         if let Ok(output) = self.execute_command("lscpu", &[]) {
-            return AgentResponse::success(output)
-                .with_commands(vec!["lscpu".to_string()]);
+            return AgentResponse::success(output).with_commands(vec!["lscpu".to_string()]);
         }
 
         // Try /proc/cpuinfo
@@ -404,8 +425,7 @@ impl SystemAgent {
                     return AgentResponse::success(load_part.to_string())
                         .with_commands(vec!["uptime".to_string()]);
                 }
-                AgentResponse::success(output)
-                    .with_commands(vec!["uptime".to_string()])
+                AgentResponse::success(output).with_commands(vec!["uptime".to_string()])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -415,14 +435,13 @@ impl SystemAgent {
     fn handle_unknown(&self, command: &str) -> AgentResponse {
         // For safety, we don't execute unknown commands directly
         // Instead, provide suggestions
-        AgentResponse::error(format!("Unknown system command: {}", command))
-            .with_suggestions(vec![
-                "show system info".to_string(),
-                "show disk usage".to_string(),
-                "show memory usage".to_string(),
-                "list processes".to_string(),
-                "list services".to_string(),
-            ])
+        AgentResponse::error(format!("Unknown system command: {}", command)).with_suggestions(vec![
+            "show system info".to_string(),
+            "show disk usage".to_string(),
+            "show memory usage".to_string(),
+            "list processes".to_string(),
+            "list services".to_string(),
+        ])
     }
 }
 
@@ -506,22 +525,34 @@ mod tests {
 
     #[test]
     fn test_parse_system_info() {
-        assert_eq!(SystemCommand::parse("show system info"), SystemCommand::SystemInfo);
+        assert_eq!(
+            SystemCommand::parse("show system info"),
+            SystemCommand::SystemInfo
+        );
         assert_eq!(SystemCommand::parse("sysinfo"), SystemCommand::SystemInfo);
         assert_eq!(SystemCommand::parse("uname -a"), SystemCommand::SystemInfo);
     }
 
     #[test]
     fn test_parse_disk_usage() {
-        assert_eq!(SystemCommand::parse("show disk usage"), SystemCommand::DiskUsage);
+        assert_eq!(
+            SystemCommand::parse("show disk usage"),
+            SystemCommand::DiskUsage
+        );
         assert_eq!(SystemCommand::parse("disk space"), SystemCommand::DiskUsage);
         assert_eq!(SystemCommand::parse("df -h"), SystemCommand::DiskUsage);
     }
 
     #[test]
     fn test_parse_memory() {
-        assert_eq!(SystemCommand::parse("show memory"), SystemCommand::MemoryUsage);
-        assert_eq!(SystemCommand::parse("ram usage"), SystemCommand::MemoryUsage);
+        assert_eq!(
+            SystemCommand::parse("show memory"),
+            SystemCommand::MemoryUsage
+        );
+        assert_eq!(
+            SystemCommand::parse("ram usage"),
+            SystemCommand::MemoryUsage
+        );
         assert_eq!(SystemCommand::parse("free -h"), SystemCommand::MemoryUsage);
     }
 

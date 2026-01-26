@@ -78,7 +78,10 @@ pub struct AIResponseStream {
 
 impl AIResponseStream {
     pub fn new(chunks: Vec<String>) -> Self {
-        Self { chunks, position: 0 }
+        Self {
+            chunks,
+            position: 0,
+        }
     }
 
     pub fn next_chunk(&mut self) -> Option<String> {

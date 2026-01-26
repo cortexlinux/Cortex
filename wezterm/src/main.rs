@@ -149,15 +149,24 @@ enum SubCommand {
     Ask(cli::ask::AskCommand),
 
     /// Install packages using natural language
-    #[command(name = "install", about = "Install packages using natural language (e.g., cx install cuda drivers)")]
+    #[command(
+        name = "install",
+        about = "Install packages using natural language (e.g., cx install cuda drivers)"
+    )]
     Install(cli::shortcuts::InstallCommand),
 
     /// Setup or configure systems using natural language
-    #[command(name = "setup", about = "Setup systems using natural language (e.g., cx setup lamp stack)")]
+    #[command(
+        name = "setup",
+        about = "Setup systems using natural language (e.g., cx setup lamp stack)"
+    )]
     Setup(cli::shortcuts::SetupCommand),
 
     /// Ask questions about the system
-    #[command(name = "what", about = "Ask about your system (e.g., cx what packages use the most disk space)")]
+    #[command(
+        name = "what",
+        about = "Ask about your system (e.g., cx what packages use the most disk space)"
+    )]
     What(cli::shortcuts::WhatCommand),
 
     /// Fix errors using AI

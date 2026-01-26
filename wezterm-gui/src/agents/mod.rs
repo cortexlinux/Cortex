@@ -68,7 +68,7 @@ impl BuiltinAgent {
 
     pub fn icon(&self) -> &'static str {
         match self {
-            Self::System => "󰒋",   // nf-md-cog
+            Self::System => "󰒋",  // nf-md-cog
             Self::File => "󰉋",    // nf-md-folder
             Self::Package => "󰏗", // nf-md-package
             Self::Network => "󰖩", // nf-md-network
@@ -182,9 +182,15 @@ mod tests {
 
     #[test]
     fn test_builtin_agent_from_name() {
-        assert_eq!(BuiltinAgent::from_name("system"), Some(BuiltinAgent::System));
+        assert_eq!(
+            BuiltinAgent::from_name("system"),
+            Some(BuiltinAgent::System)
+        );
         assert_eq!(BuiltinAgent::from_name("git"), Some(BuiltinAgent::Git));
-        assert_eq!(BuiltinAgent::from_name("docker"), Some(BuiltinAgent::Docker));
+        assert_eq!(
+            BuiltinAgent::from_name("docker"),
+            Some(BuiltinAgent::Docker)
+        );
         assert_eq!(BuiltinAgent::from_name("unknown"), None);
     }
 }

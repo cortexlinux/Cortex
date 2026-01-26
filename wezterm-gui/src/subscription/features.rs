@@ -107,20 +107,20 @@ impl Feature {
     /// Get the icon for this feature
     pub fn icon(&self) -> &'static str {
         match self {
-            Self::UnlimitedAgents => "󰚩",      // nf-md-robot
-            Self::CustomAI => "󰛓",             // nf-md-robot_outline
-            Self::VoiceInput => "󰍬",           // nf-md-microphone
-            Self::OfflineLLM => "󰖟",           // nf-md-wifi_off
-            Self::ExternalAPIs => "󰒍",         // nf-md-api
-            Self::UnlimitedWorkflows => "󰓦",   // nf-md-workflow
-            Self::UnlimitedAI => "󰧞",          // nf-md-infinity
-            Self::UnlimitedHistory => "󰋚",     // nf-md-history
-            Self::ApiAccess => "󰅩",            // nf-md-code_braces
-            Self::AuditLogs => "󰂵",            // nf-md-file_document
-            Self::SSO => "󰯄",                  // nf-md-account_key
-            Self::PrivateAgents => "󰦝",        // nf-md-lock
-            Self::TeamManagement => "󰡉",       // nf-md-account_group
-            Self::PrioritySupport => "󱐋",      // nf-md-star_circle
+            Self::UnlimitedAgents => "󰚩",    // nf-md-robot
+            Self::CustomAI => "󰛓",           // nf-md-robot_outline
+            Self::VoiceInput => "󰍬",         // nf-md-microphone
+            Self::OfflineLLM => "󰖟",         // nf-md-wifi_off
+            Self::ExternalAPIs => "󰒍",       // nf-md-api
+            Self::UnlimitedWorkflows => "󰓦", // nf-md-workflow
+            Self::UnlimitedAI => "󰧞",        // nf-md-infinity
+            Self::UnlimitedHistory => "󰋚",   // nf-md-history
+            Self::ApiAccess => "󰅩",          // nf-md-code_braces
+            Self::AuditLogs => "󰂵",          // nf-md-file_document
+            Self::SSO => "󰯄",                // nf-md-account_key
+            Self::PrivateAgents => "󰦝",      // nf-md-lock
+            Self::TeamManagement => "󰡉",     // nf-md-account_group
+            Self::PrioritySupport => "󱐋",    // nf-md-star_circle
         }
     }
 

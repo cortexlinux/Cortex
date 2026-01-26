@@ -159,14 +159,20 @@ impl AskCommand {
         if query_lower.contains("install") && query_lower.contains("nvidia") {
             return "sudo apt install nvidia-driver-535".to_string();
         }
-        if query_lower.contains("lamp") || (query_lower.contains("apache") && query_lower.contains("mysql") && query_lower.contains("php")) {
-            return "sudo apt install apache2 mysql-server php libapache2-mod-php php-mysql".to_string();
+        if query_lower.contains("lamp")
+            || (query_lower.contains("apache")
+                && query_lower.contains("mysql")
+                && query_lower.contains("php"))
+        {
+            return "sudo apt install apache2 mysql-server php libapache2-mod-php php-mysql"
+                .to_string();
         }
         if query_lower.contains("disk") && query_lower.contains("space") {
             return "du -h --max-depth=1 / 2>/dev/null | sort -hr | head -20".to_string();
         }
         if query_lower.contains("package") && query_lower.contains("disk") {
-            return "dpkg-query -Wf '${Installed-Size}\\t${Package}\\n' | sort -nr | head -20".to_string();
+            return "dpkg-query -Wf '${Installed-Size}\\t${Package}\\n' | sort -nr | head -20"
+                .to_string();
         }
 
         // Default
@@ -215,13 +221,14 @@ impl AskCommand {
     fn execute_commands(&self, response: &str) -> Result<()> {
         let json: serde_json::Value = serde_json::from_str(response)?;
 
-        let commands: Vec<&str> = if let Some(cmds) = json.get("commands").and_then(|c| c.as_array()) {
-            cmds.iter().filter_map(|c| c.as_str()).collect()
-        } else if let Some(suggestion) = json.get("suggestion").and_then(|s| s.as_str()) {
-            vec![suggestion]
-        } else {
-            return Ok(());
-        };
+        let commands: Vec<&str> =
+            if let Some(cmds) = json.get("commands").and_then(|c| c.as_array()) {
+                cmds.iter().filter_map(|c| c.as_str()).collect()
+            } else if let Some(suggestion) = json.get("suggestion").and_then(|s| s.as_str()) {
+                vec![suggestion]
+            } else {
+                return Ok(());
+            };
 
         if commands.is_empty() {
             return Ok(());

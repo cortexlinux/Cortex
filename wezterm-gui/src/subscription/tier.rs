@@ -49,8 +49,8 @@ impl SubscriptionTier {
     pub fn price_cents(&self) -> u32 {
         match self {
             Self::Core => 0,
-            Self::Pro => 1900,       // $19/system
-            Self::Team => 4900,      // $49/mo
+            Self::Pro => 1900,         // $19/system
+            Self::Team => 4900,        // $49/mo
             Self::Enterprise => 19900, // $199/mo
         }
     }
@@ -186,7 +186,7 @@ impl TierLimits {
             workflows: 5,
             custom_agents: false,
             voice_input: false,
-            offline_llm: true,  // Local Ollama always works
+            offline_llm: true, // Local Ollama always works
             external_apis: false,
             cloud_llm: false,
             team_dashboard: false,
@@ -211,8 +211,8 @@ impl TierLimits {
             custom_agents: true,
             voice_input: true,
             offline_llm: true,
-            external_apis: true,  // Bring your own API key
-            cloud_llm: false,     // No included cloud LLM
+            external_apis: true, // Bring your own API key
+            cloud_llm: false,    // No included cloud LLM
             team_dashboard: false,
             audit_logs: false,
             sso: false,
@@ -236,7 +236,7 @@ impl TierLimits {
             voice_input: true,
             offline_llm: true,
             external_apis: true,
-            cloud_llm: true,      // Cloud LLM fallback included
+            cloud_llm: true, // Cloud LLM fallback included
             team_dashboard: true,
             audit_logs: true,
             sso: false,
@@ -448,11 +448,26 @@ mod tests {
 
     #[test]
     fn test_tier_from_str() {
-        assert_eq!(SubscriptionTier::from_str("core"), Some(SubscriptionTier::Core));
-        assert_eq!(SubscriptionTier::from_str("free"), Some(SubscriptionTier::Core));
-        assert_eq!(SubscriptionTier::from_str("pro"), Some(SubscriptionTier::Pro));
-        assert_eq!(SubscriptionTier::from_str("team"), Some(SubscriptionTier::Team));
-        assert_eq!(SubscriptionTier::from_str("enterprise"), Some(SubscriptionTier::Enterprise));
+        assert_eq!(
+            SubscriptionTier::from_str("core"),
+            Some(SubscriptionTier::Core)
+        );
+        assert_eq!(
+            SubscriptionTier::from_str("free"),
+            Some(SubscriptionTier::Core)
+        );
+        assert_eq!(
+            SubscriptionTier::from_str("pro"),
+            Some(SubscriptionTier::Pro)
+        );
+        assert_eq!(
+            SubscriptionTier::from_str("team"),
+            Some(SubscriptionTier::Team)
+        );
+        assert_eq!(
+            SubscriptionTier::from_str("enterprise"),
+            Some(SubscriptionTier::Enterprise)
+        );
         assert_eq!(SubscriptionTier::from_str("invalid"), None);
     }
 

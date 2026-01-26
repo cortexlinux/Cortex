@@ -623,12 +623,18 @@ impl BlockHeaderRenderInfo {
 
 /// Generate render info for all visible blocks
 #[allow(dead_code)]
-pub fn collect_render_info(manager: &BlockManager, renderer: &BlockRenderer) -> Vec<BlockHeaderRenderInfo> {
+pub fn collect_render_info(
+    manager: &BlockManager,
+    renderer: &BlockRenderer,
+) -> Vec<BlockHeaderRenderInfo> {
     let mut result = Vec::new();
 
     for layout in renderer.layouts() {
         if let Some(block) = manager.get(layout.block_id) {
-            result.push(BlockHeaderRenderInfo::from_block_and_layout(block, layout.clone()));
+            result.push(BlockHeaderRenderInfo::from_block_and_layout(
+                block,
+                layout.clone(),
+            ));
         }
     }
 
@@ -650,13 +656,7 @@ mod tests {
 
     #[test]
     fn test_hit_region() {
-        let region = BlockHitRegion::new(
-            0.0,
-            0.0,
-            100.0,
-            24.0,
-            BlockUIElement::Header(BlockId(0)),
-        );
+        let region = BlockHitRegion::new(0.0, 0.0, 100.0, 24.0, BlockUIElement::Header(BlockId(0)));
         assert!(region.contains(50.0, 12.0));
         assert!(!region.contains(150.0, 12.0));
     }

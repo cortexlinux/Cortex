@@ -174,7 +174,11 @@ impl LearningCollector {
     }
 
     /// Record an error event
-    pub fn record_error(&mut self, error: &str, command: Option<&str>) -> Result<(), LearningError> {
+    pub fn record_error(
+        &mut self,
+        error: &str,
+        command: Option<&str>,
+    ) -> Result<(), LearningError> {
         if !self.config.collect_errors {
             return Ok(());
         }
@@ -234,7 +238,11 @@ impl LearningCollector {
         }
 
         self.pending_flush = 0;
-        log::debug!("Flushed {} events to {}", self.buffer.len(), events_file.display());
+        log::debug!(
+            "Flushed {} events to {}",
+            self.buffer.len(),
+            events_file.display()
+        );
 
         Ok(())
     }
@@ -490,7 +498,8 @@ mod tests {
     #[test]
     fn test_collector_record_command() {
         let dir = tempdir().unwrap();
-        let mut collector = LearningCollector::new(LearningConfig::default(), dir.path().to_path_buf());
+        let mut collector =
+            LearningCollector::new(LearningConfig::default(), dir.path().to_path_buf());
 
         let event = CommandEvent {
             command: "ls -la".to_string(),

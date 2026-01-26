@@ -168,12 +168,12 @@ impl VoiceInputState {
 
     pub fn status_icon(&self) -> &'static str {
         match self {
-            Self::Idle => "", // nf-fa-microphone
-            Self::Recording => "", // nf-fa-circle (recording indicator)
-            Self::Processing => "", // nf-fa-cog
+            Self::Idle => "",         // nf-fa-microphone
+            Self::Recording => "",    // nf-fa-circle (recording indicator)
+            Self::Processing => "",   // nf-fa-cog
             Self::Transcribing => "", // nf-fa-comment
-            Self::Executing => "", // nf-fa-play
-            Self::Error => "", // nf-fa-exclamation_triangle
+            Self::Executing => "",    // nf-fa-play
+            Self::Error => "",        // nf-fa-exclamation_triangle
         }
     }
 }

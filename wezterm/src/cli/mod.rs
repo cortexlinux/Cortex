@@ -24,17 +24,30 @@ mod tls_creds;
 mod zoom_pane;
 
 // CX Terminal: AI-powered commands
+// Allow dead code in scaffolded modules that will be wired up incrementally
+#[allow(dead_code)]
 pub mod ask;
+#[allow(dead_code)]
 pub mod ask_agent;
+#[allow(dead_code)]
 pub mod ask_ai;
+#[allow(dead_code)]
 pub mod ask_context;
+#[allow(dead_code)]
 pub mod ask_executor;
+#[allow(dead_code)]
 pub mod ask_patterns;
+#[allow(dead_code)]
 pub mod branding;
+#[allow(dead_code)]
 pub mod new;
+#[allow(dead_code)]
 pub mod plan;
+#[allow(dead_code)]
 pub mod shortcuts;
+#[allow(dead_code)]
 pub mod snapshot;
+#[allow(dead_code)]
 pub mod templates;
 
 #[derive(Debug, Parser, Clone, Copy)]

@@ -2,6 +2,8 @@
 //!
 //! ASCII art logo and branded output for CX Terminal.
 
+// Note: Some functions are scaffolded for future use
+
 /// CX Terminal ASCII art logo (compact)
 pub const CX_LOGO: &str = r#"
    ██████╗██╗  ██╗

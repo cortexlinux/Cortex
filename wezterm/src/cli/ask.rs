@@ -8,7 +8,7 @@
 
 use anyhow::Result;
 use clap::Parser;
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::process::Command;
 
 use super::ask_agent::execute_and_capture;

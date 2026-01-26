@@ -1,5 +1,8 @@
 name: debian12_tag
 
+permissions:
+  contents: read
+
 on:
   push:
     tags:

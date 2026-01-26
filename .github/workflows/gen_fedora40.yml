@@ -1,5 +1,8 @@
 name: fedora40
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches:

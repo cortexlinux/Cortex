@@ -1,5 +1,8 @@
 name: debian11_tag
 
+permissions:
+  contents: read
+
 on:
   push:
     tags:

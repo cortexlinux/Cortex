@@ -1,5 +1,8 @@
 name: centos9_tag
 
+permissions:
+  contents: read
+
 on:
   push:
     tags:

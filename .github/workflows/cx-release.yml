@@ -1,5 +1,8 @@
 name: CX Terminal Release
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:

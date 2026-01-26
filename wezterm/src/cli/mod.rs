@@ -23,6 +23,10 @@ mod split_pane;
 mod tls_creds;
 mod zoom_pane;
 
+// CX Terminal: AI-powered commands
+pub mod ask;
+pub mod shortcuts;
+
 #[derive(Debug, Parser, Clone, Copy)]
 enum CliOutputFormatKind {
     #[command(name = "table", about = "multi line space separated table")]

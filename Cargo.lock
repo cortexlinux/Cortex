@@ -1339,6 +1339,7 @@ dependencies = [
  "clap_complete_fig",
  "codec",
  "config",
+ "cx-daemon",
  "embed-resource",
  "env-bootstrap",
  "filedescriptor",

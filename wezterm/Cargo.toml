@@ -16,6 +16,7 @@ clap_complete.workspace = true
 clap_complete_fig.workspace = true
 codec.workspace = true
 config.workspace = true
+cx-daemon = { path = "../cx-daemon" }
 env-bootstrap.workspace = true
 filedescriptor.workspace = true
 hostname.workspace = true

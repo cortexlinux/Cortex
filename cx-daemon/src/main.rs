@@ -17,6 +17,7 @@ use std::time::Duration;
 mod alerts;
 mod ipc;
 mod monitoring;
+mod paths;
 
 use alerts::AlertDatabase;
 use ipc::{DaemonRequest, DaemonResponse, RequestHandler};
@@ -64,21 +65,11 @@ struct Args {
 }
 
 fn get_default_socket_path() -> PathBuf {
-    if let Some(runtime_dir) = dirs_next::runtime_dir() {
-        runtime_dir.join("cx/daemon.sock")
-    } else if let Some(home) = dirs_next::home_dir() {
-        home.join(".cx/daemon.sock")
-    } else {
-        PathBuf::from("/var/run/cx/daemon.sock")
-    }
+    paths::get_daemon_socket_path()
 }
 
 fn get_default_db_path() -> PathBuf {
-    if let Some(home) = dirs_next::home_dir() {
-        home.join(".cx/alerts.db")
-    } else {
-        PathBuf::from("/var/lib/cx/alerts.db")
-    }
+    paths::get_alert_db_path()
 }
 
 fn main() {

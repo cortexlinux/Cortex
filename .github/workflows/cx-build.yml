@@ -48,7 +48,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libfontconfig1-dev \
-            libfreetype6-dev \
+            libfreetype6-dev libx11-dev libx11-xcb-dev libxcb1-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
@@ -108,7 +111,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libfontconfig1-dev \
-            libfreetype6-dev \
+            libfreetype6-dev libx11-dev libx11-xcb-dev libxcb1-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
@@ -178,7 +184,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libfontconfig1-dev \
-            libfreetype6-dev \
+            libfreetype6-dev libx11-dev libx11-xcb-dev libxcb1-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \

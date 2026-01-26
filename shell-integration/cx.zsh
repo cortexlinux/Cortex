@@ -55,13 +55,8 @@ __cx_prompt_end() {
     __cx_osc "777;cx;prompt;end"
 }
 
-# Setup hooks
+# Setup CX Terminal specific features
 __cx_setup() {
-    # Add to precmd (runs before prompt)
-    autoload -Uz add-zsh-hook
-    add-zsh-hook precmd __cx_precmd
-    add-zsh-hook preexec __cx_preexec
-
     # Set terminal title
     __cx_osc "0;CX Terminal - $USER@$HOST"
 
@@ -70,13 +65,26 @@ __cx_setup() {
 }
 
 __cx_precmd() {
+    local last_exit=$?
     __cx_block_end
     __cx_prompt_start
+
+    # Auto-capture failed commands for cx fix
+    if [[ $last_exit -ne 0 && -n "$__CX_LAST_CMD" ]]; then
+        {
+            echo "Command: $__CX_LAST_CMD"
+            echo "Exit code: $last_exit"
+            echo "Directory: $(pwd)"
+        } > "$__CX_LAST_ERROR"
+    fi
+    __CX_LAST_CMD=""
 }
 
 __cx_preexec() {
     __cx_prompt_end
     __cx_block_start "$1"
+    # Store command for error capture
+    __CX_LAST_CMD="$1"
 }
 
 # CWD reporting
@@ -297,7 +305,15 @@ EOF
     echo "Example: /python my-ml-project"
 }
 
-# Initialize
+# Initialize error capture (works in any terminal)
+mkdir -p "$__CX_DIR" 2>/dev/null
+
+# Always enable error capture hooks for cx fix
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec __cx_preexec
+add-zsh-hook precmd __cx_precmd
+
+# CX Terminal specific features
 if [[ "$TERM_PROGRAM" == "CXTerminal" ]] || [[ -n "$CX_TERMINAL" ]]; then
     __cx_setup
     __cx_report_cwd

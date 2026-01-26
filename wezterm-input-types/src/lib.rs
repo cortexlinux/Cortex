@@ -2145,8 +2145,20 @@ pub enum IntegratedTitleButtonStyle {
 
 impl Default for IntegratedTitleButtonStyle {
     fn default() -> Self {
-        // CX Terminal defaults to CX style on all platforms
-        Self::CX
+        // CX Terminal: Use platform-native style by default
+        // This gives familiar traffic lights on macOS, Gnome style on Linux
+        #[cfg(target_os = "macos")]
+        {
+            Self::MacOsNative
+        }
+        #[cfg(target_os = "windows")]
+        {
+            Self::Windows
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            Self::Gnome
+        }
     }
 }
 

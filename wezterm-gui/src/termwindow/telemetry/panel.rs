@@ -46,12 +46,12 @@ impl TelemetryPanel {
             TelemetryAction {
                 label: "Fix with AI".into(),
                 key: 'f',
-                command: "claude --fix-last-error\n".into(),
+                command: "cx fix\n".into(),
             },
             TelemetryAction {
                 label: "Explain Last".into(),
                 key: 'e',
-                command: "claude explain\n".into(),
+                command: "cx explain\n".into(),
             },
             TelemetryAction {
                 label: "Git Status".into(),

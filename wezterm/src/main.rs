@@ -23,7 +23,7 @@ mod cli;
 
 #[derive(Debug, Parser)]
 #[command(
-    about = "CX Terminal - AI-Native Terminal for CX Linux\nhttps://cxlinux.com",
+    about = "CX Terminal - AI-Native Terminal for CX Linux\nhttps://github.com/cxlinux-ai/cx",
     version = wezterm_version()
 )]
 pub struct Opt {
@@ -50,7 +50,7 @@ pub struct Opt {
     config_override: Vec<(String, String)>,
 
     #[command(subcommand)]
-    cmd: Option<SubCommand>,
+    cmd: SubCommand,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -143,39 +143,15 @@ enum SubCommand {
         shell: Shell,
     },
 
-    // CX Terminal: AI-powered commands
-    /// Ask AI a question or request an action
-    #[command(name = "ask", about = "Ask AI a question or request an action")]
-    Ask(cli::ask::AskCommand),
+    /// Show CX Terminal version with branding
+    #[command(name = "version", about = "Show CX Terminal version")]
+    Version,
 
-    /// Install packages using natural language
-    #[command(
-        name = "install",
-        about = "Install packages using natural language (e.g., cx install cuda drivers)"
-    )]
-    Install(cli::shortcuts::InstallCommand),
-
-    /// Setup or configure systems using natural language
-    #[command(
-        name = "setup",
-        about = "Setup systems using natural language (e.g., cx setup lamp stack)"
-    )]
-    Setup(cli::shortcuts::SetupCommand),
-
-    /// Ask questions about the system
-    #[command(
-        name = "what",
-        about = "Ask about your system (e.g., cx what packages use the most disk space)"
-    )]
-    What(cli::shortcuts::WhatCommand),
-
-    /// Fix errors using AI
-    #[command(name = "fix", about = "Fix errors using AI assistance")]
-    Fix(cli::shortcuts::FixCommand),
-
-    /// Explain a command, file, or concept
-    #[command(name = "explain", about = "Explain a command or concept")]
-    Explain(cli::shortcuts::ExplainCommand),
+    // CX: Catch-all for natural language prompts AND default when no args
+    // Everything else goes to AI: cx install nginx, cx what is my ip, etc.
+    // Also handles `cx` with no args (empty Vec = start GUI)
+    #[command(external_subcommand)]
+    External(Vec<OsString>),
 }
 
 use termwiz::escape::osc::{
@@ -771,12 +747,8 @@ fn run() -> anyhow::Result<()> {
 
     let opts = Opt::parse();
 
-    match opts
-        .cmd
-        .as_ref()
-        .cloned()
-        .unwrap_or_else(|| SubCommand::Start(StartCommand::default()))
-    {
+    // Standard subcommand handling
+    match opts.cmd {
         SubCommand::Start(_)
         | SubCommand::BlockingStart(_)
         | SubCommand::LsFonts(_)
@@ -786,8 +758,8 @@ fn run() -> anyhow::Result<()> {
         | SubCommand::Connect(_) => delegate_to_gui(saver),
         SubCommand::ImageCat(cmd) => cmd.run(),
         SubCommand::SetCwd(cmd) => cmd.run(),
-        SubCommand::Cli(cli) => cli::run_cli(&opts, cli),
-        SubCommand::Record(cmd) => cmd.run(init_config(&opts)?),
+        SubCommand::Cli(ref cli) => cli::run_cli(&opts, cli.clone()),
+        SubCommand::Record(ref cmd) => cmd.run(init_config(&opts)?),
         SubCommand::Replay(cmd) => cmd.run(),
         SubCommand::ShellCompletion { shell } => {
             use clap::CommandFactory;
@@ -796,13 +768,25 @@ fn run() -> anyhow::Result<()> {
             generate_completion(shell, &mut cmd, name, &mut std::io::stdout());
             Ok(())
         }
-        // CX Terminal: AI-powered commands
-        SubCommand::Ask(cmd) => cmd.run(),
-        SubCommand::Install(cmd) => cmd.run(),
-        SubCommand::Setup(cmd) => cmd.run(),
-        SubCommand::What(cmd) => cmd.run(),
-        SubCommand::Fix(cmd) => cmd.run(),
-        SubCommand::Explain(cmd) => cmd.run(),
+        SubCommand::Version => {
+            cli::branding::print_version(wezterm_version());
+            Ok(())
+        }
+        // CX: External subcommand - either natural language prompt or default GUI start
+        SubCommand::External(args) => {
+            let prompt: String = args
+                .iter()
+                .map(|s| s.to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            if prompt.is_empty() {
+                // No args = start GUI (default behavior)
+                delegate_to_gui(saver)
+            } else {
+                // Has args = natural language prompt
+                cli::run_prompt(&prompt)
+            }
+        }
     }
 }
 

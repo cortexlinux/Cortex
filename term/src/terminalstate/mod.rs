@@ -392,6 +392,12 @@ pub struct TerminalState {
     /// applied to lines.
     /// If none, then the default value specified by the config is used.
     bidi_hint: Option<ParagraphDirectionHint>,
+
+    // CX Terminal: Command tracking for native error capture
+    /// Track when we're in command output mode (between C and D markers)
+    cx_command_output_active: bool,
+    /// The row where command output started
+    cx_output_start_row: Option<VisibleRowIndex>,
 }
 
 #[derive(Debug)]
@@ -581,6 +587,9 @@ impl TerminalState {
             bidi_enabled: None,
             bidi_hint: None,
             progress: Progress::default(),
+            // CX Terminal: Command tracking
+            cx_command_output_active: false,
+            cx_output_start_row: None,
         }
     }
 

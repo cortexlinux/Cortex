@@ -53,17 +53,36 @@ __cx_prompt_start() {
     __cx_osc "777;cx;prompt;start"
 }
 
+# Auto-capture failed commands for cx fix
+__cx_capture_error() {
+    local last_exit=$?
+    if [[ $last_exit -ne 0 && -n "$__CX_LAST_CMD" ]]; then
+        {
+            echo "Command: $__CX_LAST_CMD"
+            echo "Exit code: $last_exit"
+            echo "Directory: $(pwd)"
+        } > "$__CX_LAST_ERROR"
+    fi
+    __CX_LAST_CMD=""
+    return $last_exit
+}
+
+# Store command before execution
+__cx_store_cmd() {
+    __CX_LAST_CMD="$BASH_COMMAND"
+}
+
 # Set up the prompt hooks
 __cx_setup() {
     # Preserve existing PROMPT_COMMAND
     if [[ -n "$PROMPT_COMMAND" ]]; then
-        PROMPT_COMMAND="__cx_block_end; $PROMPT_COMMAND; __cx_prompt_start"
+        PROMPT_COMMAND="__cx_capture_error; __cx_block_end; $PROMPT_COMMAND; __cx_prompt_start"
     else
-        PROMPT_COMMAND="__cx_block_end; __cx_prompt_start"
+        PROMPT_COMMAND="__cx_capture_error; __cx_block_end; __cx_prompt_start"
     fi
 
-    # Hook into DEBUG trap for command start
-    trap '__cx_block_start "$BASH_COMMAND"' DEBUG
+    # Hook into DEBUG trap for command start and error capture
+    trap '__cx_store_cmd; __cx_block_start "$BASH_COMMAND"' DEBUG
 
     # Set terminal title
     __cx_osc "0;CX Terminal - $USER@$HOSTNAME"

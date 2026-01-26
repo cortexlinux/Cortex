@@ -1,11 +1,10 @@
-//! CX Terminal: AI-powered ask command
+//! CX Terminal: Agentic AI command interface
 //!
-//! Smart command detection that uses CX primitives (`cx new`, `cx save`, etc.)
-//! before falling back to AI providers.
+//! True agent behavior - automatically executes safe commands and returns results.
+//! Not just a command suggester, but an AI that DOES things.
 //!
-//! Example: cx ask "create a python project" → cx new python <name>
-//! Example: cx ask "save my work" → cx save <smart-name>
-//! Example: cx ask "how do I install docker" → AI response with command
+//! Example: cx ask "what time is it" → "Sun Jan 26 15:47:32 IST 2026"
+//! Example: cx ask "create a python project" → Creates and shows the result
 
 use anyhow::Result;
 use clap::Parser;
@@ -15,21 +14,24 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::process::Command;
 
+use super::ask_agent::{classify_command, execute_and_capture, CommandSafety};
 use super::ask_context::ProjectContext;
+use super::ask_executor::extract_commands;
 use super::ask_patterns::PatternMatcher;
+use super::branding::{colors, print_error, print_info, print_success};
+use super::plan::{Plan, PlanAction};
 
-/// AI-powered command interface
+/// AI-powered agentic command interface
+///
+/// By default, safe commands are auto-executed and results shown.
+/// Use --no-exec to get suggestions instead of execution.
 #[derive(Debug, Parser, Clone)]
 pub struct AskCommand {
-    /// The question or task description
-    #[arg(trailing_var_arg = true)]
-    pub query: Vec<String>,
+    /// Don't auto-execute, just show suggestions
+    #[arg(long = "no-exec", short = 'n')]
+    pub no_execute: bool,
 
-    /// Execute the suggested commands (with confirmation)
-    #[arg(long = "do", short = 'd')]
-    pub execute: bool,
-
-    /// Skip confirmation prompts (use with caution)
+    /// Skip confirmation prompts for moderate-risk commands
     #[arg(long = "yes", short = 'y')]
     pub auto_confirm: bool,
 
@@ -41,9 +43,13 @@ pub struct AskCommand {
     #[arg(long = "format", short = 'f', default_value = "text")]
     pub format: String,
 
-    /// Verbose output
+    /// Verbose output (show commands being run)
     #[arg(long = "verbose", short = 'v')]
     pub verbose: bool,
+
+    /// The question or task description
+    #[arg(trailing_var_arg = true)]
+    pub query: Vec<String>,
 }
 
 const CX_DAEMON_SOCKET: &str = "/var/run/cx/daemon.sock";
@@ -61,27 +67,174 @@ impl AskCommand {
             eprintln!("cx ask: {}", query);
         }
 
-        // Step 1: Try to match CX commands (new, save, restore, etc.)
-        if let Some(response) = self.try_cx_command(&query)? {
-            return self.handle_response(&response);
+        // Step 1: Try CX command patterns (new, save, restore, etc.)
+        if let Some(_) = self.try_cx_command(&query)? {
+            return Ok(());
         }
 
-        // Step 2: Try AI providers (daemon, Claude, Ollama)
+        // Step 2: Query AI and handle response agentically
         let response = self.query_ai(&query)?;
-        self.handle_response(&response)
+        self.handle_agentic_response(&query, &response)
     }
 
-    /// Try to match query against CX command patterns and execute
-    fn try_cx_command(&self, query: &str) -> Result<Option<String>> {
+    /// Handle response with true agent behavior
+    fn handle_agentic_response(&self, _original_query: &str, response: &str) -> Result<()> {
+        // Extract commands from AI response
+        let extraction = extract_commands(response);
+
+        // If no-exec mode, just show the response
+        if self.no_execute {
+            return self.show_suggestion(response, &extraction);
+        }
+
+        // If we extracted commands, decide how to handle them
+        if !extraction.commands.is_empty() {
+            let plan = Plan::from_commands(&extraction.commands);
+
+            // Check if any command is dangerous or blocked
+            let needs_confirmation = plan.has_dangerous() || plan.has_blocked() || plan.requires_sudo;
+
+            if needs_confirmation {
+                // Dangerous/sudo commands → show Plan UI for confirmation
+                return self.execute_with_plan(plan);
+            } else {
+                // Safe/moderate commands → execute immediately (autonomous agent!)
+                return self.execute_plan_immediately(&plan);
+            }
+        }
+
+        // No commands found - show the text response
+        self.print_ai_response(response);
+        Ok(())
+    }
+
+    /// Execute plan immediately without prompting (autonomous agent mode)
+    fn execute_plan_immediately(&self, plan: &Plan) -> Result<()> {
+        use colors::*;
+
+        for step in &plan.commands {
+            if self.verbose {
+                eprintln!("{DIM}${RESET} {}", step.command);
+            }
+
+            let output = execute_and_capture(&step.command)?;
+
+            if output.success {
+                let out = output.primary_output();
+                print!("{}", out);
+                if !out.ends_with('\n') && !out.is_empty() {
+                    println!();
+                }
+            } else {
+                print_error(&format!("Command failed: {}", step.command));
+                let out = output.primary_output();
+                if !out.trim().is_empty() {
+                    eprintln!("{}", out);
+                }
+                // Stop on first failure
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+
+    /// Execute with Plan UI - shows plan, prompts user, then executes
+    fn execute_with_plan(&self, plan: Plan) -> Result<()> {
+        // Display the plan
+        plan.display();
+
+        // Multi-step plans ALWAYS prompt (this is the "Prompt-to-Plan" feature)
+        // The whole point is to show what will happen and let user decide
+        let action = plan.prompt_action()?;
+
+        match action {
+            PlanAction::Execute => plan.execute(false),
+            PlanAction::DryRun => plan.execute(true),
+            PlanAction::Cancel => {
+                print_info("Cancelled");
+                Ok(())
+            }
+        }
+    }
+
+    /// Confirm before executing a command
+    fn confirm_execution(&self, command: &str, is_dangerous: bool) -> Result<bool> {
+        use colors::*;
+
+        eprintln!("\n{DIM}Command:{RESET} {BOLD}{}{RESET}", command);
+
+        if is_dangerous {
+            eprint!("{RED}[DANGEROUS]{RESET} Execute? Type 'yes' to confirm: ");
+        } else {
+            eprint!("{CX_PURPLE}▶{RESET} Execute? [Y/n] ");
+        }
+        io::stderr().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let input = input.trim().to_lowercase();
+
+        let confirmed = if is_dangerous {
+            input == "yes"
+        } else {
+            input.is_empty() || input == "y" || input == "yes"
+        };
+
+        if !confirmed {
+            print_info("Skipped");
+        }
+        Ok(confirmed)
+    }
+
+    /// Show suggestion without executing (--no-exec mode)
+    fn show_suggestion(
+        &self,
+        response: &str,
+        extraction: &super::ask_executor::ExtractionResult,
+    ) -> Result<()> {
+        match self.format.as_str() {
+            "json" => println!("{}", response),
+            "commands" => {
+                for cmd in &extraction.commands {
+                    println!("{}", cmd.command);
+                }
+            }
+            _ => self.print_ai_response(response),
+        }
+        Ok(())
+    }
+
+    /// Print AI response text
+    fn print_ai_response(&self, response: &str) {
+        use colors::*;
+
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(response) {
+            if json.get("status").and_then(|s| s.as_str()) == Some("no_ai") {
+                if let Some(msg) = json.get("message").and_then(|m| m.as_str()) {
+                    eprintln!("{YELLOW}{msg}{RESET}");
+                }
+                if let Some(hint) = json.get("hint").and_then(|h| h.as_str()) {
+                    eprintln!("\n{DIM}Hint:{RESET} {hint}");
+                }
+                return;
+            }
+            if let Some(ai_response) = json.get("response").and_then(|r| r.as_str()) {
+                println!("{}", ai_response);
+                return;
+            }
+        }
+        println!("{}", response);
+    }
+
+    /// Try to match query against CX command patterns
+    fn try_cx_command(&self, query: &str) -> Result<Option<()>> {
         let matcher = PatternMatcher::new();
         let context = ProjectContext::detect();
 
         if let Some(pattern_match) = matcher.match_query(query) {
-            // Only use pattern match if confidence is reasonable
             if pattern_match.confidence >= 0.7 {
                 let mut command = pattern_match.command.clone();
 
-                // If command needs a name, try to extract or generate one
                 if pattern_match.needs_name {
                     let name = matcher
                         .extract_name(query)
@@ -89,61 +242,27 @@ impl AskCommand {
                     command = command.replace("{name}", &name);
                 }
 
-                // For CX commands, execute automatically (AI-native behavior)
-                println!("{}", pattern_match.description);
-                self.execute_cx_command(&command)?;
+                if self.verbose {
+                    eprintln!("{}", pattern_match.description);
+                }
 
-                // Return empty response since we already handled it
-                return Ok(Some("{}".to_string()));
+                // Execute the CX command
+                if self.verbose {
+                    eprintln!("$ {}", command);
+                }
+                let status = Command::new("sh").arg("-c").arg(&command).status()?;
+                if !status.success() {
+                    eprintln!("Command failed with exit code: {:?}", status.code());
+                }
+                return Ok(Some(()));
             }
         }
-
         Ok(None)
     }
 
-    /// Execute a CX command with optional confirmation
-    fn execute_cx_command(&self, command: &str) -> Result<()> {
-        if !self.auto_confirm {
-            eprintln!("\n  $ {}", command);
-            eprint!("\nRun this? [Y/n] ");
-            io::stderr().flush()?;
-
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            let input = input.trim();
-            if !input.is_empty() && !input.eq_ignore_ascii_case("y") {
-                eprintln!("Cancelled.");
-                return Ok(());
-            }
-        }
-
-        // Execute the command
-        let status = Command::new("sh").arg("-c").arg(command).status()?;
-
-        if !status.success() {
-            eprintln!("Command failed with exit code: {:?}", status.code());
-        }
-
-        Ok(())
-    }
-
-    fn handle_response(&self, response: &str) -> Result<()> {
-        match self.format.as_str() {
-            "json" => println!("{}", response),
-            "commands" => self.print_commands_only(response),
-            _ => self.print_formatted(response),
-        }
-
-        if self.execute {
-            self.execute_commands(response)?;
-        }
-
-        Ok(())
-    }
-
     fn run_interactive(&self) -> Result<()> {
-        eprintln!("cx ask: Enter your question (Ctrl+D to finish):");
+        use colors::*;
+        eprintln!("{CX_PURPLE}▶{RESET} Enter your question (Ctrl+D to finish):");
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
 
@@ -152,12 +271,12 @@ impl AskCommand {
             anyhow::bail!("No query provided");
         }
 
-        if let Some(response) = self.try_cx_command(query)? {
-            return self.handle_response(&response);
+        if let Some(_) = self.try_cx_command(query)? {
+            return Ok(());
         }
 
         let response = self.query_ai(query)?;
-        self.handle_response(&response)
+        self.handle_agentic_response(query, &response)
     }
 
     fn query_ai(&self, query: &str) -> Result<String> {
@@ -170,28 +289,25 @@ impl AskCommand {
         if !self.local_only {
             if let Ok(api_key) = env::var("ANTHROPIC_API_KEY") {
                 if !api_key.is_empty() && api_key.starts_with("sk-") {
-                    if let Ok(response) = self.query_claude(&query, &api_key) {
+                    if let Ok(response) = self.query_claude(query, &api_key) {
                         return Ok(response);
                     }
                 }
             }
         }
 
-        // Try Ollama
-        if let Ok(host) = env::var("OLLAMA_HOST") {
-            if !host.is_empty() && host.starts_with("http") {
-                if let Ok(response) = self.query_ollama(&query, &host) {
-                    return Ok(response);
-                }
-            }
+        // Try Ollama (auto-detect at localhost:11434 if OLLAMA_HOST not set)
+        let ollama_host = env::var("OLLAMA_HOST")
+            .unwrap_or_else(|_| "http://localhost:11434".to_string());
+        if let Ok(response) = self.query_ollama(query, &ollama_host) {
+            return Ok(response);
         }
 
-        // No AI available - return helpful message
+        // No AI available
         let response = serde_json::json!({
             "status": "no_ai",
-            "message": "No AI backend available for this query.",
-            "query": query,
-            "hint": "Set ANTHROPIC_API_KEY or OLLAMA_HOST for AI features, or try specific commands like 'cx new python myapp'"
+            "message": "No AI backend available.",
+            "hint": "Set ANTHROPIC_API_KEY or OLLAMA_HOST"
         });
         Ok(serde_json::to_string_pretty(&response)?)
     }
@@ -213,43 +329,28 @@ impl AskCommand {
                 let request = serde_json::json!({
                     "type": "ask",
                     "query": query,
-                    "execute": self.execute,
                     "local_only": self.local_only,
                 });
-
-                let request_bytes = serde_json::to_vec(&request)?;
-                stream.write_all(&request_bytes)?;
+                stream.write_all(&serde_json::to_vec(&request)?)?;
                 stream.shutdown(std::net::Shutdown::Write)?;
 
                 let mut response = String::new();
                 stream.read_to_string(&mut response)?;
                 Ok(Some(response))
             }
-            Err(e) => {
-                if self.verbose {
-                    eprintln!("cx ask: daemon connection failed: {}", e);
-                }
-                Ok(None)
-            }
+            Err(_) => Ok(None),
         }
     }
 
     fn query_claude(&self, query: &str, api_key: &str) -> Result<String> {
         let context = ProjectContext::detect();
-        let system_prompt = format!(
-            "You are CX Terminal, an AI assistant for CX Linux. \
-            Current directory: {}. Project type: {:?}. \
-            Provide concise, actionable commands. Use ```bash code blocks.",
-            context.cwd.display(),
-            context.project_type
-        );
+        let system_prompt = build_agent_prompt(&context);
 
         let payload = serde_json::json!({
             "model": "claude-sonnet-4-20250514",
             "max_tokens": 1024,
-            "messages": [
-                {"role": "user", "content": format!("{}\n\nQuestion: {}", system_prompt, query)}
-            ]
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": query}]
         });
 
         let output = Command::new("curl")
@@ -266,28 +367,53 @@ impl AskCommand {
         if output.status.success() {
             let response: serde_json::Value = serde_json::from_slice(&output.stdout)?;
             if let Some(content) = response["content"][0]["text"].as_str() {
-                let result = serde_json::json!({
+                return Ok(serde_json::json!({
                     "status": "success",
                     "source": "claude",
                     "response": content,
-                });
-                return Ok(serde_json::to_string_pretty(&result)?);
+                }).to_string());
             }
         }
-
         anyhow::bail!("Claude API request failed")
     }
 
     fn query_ollama(&self, query: &str, host: &str) -> Result<String> {
-        let model = env::var("OLLAMA_MODEL").unwrap_or_else(|_| "llama3".to_string());
+        // Get model from env, or auto-detect best available model
+        let model = env::var("OLLAMA_MODEL").unwrap_or_else(|_| {
+            // Try to get best available model (prefer larger models)
+            if let Ok(output) = Command::new("curl")
+                .args(["-s", &format!("{}/api/tags", host)])
+                .output()
+            {
+                if let Ok(tags) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                    if let Some(models) = tags["models"].as_array() {
+                        // Prefer 7b+ models over smaller ones
+                        for model in models {
+                            if let Some(name) = model["name"].as_str() {
+                                if name.contains("7b") || name.contains("8b") || name.contains("13b") {
+                                    return name.to_string();
+                                }
+                            }
+                        }
+                        // Fallback to first model
+                        if let Some(first) = models.first() {
+                            if let Some(name) = first["name"].as_str() {
+                                return name.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+            "llama3".to_string() // fallback
+        });
+
         let context = ProjectContext::detect();
+        let system_prompt = build_agent_prompt(&context);
 
         let payload = serde_json::json!({
             "model": model,
-            "prompt": format!(
-                "You are CX Terminal assistant. Directory: {}. Answer concisely with commands.\n\nQuestion: {}",
-                context.cwd.display(), query
-            ),
+            "system": system_prompt,
+            "prompt": query,
             "stream": false
         });
 
@@ -303,89 +429,44 @@ impl AskCommand {
         if output.status.success() {
             let response: serde_json::Value = serde_json::from_slice(&output.stdout)?;
             if let Some(text) = response["response"].as_str() {
-                let result = serde_json::json!({
+                return Ok(serde_json::json!({
                     "status": "success",
                     "source": "ollama",
                     "response": text,
-                });
-                return Ok(serde_json::to_string_pretty(&result)?);
+                }).to_string());
             }
         }
-
         anyhow::bail!("Ollama request failed")
     }
+}
 
-    fn print_formatted(&self, response: &str) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(response) {
-            // CX command detection response
-            if json.get("status").and_then(|s| s.as_str()) == Some("cx_command") {
-                if let Some(desc) = json.get("description").and_then(|d| d.as_str()) {
-                    println!("{}", desc);
-                }
-                if let Some(cmd) = json.get("command").and_then(|c| c.as_str()) {
-                    println!("\n  $ {}", cmd);
-                }
-                return;
-            }
-
-            // AI response
-            if let Some(ai_response) = json.get("response").and_then(|r| r.as_str()) {
-                println!("{}", ai_response);
-                return;
-            }
-
-            // Message field
-            if let Some(message) = json.get("message").and_then(|m| m.as_str()) {
-                println!("{}", message);
-            }
-            if let Some(hint) = json.get("hint").and_then(|h| h.as_str()) {
-                eprintln!("\nHint: {}", hint);
-            }
-        } else {
-            println!("{}", response);
-        }
+/// Detect OS for appropriate commands
+fn detect_os() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macOS - USE MACOS COMMANDS ONLY: brew (not apt), top/vm_stat (not free), ifconfig (not ip), diskutil (not fdisk), launchctl (not systemctl), pbcopy/pbpaste"
+    } else if cfg!(target_os = "linux") {
+        "CX Linux / Debian-based - use apt, systemctl, ip addr, free, etc."
+    } else {
+        "Linux"
     }
+}
 
-    fn print_commands_only(&self, response: &str) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(response) {
-            if let Some(cmd) = json.get("command").and_then(|c| c.as_str()) {
-                println!("{}", cmd);
-            }
-        }
-    }
+/// Build the agent-focused system prompt
+fn build_agent_prompt(context: &ProjectContext) -> String {
+    let is_macos = cfg!(target_os = "macos");
 
-    fn execute_commands(&self, response: &str) -> Result<()> {
-        let json: serde_json::Value = serde_json::from_str(response)?;
+    format!(
+        r#"You are CX, an AI terminal assistant.
 
-        let command = json.get("command").and_then(|c| c.as_str());
+OS: {os}
+Directory: {cwd}
 
-        let command = match command {
-            Some(cmd) => cmd,
-            None => return Ok(()),
-        };
+If the user wants to DO something on their computer (check files, install software, see system info, run programs), give a shell command in ```bash block.
 
-        if !self.auto_confirm {
-            eprintln!("\nCommand to execute:");
-            eprintln!("  $ {}", command);
-            eprint!("\nProceed? [y/N] ");
-            io::stderr().flush()?;
+If the user is just TALKING to you (greetings, questions about you, chitchat), respond naturally with text - no commands.
 
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            if !input.trim().eq_ignore_ascii_case("y") {
-                eprintln!("Aborted.");
-                return Ok(());
-            }
-        }
-
-        eprintln!("$ {}", command);
-        let status = Command::new("sh").arg("-c").arg(command).status()?;
-
-        if !status.success() {
-            eprintln!("Command failed with exit code: {:?}", status.code());
-        }
-
-        Ok(())
-    }
+Keep commands simple. One command when possible. No explanations unless asked."#,
+        os = if is_macos { "macOS (use brew, not apt)" } else { "Linux" },
+        cwd = context.cwd.display(),
+    )
 }

@@ -109,6 +109,63 @@ pub fn get_window_class() -> String {
     WINDOW_CLASS.lock().unwrap().clone()
 }
 
+/// CX Terminal: Save last error info for `cx fix` command
+/// This stores command failure info at ~/.cx/last_error
+fn cx_save_last_error(command: &str, cwd: &str, exit_code: i32) {
+    use std::io::Write;
+
+    let home = match std::env::var("HOME") {
+        Ok(h) => h,
+        Err(_) => {
+            log::warn!("CX: Could not determine HOME directory for error capture");
+            return;
+        }
+    };
+
+    let cx_dir = std::path::Path::new(&home).join(".cx");
+    if let Err(e) = std::fs::create_dir_all(&cx_dir) {
+        log::warn!("CX: Could not create ~/.cx directory: {}", e);
+        return;
+    }
+
+    // Set secure permissions on the directory (owner-only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = std::fs::metadata(&cx_dir) {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o700);
+            let _ = std::fs::set_permissions(&cx_dir, perms);
+        }
+    }
+
+    let error_file = cx_dir.join("last_error");
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let content = format!(
+        "Command: {}\nDirectory: {}\nExit code: {}\nTimestamp: {}\n",
+        command,
+        cwd,
+        exit_code,
+        timestamp
+    );
+
+    match std::fs::File::create(&error_file) {
+        Ok(mut file) => {
+            if let Err(e) = file.write_all(content.as_bytes()) {
+                log::warn!("CX: Could not write error file: {}", e);
+            } else {
+                log::debug!("CX: Saved last error to {:?}", error_file);
+            }
+        }
+        Err(e) => {
+            log::warn!("CX: Could not create error file: {}", e);
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MouseCapture {
     UI,
@@ -1313,6 +1370,14 @@ impl TermWindow {
                         let mut managers = self.block_managers.borrow_mut();
                         if let Some(manager) = managers.get_mut(&pane_id) {
                             manager.end_block(exit_code, current_line);
+
+                            // CX Terminal: Capture failed command info for `cx fix`
+                            if exit_code != 0 {
+                                if let Some(data) = manager.get_last_completed_learning_data() {
+                                    // Save error info to ~/.cx/last_error
+                                    cx_save_last_error(&data.command, &data.cwd, exit_code);
+                                }
+                            }
                         }
                         window.invalidate();
                     }

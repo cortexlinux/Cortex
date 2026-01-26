@@ -25,9 +25,13 @@ mod zoom_pane;
 
 // CX Terminal: AI-powered commands
 pub mod ask;
+pub mod ask_agent;
 pub mod ask_context;
+pub mod ask_executor;
 pub mod ask_patterns;
+pub mod branding;
 pub mod new;
+pub mod plan;
 pub mod shortcuts;
 pub mod snapshot;
 
@@ -298,6 +302,23 @@ pub fn run_cli(opts: &crate::Opt, cli: CliCommand) -> anyhow::Result<()> {
         Ok(_) => Ok(()),
         Err(err) => crate::terminate_with_error(err),
     }
+}
+
+/// CX: Run a natural language prompt through AI
+/// This is the simplified entry point - everything goes through here
+pub fn run_prompt(prompt: &str) -> anyhow::Result<()> {
+    use ask::AskCommand;
+
+    let cmd = AskCommand {
+        query: vec![prompt.to_string()],
+        no_execute: false,      // Agent mode: execute commands
+        auto_confirm: true,     // User typed the prompt, they want it done
+        local_only: false,
+        format: "text".to_string(),
+        verbose: false,
+    };
+
+    cmd.run()
 }
 
 pub fn resolve_relative_cwd(cwd: Option<OsString>) -> anyhow::Result<Option<String>> {

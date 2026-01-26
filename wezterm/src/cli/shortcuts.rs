@@ -1,11 +1,11 @@
 //! CX Terminal: Shortcut commands
 //!
 //! Simplified aliases for common AI-powered operations:
-//! - cx install <description> -> cx ask --do "install <description>"
-//! - cx setup <description>   -> cx ask --do "setup <description>"
-//! - cx what <question>       -> cx ask "what <question>"
-//! - cx fix <error>           -> cx ask --do "fix <error>"
-//! - cx explain <thing>       -> cx ask "explain <thing>"
+//! - cx install <description> -> cx ask "install <description>" (agent mode)
+//! - cx setup <description>   -> cx ask "setup <description>" (agent mode)
+//! - cx what <question>       -> cx ask "what <question>" (agent mode)
+//! - cx fix <error>           -> cx ask "fix <error>" (agent mode)
+//! - cx explain <thing>       -> cx ask --no-exec "explain <thing>"
 
 use anyhow::Result;
 use clap::Parser;
@@ -38,8 +38,8 @@ impl InstallCommand {
 
         let ask = AskCommand {
             query: vec![query],
-            execute: true,
-            auto_confirm: self.auto_confirm,
+            no_execute: false, // Agent mode: auto-execute
+            auto_confirm: true, // User explicitly asked to install - no need to confirm again
             local_only: self.local_only,
             format: "text".to_string(),
             verbose: self.verbose,
@@ -75,8 +75,8 @@ impl SetupCommand {
 
         let ask = AskCommand {
             query: vec![query],
-            execute: true,
-            auto_confirm: self.auto_confirm,
+            no_execute: false, // Agent mode: auto-execute
+            auto_confirm: true, // User explicitly asked to setup - no need to confirm again
             local_only: self.local_only,
             format: "text".to_string(),
             verbose: self.verbose,
@@ -112,7 +112,7 @@ impl WhatCommand {
 
         let ask = AskCommand {
             query: vec![query],
-            execute: false,
+            no_execute: false, // Agent mode: auto-execute and show result
             auto_confirm: false,
             local_only: self.local_only,
             format: self.format.clone(),
@@ -160,8 +160,8 @@ impl FixCommand {
 
         let ask = AskCommand {
             query: vec![query],
-            execute: true,
-            auto_confirm: self.auto_confirm,
+            no_execute: false, // Agent mode: auto-execute fix
+            auto_confirm: true, // User explicitly asked to fix - no need to confirm again
             local_only: self.local_only,
             format: "text".to_string(),
             verbose: self.verbose,
@@ -182,6 +182,39 @@ impl FixCommand {
         } else {
             Ok(String::new())
         }
+    }
+}
+
+/// Create files, directories, or projects using natural language
+#[derive(Debug, Parser, Clone)]
+pub struct CreateCommand {
+    /// What to create (natural language description)
+    #[arg(trailing_var_arg = true, required = true)]
+    pub description: Vec<String>,
+
+    /// Use local AI only
+    #[arg(long = "local")]
+    pub local_only: bool,
+
+    /// Verbose output
+    #[arg(long = "verbose", short = 'v')]
+    pub verbose: bool,
+}
+
+impl CreateCommand {
+    pub fn run(&self) -> Result<()> {
+        let query = format!("create {}", self.description.join(" "));
+
+        let ask = AskCommand {
+            query: vec![query],
+            no_execute: false,
+            auto_confirm: true, // User explicitly asked to create
+            local_only: self.local_only,
+            format: "text".to_string(),
+            verbose: self.verbose,
+        };
+
+        ask.run()
     }
 }
 
@@ -211,7 +244,7 @@ impl ExplainCommand {
 
         let ask = AskCommand {
             query: vec![query],
-            execute: false,
+            no_execute: true, // Explanation mode: just show text
             auto_confirm: false,
             local_only: self.local_only,
             format: self.format.clone(),

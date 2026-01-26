@@ -1035,11 +1035,29 @@ impl<'a> Performer<'a> {
                 FinalTermSemanticPrompt::MarkEndOfInputAndStartOfOutput { .. },
             ) => {
                 self.pen.set_semantic_type(SemanticType::Output);
+                // CX Terminal: Mark start of command output for error capture
+                self.cx_command_output_active = true;
+                self.cx_output_start_row = Some(self.cursor.y);
             }
 
             OperatingSystemCommand::FinalTermSemanticPrompt(
-                FinalTermSemanticPrompt::CommandStatus { .. },
-            ) => {}
+                FinalTermSemanticPrompt::CommandStatus { status, .. },
+            ) => {
+                // CX Terminal: Emit alert with command exit status
+                if let Some(handler) = self.alert_handler.as_mut() {
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    handler.alert(Alert::CXBlockEnd {
+                        exit_code: status,
+                        timestamp,
+                    });
+                }
+                // Reset command output tracking
+                self.cx_command_output_active = false;
+                self.cx_output_start_row = None;
+            }
 
             OperatingSystemCommand::SystemNotification(message) => {
                 if let Some(handler) = self.alert_handler.as_mut() {

@@ -31,10 +31,11 @@ config.font = cx.font_with_fallback({
 })
 config.font_size = 14.0
 
--- Enable ligatures if using a font that supports them
+-- Font features (ligatures disabled to prevent spacing issues like "fi" gaps)
 config.harfbuzz_features = {
     "calt=1",  -- Contextual alternates
-    "liga=1",  -- Standard ligatures
+    "liga=0",  -- Disable ligatures (causes gaps in terminals)
+    "clig=0",  -- Disable contextual ligatures
 }
 
 -- Window appearance

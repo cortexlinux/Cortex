@@ -35,17 +35,27 @@ pub enum FileCommand {
     /// Get file/directory info
     FileInfo { path: String },
     /// Find files by name pattern
-    FindFiles { pattern: String, path: Option<String> },
+    FindFiles {
+        pattern: String,
+        path: Option<String>,
+    },
     /// Find large files
     FindLargeFiles { size: String, path: Option<String> },
     /// Find recent files
     FindRecentFiles { days: usize, path: Option<String> },
     /// Search in files (grep)
-    SearchInFiles { pattern: String, path: Option<String>, file_pattern: Option<String> },
+    SearchInFiles {
+        pattern: String,
+        path: Option<String>,
+        file_pattern: Option<String>,
+    },
     /// Get directory size
     DirectorySize { path: String },
     /// Count files
-    CountFiles { path: String, pattern: Option<String> },
+    CountFiles {
+        path: String,
+        pattern: Option<String>,
+    },
     /// Unknown command
     Unknown(String),
 }
@@ -57,20 +67,25 @@ impl FileCommand {
         let words: Vec<&str> = input.split_whitespace().collect();
 
         // List directory
-        if input_lower.starts_with("ls") || input_lower.starts_with("list")
-            || input_lower.contains("list dir") || input_lower.contains("show files")
+        if input_lower.starts_with("ls")
+            || input_lower.starts_with("list")
+            || input_lower.contains("list dir")
+            || input_lower.contains("show files")
         {
             let path = Self::extract_path(&words).unwrap_or(".".to_string());
             return Self::ListDirectory { path };
         }
 
         // Read file
-        if input_lower.starts_with("cat") || input_lower.starts_with("read")
-            || input_lower.contains("show file") || input_lower.contains("view file")
+        if input_lower.starts_with("cat")
+            || input_lower.starts_with("read")
+            || input_lower.contains("show file")
+            || input_lower.contains("view file")
         {
             if let Some(path) = Self::extract_path(&words) {
                 // Check for line limit
-                let lines = words.iter()
+                let lines = words
+                    .iter()
                     .position(|&w| w == "-n" || w == "--lines")
                     .and_then(|i| words.get(i + 1))
                     .and_then(|s| s.parse().ok());
@@ -79,7 +94,8 @@ impl FileCommand {
         }
 
         // File info (stat)
-        if input_lower.contains("info") || input_lower.contains("stat")
+        if input_lower.contains("info")
+            || input_lower.contains("stat")
             || input_lower.contains("details")
         {
             if let Some(path) = Self::extract_path(&words) {
@@ -92,7 +108,8 @@ impl FileCommand {
             && input_lower.contains("file")
         {
             // Try to extract size (e.g., "100M", "1G")
-            let size = words.iter()
+            let size = words
+                .iter()
                 .find(|w| w.ends_with('M') || w.ends_with('G') || w.ends_with('K'))
                 .map(|s| s.to_string())
                 .unwrap_or("100M".to_string());
@@ -101,10 +118,12 @@ impl FileCommand {
         }
 
         // Find recent files
-        if input_lower.contains("recent") || input_lower.contains("new file")
+        if input_lower.contains("recent")
+            || input_lower.contains("new file")
             || input_lower.contains("modified")
         {
-            let days = words.iter()
+            let days = words
+                .iter()
                 .filter_map(|w| w.parse::<usize>().ok())
                 .next()
                 .unwrap_or(7);
@@ -113,11 +132,13 @@ impl FileCommand {
         }
 
         // Find files by pattern
-        if input_lower.contains("find") || input_lower.contains("search for")
+        if input_lower.contains("find")
+            || input_lower.contains("search for")
             || input_lower.contains("locate")
         {
             // Look for pattern (often in quotes or with *)
-            let pattern = words.iter()
+            let pattern = words
+                .iter()
                 .find(|w| w.contains('*') || w.contains('.'))
                 .map(|s| s.trim_matches('"').trim_matches('\'').to_string())
                 .unwrap_or("*".to_string());
@@ -126,13 +147,16 @@ impl FileCommand {
         }
 
         // Grep/search in files
-        if input_lower.contains("grep") || input_lower.contains("search in")
-            || input_lower.contains("find text") || input_lower.contains("search for")
+        if input_lower.contains("grep")
+            || input_lower.contains("search in")
+            || input_lower.contains("find text")
+            || input_lower.contains("search for")
         {
             // Extract pattern (usually quoted or after specific keywords)
             let pattern = Self::extract_quoted(&input)
                 .or_else(|| {
-                    words.iter()
+                    words
+                        .iter()
                         .skip_while(|&w| w.to_lowercase() != "for" && w.to_lowercase() != "grep")
                         .nth(1)
                         .map(|s| s.to_string())
@@ -140,15 +164,22 @@ impl FileCommand {
                 .unwrap_or_default();
 
             let path = Self::extract_path(&words);
-            let file_pattern = words.iter()
+            let file_pattern = words
+                .iter()
                 .find(|w| w.contains('*') && w.contains('.'))
                 .map(|s| s.to_string());
 
-            return Self::SearchInFiles { pattern, path, file_pattern };
+            return Self::SearchInFiles {
+                pattern,
+                path,
+                file_pattern,
+            };
         }
 
         // Directory size
-        if input_lower.contains("size") && (input_lower.contains("dir") || input_lower.contains("folder")) {
+        if input_lower.contains("size")
+            && (input_lower.contains("dir") || input_lower.contains("folder"))
+        {
             let path = Self::extract_path(&words).unwrap_or(".".to_string());
             return Self::DirectorySize { path };
         }
@@ -156,7 +187,8 @@ impl FileCommand {
         // Count files
         if input_lower.contains("count") && input_lower.contains("file") {
             let path = Self::extract_path(&words).unwrap_or(".".to_string());
-            let pattern = words.iter()
+            let pattern = words
+                .iter()
                 .find(|w| w.contains('*'))
                 .map(|s| s.to_string());
             return Self::CountFiles { path, pattern };
@@ -167,10 +199,10 @@ impl FileCommand {
 
     /// Extract a path from the command words
     fn extract_path(words: &[&str]) -> Option<String> {
-        words.iter()
+        words
+            .iter()
             .find(|w| {
-                w.starts_with('/') || w.starts_with('.') || w.starts_with('~')
-                    || w.contains('/')
+                w.starts_with('/') || w.starts_with('.') || w.starts_with('~') || w.contains('/')
             })
             .map(|s| s.to_string())
     }
@@ -219,7 +251,10 @@ impl FileAgent {
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.is_empty() {
-                        Err(format!("Command failed with exit code: {:?}", output.status.code()))
+                        Err(format!(
+                            "Command failed with exit code: {:?}",
+                            output.status.code()
+                        ))
                     } else {
                         Err(stderr.to_string())
                     }
@@ -247,9 +282,7 @@ impl FileAgent {
         match self.execute_command("ls", &["-la", &expanded_path]) {
             Ok(output) => AgentResponse::success(output)
                 .with_commands(vec![format!("ls -la {}", path)])
-                .with_suggestions(vec![
-                    format!("show directory size {}", path),
-                ]),
+                .with_suggestions(vec![format!("show directory size {}", path)]),
             Err(e) => AgentResponse::error(e),
         }
     }
@@ -266,9 +299,20 @@ impl FileAgent {
         // Try bat first (syntax highlighting)
         if let Some(limit) = lines {
             let limit_str = limit.to_string();
-            if let Ok(output) = self.execute_command("bat", &["--plain", "-n", "--line-range", &format!(":{}",limit_str), &expanded_path]) {
-                return AgentResponse::success(output)
-                    .with_commands(vec![format!("bat --plain -n --line-range :{} {}", limit, path)]);
+            if let Ok(output) = self.execute_command(
+                "bat",
+                &[
+                    "--plain",
+                    "-n",
+                    "--line-range",
+                    &format!(":{}", limit_str),
+                    &expanded_path,
+                ],
+            ) {
+                return AgentResponse::success(output).with_commands(vec![format!(
+                    "bat --plain -n --line-range :{} {}",
+                    limit, path
+                )]);
             }
             // Fall back to head
             if let Ok(output) = self.execute_command("head", &["-n", &limit_str, &expanded_path]) {
@@ -284,8 +328,9 @@ impl FileAgent {
 
         // Fall back to cat
         match self.execute_command("cat", &[&expanded_path]) {
-            Ok(output) => AgentResponse::success(output)
-                .with_commands(vec![format!("cat {}", path)]),
+            Ok(output) => {
+                AgentResponse::success(output).with_commands(vec![format!("cat {}", path)])
+            }
             Err(e) => AgentResponse::error(e),
         }
     }
@@ -303,9 +348,7 @@ impl FileAgent {
         match self.execute_command("stat", &stat_args) {
             Ok(output) => AgentResponse::success(output)
                 .with_commands(vec![format!("stat {}", path)])
-                .with_suggestions(vec![
-                    format!("read file {}", path),
-                ]),
+                .with_suggestions(vec![format!("read file {}", path)]),
             Err(e) => AgentResponse::error(e),
         }
     }
@@ -319,9 +362,7 @@ impl FileAgent {
         if let Ok(output) = self.execute_command("fd", &[pattern, &expanded_path]) {
             return AgentResponse::success(output)
                 .with_commands(vec![format!("fd {} {}", pattern, search_path)])
-                .with_suggestions(vec![
-                    format!("search in files for pattern {}", pattern),
-                ]);
+                .with_suggestions(vec![format!("search in files for pattern {}", pattern)]);
         }
 
         // Fall back to find
@@ -338,18 +379,24 @@ impl FileAgent {
         let expanded_path = expand_tilde(search_path);
 
         // Try fd with size filter
-        if let Ok(output) = self.execute_command("fd", &[".", &expanded_path, "-S", &format!("+{}", size), "-t", "f"]) {
+        if let Ok(output) = self.execute_command(
+            "fd",
+            &[".", &expanded_path, "-S", &format!("+{}", size), "-t", "f"],
+        ) {
             return AgentResponse::success(output)
                 .with_commands(vec![format!("fd . {} -S +{} -t f", search_path, size)])
-                .with_suggestions(vec![
-                    "show disk usage".to_string(),
-                ]);
+                .with_suggestions(vec!["show disk usage".to_string()]);
         }
 
         // Fall back to find
-        match self.execute_command("find", &[&expanded_path, "-type", "f", "-size", &format!("+{}", size)]) {
-            Ok(output) => AgentResponse::success(output)
-                .with_commands(vec![format!("find {} -type f -size +{}", search_path, size)]),
+        match self.execute_command(
+            "find",
+            &[&expanded_path, "-type", "f", "-size", &format!("+{}", size)],
+        ) {
+            Ok(output) => AgentResponse::success(output).with_commands(vec![format!(
+                "find {} -type f -size +{}",
+                search_path, size
+            )]),
             Err(e) => AgentResponse::error(e),
         }
     }
@@ -361,21 +408,49 @@ impl FileAgent {
         let days_str = days.to_string();
 
         // Try fd with time filter
-        if let Ok(output) = self.execute_command("fd", &[".", &expanded_path, "--changed-within", &format!("{}d", days), "-t", "f"]) {
-            return AgentResponse::success(output)
-                .with_commands(vec![format!("fd . {} --changed-within {}d -t f", search_path, days)]);
+        if let Ok(output) = self.execute_command(
+            "fd",
+            &[
+                ".",
+                &expanded_path,
+                "--changed-within",
+                &format!("{}d", days),
+                "-t",
+                "f",
+            ],
+        ) {
+            return AgentResponse::success(output).with_commands(vec![format!(
+                "fd . {} --changed-within {}d -t f",
+                search_path, days
+            )]);
         }
 
         // Fall back to find
-        match self.execute_command("find", &[&expanded_path, "-type", "f", "-mtime", &format!("-{}", days_str)]) {
-            Ok(output) => AgentResponse::success(output)
-                .with_commands(vec![format!("find {} -type f -mtime -{}", search_path, days)]),
+        match self.execute_command(
+            "find",
+            &[
+                &expanded_path,
+                "-type",
+                "f",
+                "-mtime",
+                &format!("-{}", days_str),
+            ],
+        ) {
+            Ok(output) => AgentResponse::success(output).with_commands(vec![format!(
+                "find {} -type f -mtime -{}",
+                search_path, days
+            )]),
             Err(e) => AgentResponse::error(e),
         }
     }
 
     /// Search in files (grep)
-    fn search_in_files(&self, pattern: &str, path: Option<&str>, file_pattern: Option<&str>) -> AgentResponse {
+    fn search_in_files(
+        &self,
+        pattern: &str,
+        path: Option<&str>,
+        file_pattern: Option<&str>,
+    ) -> AgentResponse {
         let search_path = path.unwrap_or(".");
         let expanded_path = expand_tilde(search_path);
 
@@ -391,8 +466,7 @@ impl FileAgent {
             } else {
                 format!("rg {} {}", pattern, search_path)
             };
-            return AgentResponse::success(output)
-                .with_commands(vec![cmd]);
+            return AgentResponse::success(output).with_commands(vec![cmd]);
         }
 
         // Fall back to grep
@@ -455,13 +529,12 @@ impl FileAgent {
 
     /// Handle unknown command
     fn handle_unknown(&self, command: &str) -> AgentResponse {
-        AgentResponse::error(format!("Unknown file command: {}", command))
-            .with_suggestions(vec![
-                "list directory .".to_string(),
-                "find *.log files".to_string(),
-                "find large files".to_string(),
-                "search in files for TODO".to_string(),
-            ])
+        AgentResponse::error(format!("Unknown file command: {}", command)).with_suggestions(vec![
+            "list directory .".to_string(),
+            "find *.log files".to_string(),
+            "find large files".to_string(),
+            "search in files for TODO".to_string(),
+        ])
     }
 }
 
@@ -514,13 +587,21 @@ impl Agent for FileAgent {
             FileCommand::ReadFile { path, lines } => self.read_file(&path, lines),
             FileCommand::FileInfo { path } => self.file_info(&path),
             FileCommand::FindFiles { pattern, path } => self.find_files(&pattern, path.as_deref()),
-            FileCommand::FindLargeFiles { size, path } => self.find_large_files(&size, path.as_deref()),
-            FileCommand::FindRecentFiles { days, path } => self.find_recent_files(days, path.as_deref()),
-            FileCommand::SearchInFiles { pattern, path, file_pattern } => {
-                self.search_in_files(&pattern, path.as_deref(), file_pattern.as_deref())
+            FileCommand::FindLargeFiles { size, path } => {
+                self.find_large_files(&size, path.as_deref())
             }
+            FileCommand::FindRecentFiles { days, path } => {
+                self.find_recent_files(days, path.as_deref())
+            }
+            FileCommand::SearchInFiles {
+                pattern,
+                path,
+                file_pattern,
+            } => self.search_in_files(&pattern, path.as_deref(), file_pattern.as_deref()),
             FileCommand::DirectorySize { path } => self.directory_size(&path),
-            FileCommand::CountFiles { path, pattern } => self.count_files(&path, pattern.as_deref()),
+            FileCommand::CountFiles { path, pattern } => {
+                self.count_files(&path, pattern.as_deref())
+            }
             FileCommand::Unknown(cmd) => self.handle_unknown(&cmd),
         }
     }

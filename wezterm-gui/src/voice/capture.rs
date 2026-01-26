@@ -243,9 +243,7 @@ impl AudioCapture {
     pub fn new(config: AudioConfig) -> Result<Self, CaptureError> {
         let host = cpal::default_host();
 
-        let device = host
-            .default_input_device()
-            .ok_or(CaptureError::NoDevice)?;
+        let device = host.default_input_device().ok_or(CaptureError::NoDevice)?;
 
         let device_name = device.name().unwrap_or_else(|_| "Unknown".to_string());
         log::info!("Using audio input device: {}", device_name);
@@ -310,9 +308,7 @@ impl AudioCapture {
             .input_devices()
             .map_err(|e| CaptureError::DeviceInit(e.to_string()))?;
 
-        Ok(devices
-            .filter_map(|d| d.name().ok())
-            .collect())
+        Ok(devices.filter_map(|d| d.name().ok()).collect())
     }
 
     /// Enable voice activity detection
@@ -497,7 +493,9 @@ mod tests {
         assert!(energy < 0.001);
 
         // Loud samples
-        let loud: Vec<i16> = (0..100).map(|i| ((i as f32 / 100.0 * 32767.0) as i16)).collect();
+        let loud: Vec<i16> = (0..100)
+            .map(|i| ((i as f32 / 100.0 * 32767.0) as i16))
+            .collect();
         let energy = vad.compute_energy(&loud);
         assert!(energy > 0.3);
     }

@@ -37,7 +37,12 @@ impl BlockManager {
     }
 
     /// Start a new command block
-    pub fn start_block(&mut self, command: String, working_dir: String, start_line: usize) -> BlockId {
+    pub fn start_block(
+        &mut self,
+        command: String,
+        working_dir: String,
+        start_line: usize,
+    ) -> BlockId {
         let block = Block::new(command, working_dir, start_line);
         let id = block.id;
 
@@ -143,7 +148,11 @@ impl BlockManager {
     }
 
     /// Execute an action on a block
-    pub fn execute_action(&mut self, id: BlockId, action: BlockAction) -> Option<BlockActionResult> {
+    pub fn execute_action(
+        &mut self,
+        id: BlockId,
+        action: BlockAction,
+    ) -> Option<BlockActionResult> {
         let block = self.blocks.get_mut(&id)?;
 
         match action {
@@ -158,18 +167,10 @@ impl BlockManager {
                 // This would need to extract text from terminal buffer
                 Some(BlockActionResult::NeedsTerminalData)
             }
-            BlockAction::CopyAll => {
-                Some(BlockActionResult::NeedsTerminalData)
-            }
-            BlockAction::Rerun => {
-                Some(BlockActionResult::ExecuteCommand(block.command.clone()))
-            }
-            BlockAction::EditAndRun => {
-                Some(BlockActionResult::EditCommand(block.command.clone()))
-            }
-            BlockAction::Explain => {
-                Some(BlockActionResult::SendToAI(block.command.clone()))
-            }
+            BlockAction::CopyAll => Some(BlockActionResult::NeedsTerminalData),
+            BlockAction::Rerun => Some(BlockActionResult::ExecuteCommand(block.command.clone())),
+            BlockAction::EditAndRun => Some(BlockActionResult::EditCommand(block.command.clone())),
+            BlockAction::Explain => Some(BlockActionResult::SendToAI(block.command.clone())),
             BlockAction::TogglePin => {
                 block.toggle_pinned();
                 if block.pinned {
@@ -200,9 +201,7 @@ impl BlockManager {
                 }
                 Some(BlockActionResult::Deleted)
             }
-            BlockAction::Share => {
-                Some(BlockActionResult::NeedsTerminalData)
-            }
+            BlockAction::Share => Some(BlockActionResult::NeedsTerminalData),
         }
     }
 

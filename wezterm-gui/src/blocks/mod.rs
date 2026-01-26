@@ -8,11 +8,11 @@ mod manager;
 mod parser;
 mod renderer;
 
-pub use block::{BlockId, BlockAction};
+pub use block::{BlockAction, BlockId};
 // Block and BlockState available but currently only used internally
 #[allow(unused_imports)]
 pub use block::{Block, BlockState};
-pub use manager::{BlockManager, BlockActionResult, BlockStats, BlockLearningData};
+pub use manager::{BlockActionResult, BlockLearningData, BlockManager, BlockStats};
 pub use parser::CXSequence;
 // BlockParser available but currently only used internally
 #[allow(unused_imports)]
@@ -21,8 +21,8 @@ pub use renderer::{BlockRenderer, BlockUIElement};
 // Additional renderer types available for future use
 #[allow(unused_imports)]
 pub use renderer::{
-    BlockRenderConfig, BlockLayout, BlockHitRegion,
-    BlockHeaderRenderInfo, RectF, collect_render_info,
+    collect_render_info, BlockHeaderRenderInfo, BlockHitRegion, BlockLayout, BlockRenderConfig,
+    RectF,
 };
 
 // chrono types available for timestamp handling

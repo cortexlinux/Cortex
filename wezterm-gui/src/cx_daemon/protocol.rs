@@ -71,9 +71,7 @@ pub enum DaemonRequest {
     },
 
     /// Get shared context from daemon
-    GetContext {
-        context_type: ContextType,
-    },
+    GetContext { context_type: ContextType },
 
     /// Register a terminal instance
     RegisterTerminal {
@@ -83,9 +81,7 @@ pub enum DaemonRequest {
     },
 
     /// Unregister a terminal instance
-    UnregisterTerminal {
-        terminal_id: String,
-    },
+    UnregisterTerminal { terminal_id: String },
 
     /// Ping the daemon
     Ping,
@@ -97,9 +93,7 @@ pub enum DaemonRequest {
     ListAgents,
 
     /// Get agent details
-    GetAgent {
-        name: String,
-    },
+    GetAgent { name: String },
 }
 
 /// Responses from the CX daemon
@@ -107,15 +101,10 @@ pub enum DaemonRequest {
 #[serde(tag = "type", content = "data")]
 pub enum DaemonResponse {
     /// Operation succeeded
-    Success {
-        message: String,
-    },
+    Success { message: String },
 
     /// Operation failed
-    Error {
-        code: String,
-        message: String,
-    },
+    Error { code: String, message: String },
 
     /// Result from agent execution
     AgentResult {
@@ -135,10 +124,7 @@ pub enum DaemonResponse {
     },
 
     /// Streaming AI response chunk
-    AIStreamChunk {
-        content: String,
-        done: bool,
-    },
+    AIStreamChunk { content: String, done: bool },
 
     /// Context data from daemon
     Context {
@@ -147,10 +133,7 @@ pub enum DaemonResponse {
     },
 
     /// Pong response
-    Pong {
-        version: String,
-        uptime_secs: u64,
-    },
+    Pong { version: String, uptime_secs: u64 },
 
     /// Daemon status
     Status {
@@ -163,9 +146,7 @@ pub enum DaemonResponse {
     },
 
     /// List of available agents
-    AgentList {
-        agents: Vec<AgentInfo>,
-    },
+    AgentList { agents: Vec<AgentInfo> },
 
     /// Details of a specific agent
     AgentDetails {
@@ -314,13 +295,7 @@ impl DaemonRequest {
     }
 
     /// Create a learn from history request
-    pub fn learn(
-        command: &str,
-        output: &str,
-        exit_code: i32,
-        duration_ms: u64,
-        cwd: &str,
-    ) -> Self {
+    pub fn learn(command: &str, output: &str, exit_code: i32, duration_ms: u64, cwd: &str) -> Self {
         Self::LearnFromHistory {
             command: command.to_string(),
             output: output.to_string(),

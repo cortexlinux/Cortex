@@ -97,27 +97,15 @@ impl BlockParser {
 
         if params.contains_key("start") || params.get("").map(|s| s.as_str()) == Some("start") {
             // Try to get command from either format
-            let command = params
-                .get("cmd")
-                .cloned()
-                .unwrap_or_default();
-            let timestamp = params
-                .get("time")
-                .and_then(|t| t.parse().ok())
-                .unwrap_or(0);
+            let command = params.get("cmd").cloned().unwrap_or_default();
+            let timestamp = params.get("time").and_then(|t| t.parse().ok()).unwrap_or(0);
 
             return Some(CXSequence::BlockStart { command, timestamp });
         }
 
         if params.contains_key("end") || params.get("").map(|s| s.as_str()) == Some("end") {
-            let exit_code = params
-                .get("exit")
-                .and_then(|e| e.parse().ok())
-                .unwrap_or(0);
-            let timestamp = params
-                .get("time")
-                .and_then(|t| t.parse().ok())
-                .unwrap_or(0);
+            let exit_code = params.get("exit").and_then(|e| e.parse().ok()).unwrap_or(0);
+            let timestamp = params.get("time").and_then(|t| t.parse().ok()).unwrap_or(0);
 
             return Some(CXSequence::BlockEnd {
                 exit_code,
@@ -153,7 +141,9 @@ impl BlockParser {
 
         if let Some(query) = params.get("suggest").or_else(|| params.get("query")) {
             if params.contains_key("suggest") {
-                return Some(CXSequence::AISuggest { query: query.clone() });
+                return Some(CXSequence::AISuggest {
+                    query: query.clone(),
+                });
             }
         }
 
@@ -196,7 +186,10 @@ mod tests {
     fn test_parse_block_end() {
         let seq = BlockParser::parse("777;cx;block;end;exit=0;time=1234567891");
         match seq {
-            Some(CXSequence::BlockEnd { exit_code, timestamp }) => {
+            Some(CXSequence::BlockEnd {
+                exit_code,
+                timestamp,
+            }) => {
                 assert_eq!(exit_code, 0);
                 assert_eq!(timestamp, 1234567891);
             }

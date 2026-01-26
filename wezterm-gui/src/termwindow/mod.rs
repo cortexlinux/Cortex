@@ -1291,7 +1291,11 @@ impl TermWindow {
 
                 // CX Terminal: Handle command block alerts
                 MuxNotification::Alert {
-                    alert: Alert::CXBlockStart { command, timestamp: _ },
+                    alert:
+                        Alert::CXBlockStart {
+                            command,
+                            timestamp: _,
+                        },
                     pane_id,
                 } => {
                     if self.window_contains_pane(pane_id) {
@@ -1300,13 +1304,19 @@ impl TermWindow {
                         // Get current line from pane
                         let current_line = self.get_pane_cursor_line(pane_id).unwrap_or(0);
                         let mut managers = self.block_managers.borrow_mut();
-                        let manager = managers.entry(pane_id).or_insert_with(crate::blocks::BlockManager::new);
+                        let manager = managers
+                            .entry(pane_id)
+                            .or_insert_with(crate::blocks::BlockManager::new);
                         manager.start_block(command, cwd, current_line);
                         window.invalidate();
                     }
                 }
                 MuxNotification::Alert {
-                    alert: Alert::CXBlockEnd { exit_code, timestamp: _ },
+                    alert:
+                        Alert::CXBlockEnd {
+                            exit_code,
+                            timestamp: _,
+                        },
                     pane_id,
                 } => {
                     if self.window_contains_pane(pane_id) {
@@ -1351,7 +1361,12 @@ impl TermWindow {
                     pane_id,
                 } => {
                     if self.window_contains_pane(pane_id) {
-                        log::debug!("CX Agent request: {} - {} (pane {})", name, command, pane_id);
+                        log::debug!(
+                            "CX Agent request: {} - {} (pane {})",
+                            name,
+                            command,
+                            pane_id
+                        );
                         // TODO: Route to agent system when implemented
                     }
                 }

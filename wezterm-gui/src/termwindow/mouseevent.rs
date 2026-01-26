@@ -7,7 +7,9 @@ use ::window::{
     MouseButtons as WMB, MouseCursor, MouseEvent, MouseEventKind as WMEK, MousePress,
     WindowDecorations, WindowOps, WindowState,
 };
-use config::keyassignment::{ClipboardCopyDestination, KeyAssignment, MouseEventTrigger, SpawnTabDomain};
+use config::keyassignment::{
+    ClipboardCopyDestination, KeyAssignment, MouseEventTrigger, SpawnTabDomain,
+};
 use config::MouseEventAltScreen;
 use mux::pane::{Pane, WithPaneLines};
 use mux::tab::SplitDirection;
@@ -1110,7 +1112,10 @@ impl super::TermWindow {
                         if let Some(result) = self.handle_block_click(pane_id, &hit_element) {
                             match result {
                                 BlockActionResult::CopyToClipboard(text) => {
-                                    self.copy_to_clipboard(ClipboardCopyDestination::Clipboard, text);
+                                    self.copy_to_clipboard(
+                                        ClipboardCopyDestination::Clipboard,
+                                        text,
+                                    );
                                 }
                                 _ => {}
                             }

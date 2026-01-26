@@ -266,11 +266,7 @@ impl CXDaemonClient {
                     });
                 }
                 Err(e) => {
-                    log::warn!(
-                        "Connection attempt {} failed: {}",
-                        retry_count + 1,
-                        e
-                    );
+                    log::warn!("Connection attempt {} failed: {}", retry_count + 1, e);
 
                     if !self.reconnect_config.enabled {
                         self.set_state(ConnectionState::Failed, &e.to_string());
@@ -532,9 +528,9 @@ impl CXDaemonClient {
         };
 
         let stream = self.connect_stream()?;
-        let mut stream_writer = stream.try_clone().map_err(|e| {
-            DaemonError::ConnectionFailed(format!("Failed to clone stream: {}", e))
-        })?;
+        let mut stream_writer = stream
+            .try_clone()
+            .map_err(|e| DaemonError::ConnectionFailed(format!("Failed to clone stream: {}", e)))?;
 
         // Send request
         let json = request.to_json_line()?;
@@ -671,11 +667,7 @@ impl CXDaemonClient {
                     cpu_count: data["cpu_count"].as_u64().unwrap_or(0) as u32,
                     load_average: data["load_average"]
                         .as_array()
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_f64())
-                                .collect::<Vec<_>>()
-                        })
+                        .map(|a| a.iter().filter_map(|v| v.as_f64()).collect::<Vec<_>>())
                         .unwrap_or_default(),
                 })
             }
@@ -763,21 +755,17 @@ impl CXDaemonClient {
                 .map_err(|e| DaemonError::ConnectionFailed(e.to_string()))?;
 
             let mut stream = stream;
-            stream
-                .write_all(json.as_bytes())
-                .map_err(|e| {
-                    connected.store(false, Ordering::SeqCst);
-                    DaemonError::ConnectionFailed(e.to_string())
-                })?;
+            stream.write_all(json.as_bytes()).map_err(|e| {
+                connected.store(false, Ordering::SeqCst);
+                DaemonError::ConnectionFailed(e.to_string())
+            })?;
 
             let mut reader = BufReader::new(&stream);
             let mut response = String::new();
-            reader
-                .read_line(&mut response)
-                .map_err(|e| {
-                    connected.store(false, Ordering::SeqCst);
-                    DaemonError::ConnectionFailed(e.to_string())
-                })?;
+            reader.read_line(&mut response).map_err(|e| {
+                connected.store(false, Ordering::SeqCst);
+                DaemonError::ConnectionFailed(e.to_string())
+            })?;
 
             DaemonResponse::from_json(&response)
         })

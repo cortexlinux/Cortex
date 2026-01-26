@@ -65,9 +65,7 @@ impl crate::TermWindow {
         };
 
         let top_offset = top_bar_height + padding_top + border.top.get() as f32;
-        let left_offset = padding_left
-            + border.left.get() as f32
-            + (pos.left as f32 * cell_width);
+        let left_offset = padding_left + border.left.get() as f32 + (pos.left as f32 * cell_width);
         let pane_width = pos.width as f32 * cell_width;
 
         // Compute layouts for visible blocks
@@ -159,12 +157,7 @@ impl crate::TermWindow {
                 self.filled_rectangle(
                     layers,
                     1,
-                    euclid::rect(
-                        block_rect.x,
-                        block_rect.y,
-                        block_rect.width,
-                        border_width,
-                    ),
+                    euclid::rect(block_rect.x, block_rect.y, block_rect.width, border_width),
                     config.selected_border_color,
                 )
                 .context("block top border")?;
@@ -187,12 +180,7 @@ impl crate::TermWindow {
                 self.filled_rectangle(
                     layers,
                     1,
-                    euclid::rect(
-                        block_rect.x,
-                        block_rect.y,
-                        border_width,
-                        block_rect.height,
-                    ),
+                    euclid::rect(block_rect.x, block_rect.y, border_width, block_rect.height),
                     config.selected_border_color,
                 )
                 .context("block left border")?;

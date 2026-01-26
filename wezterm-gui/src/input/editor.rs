@@ -114,7 +114,11 @@ impl Editor {
             if i < self.cursor.line {
                 pos += line.len() + 1; // +1 for newline
             } else {
-                pos += line.chars().take(self.cursor.column).map(|c| c.len_utf8()).sum::<usize>();
+                pos += line
+                    .chars()
+                    .take(self.cursor.column)
+                    .map(|c| c.len_utf8())
+                    .sum::<usize>();
                 break;
             }
         }
@@ -134,7 +138,8 @@ impl Editor {
             if remaining <= line_len || line_idx == self.lines.len() - 1 {
                 self.cursor.line = line_idx;
                 // Convert byte position to character position
-                self.cursor.column = line.chars()
+                self.cursor.column = line
+                    .chars()
                     .take_while(|_| {
                         let c_len = 1; // Simplified for now
                         if remaining >= c_len {
@@ -366,12 +371,20 @@ impl Editor {
         }
 
         // Skip whitespace
-        while self.cursor.column > 0 && chars.get(self.cursor.column - 1).map_or(false, |c| c.is_whitespace()) {
+        while self.cursor.column > 0
+            && chars
+                .get(self.cursor.column - 1)
+                .map_or(false, |c| c.is_whitespace())
+        {
             self.cursor.column -= 1;
         }
 
         // Skip word characters
-        while self.cursor.column > 0 && chars.get(self.cursor.column - 1).map_or(false, |c| !c.is_whitespace()) {
+        while self.cursor.column > 0
+            && chars
+                .get(self.cursor.column - 1)
+                .map_or(false, |c| !c.is_whitespace())
+        {
             self.cursor.column -= 1;
         }
     }
@@ -475,12 +488,20 @@ impl Editor {
         let mut end_column = self.cursor.column;
 
         // Skip whitespace
-        while end_column > 0 && chars.get(end_column - 1).map_or(false, |c| c.is_whitespace()) {
+        while end_column > 0
+            && chars
+                .get(end_column - 1)
+                .map_or(false, |c| c.is_whitespace())
+        {
             end_column -= 1;
         }
 
         // Skip word characters
-        while end_column > 0 && chars.get(end_column - 1).map_or(false, |c| !c.is_whitespace()) {
+        while end_column > 0
+            && chars
+                .get(end_column - 1)
+                .map_or(false, |c| !c.is_whitespace())
+        {
             end_column -= 1;
         }
 
@@ -586,7 +607,8 @@ impl Editor {
                     self.lines.remove(start.line);
                 }
 
-                self.lines.insert(start.line, format!("{}{}", first_part, last_part));
+                self.lines
+                    .insert(start.line, format!("{}{}", first_part, last_part));
             }
 
             self.modified = true;

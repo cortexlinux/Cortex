@@ -31,9 +31,15 @@ pub enum GitCommand {
     /// Commit with message
     Commit { message: String },
     /// Push to remote
-    Push { remote: Option<String>, branch: Option<String> },
+    Push {
+        remote: Option<String>,
+        branch: Option<String>,
+    },
     /// Pull from remote
-    Pull { remote: Option<String>, branch: Option<String> },
+    Pull {
+        remote: Option<String>,
+        branch: Option<String>,
+    },
     /// Fetch from remote
     Fetch { remote: Option<String> },
     /// Create branch
@@ -66,17 +72,20 @@ impl GitCommand {
         // Diff
         if input_lower.contains("diff") {
             let staged = input_lower.contains("staged") || input_lower.contains("--cached");
-            let file = words.iter()
+            let file = words
+                .iter()
                 .find(|w| w.contains('.') || w.contains('/'))
                 .map(|s| s.to_string());
             return Self::Diff { staged, file };
         }
 
         // Log
-        if input_lower.contains("log") || input_lower.contains("history")
+        if input_lower.contains("log")
+            || input_lower.contains("history")
             || input_lower.contains("commits")
         {
-            let count = words.iter()
+            let count = words
+                .iter()
                 .filter_map(|w| w.parse::<usize>().ok())
                 .next()
                 .unwrap_or(10);
@@ -88,17 +97,23 @@ impl GitCommand {
         if input_lower.contains("branch") {
             if input_lower.contains("create") || input_lower.contains("new") {
                 if let Some(name) = words.last() {
-                    return Self::CreateBranch { name: name.to_string() };
+                    return Self::CreateBranch {
+                        name: name.to_string(),
+                    };
                 }
             }
             if input_lower.contains("delete") || input_lower.contains("remove") {
                 if let Some(name) = words.last() {
-                    return Self::DeleteBranch { name: name.to_string() };
+                    return Self::DeleteBranch {
+                        name: name.to_string(),
+                    };
                 }
             }
             if input_lower.contains("switch") || input_lower.contains("checkout") {
                 if let Some(name) = words.last() {
-                    return Self::SwitchBranch { name: name.to_string() };
+                    return Self::SwitchBranch {
+                        name: name.to_string(),
+                    };
                 }
             }
             if input_lower.contains("current") {
@@ -111,29 +126,36 @@ impl GitCommand {
         // Switch/checkout
         if input_lower.contains("switch") || input_lower.contains("checkout") {
             if let Some(name) = words.last() {
-                return Self::SwitchBranch { name: name.to_string() };
+                return Self::SwitchBranch {
+                    name: name.to_string(),
+                };
             }
         }
 
         // Stage (add)
-        if input_lower.contains("stage") || input_lower.starts_with("add ")
+        if input_lower.contains("stage")
+            || input_lower.starts_with("add ")
             || input_lower.contains("git add")
         {
-            let files: Vec<String> = words.iter()
+            let files: Vec<String> = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "stage" && w.to_lowercase() != "add")
                 .skip(1)
                 .map(|s| s.to_string())
                 .collect();
 
             if files.is_empty() {
-                return Self::Stage { files: vec![".".to_string()] };
+                return Self::Stage {
+                    files: vec![".".to_string()],
+                };
             }
             return Self::Stage { files };
         }
 
         // Unstage
         if input_lower.contains("unstage") || input_lower.contains("reset head") {
-            let files: Vec<String> = words.iter()
+            let files: Vec<String> = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "unstage")
                 .skip(1)
                 .map(|s| s.to_string())
@@ -171,7 +193,8 @@ impl GitCommand {
 
         // Fetch
         if input_lower.contains("fetch") {
-            let remote = words.iter()
+            let remote = words
+                .iter()
                 .skip_while(|&w| w.to_lowercase() != "fetch")
                 .nth(1)
                 .map(|s| s.to_string());
@@ -192,7 +215,9 @@ impl GitCommand {
         // Blame
         if input_lower.contains("blame") {
             if let Some(file) = words.last() {
-                return Self::Blame { file: file.to_string() };
+                return Self::Blame {
+                    file: file.to_string(),
+                };
             }
         }
 
@@ -218,7 +243,8 @@ impl GitCommand {
 
     /// Extract remote and branch from words
     fn extract_remote_branch(words: &[&str], keyword: &str) -> (Option<String>, Option<String>) {
-        let after_keyword: Vec<_> = words.iter()
+        let after_keyword: Vec<_> = words
+            .iter()
             .skip_while(|&w| w.to_lowercase() != keyword)
             .skip(1)
             .collect();
@@ -226,7 +252,10 @@ impl GitCommand {
         match after_keyword.len() {
             0 => (None, None),
             1 => (Some(after_keyword[0].to_string()), None),
-            _ => (Some(after_keyword[0].to_string()), Some(after_keyword[1].to_string())),
+            _ => (
+                Some(after_keyword[0].to_string()),
+                Some(after_keyword[1].to_string()),
+            ),
         }
     }
 }
@@ -256,7 +285,10 @@ impl GitAgent {
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.is_empty() {
-                        Err(format!("Git command failed with exit code: {:?}", output.status.code()))
+                        Err(format!(
+                            "Git command failed with exit code: {:?}",
+                            output.status.code()
+                        ))
                     } else {
                         Err(stderr.to_string())
                     }
@@ -268,7 +300,8 @@ impl GitAgent {
 
     /// Check if we're in a git repository
     fn is_git_repo(&self) -> bool {
-        self.execute_git(&["rev-parse", "--is-inside-work-tree"]).is_ok()
+        self.execute_git(&["rev-parse", "--is-inside-work-tree"])
+            .is_ok()
     }
 
     /// Get git status
@@ -313,10 +346,7 @@ impl GitAgent {
                 };
                 AgentResponse::success(result)
                     .with_commands(vec![cmd])
-                    .with_suggestions(vec![
-                        "stage all".to_string(),
-                        "commit".to_string(),
-                    ])
+                    .with_suggestions(vec!["stage all".to_string(), "commit".to_string()])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -339,8 +369,7 @@ impl GitAgent {
         match self.execute_git(&args) {
             Ok(output) => {
                 let cmd = format!("git {}", args.join(" "));
-                AgentResponse::success(output)
-                    .with_commands(vec![cmd])
+                AgentResponse::success(output).with_commands(vec![cmd])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -399,10 +428,7 @@ impl GitAgent {
                 let cmd = format!("git add {}", files.join(" "));
                 AgentResponse::success(format!("Staged: {}", files.join(", ")))
                     .with_commands(vec![cmd])
-                    .with_suggestions(vec![
-                        "show staged diff".to_string(),
-                        "commit".to_string(),
-                    ])
+                    .with_suggestions(vec!["show staged diff".to_string(), "commit".to_string()])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -423,8 +449,7 @@ impl GitAgent {
         match self.execute_git(&args) {
             Ok(_) => {
                 let cmd = format!("git reset HEAD {}", files.join(" "));
-                AgentResponse::success("Files unstaged".to_string())
-                    .with_commands(vec![cmd])
+                AgentResponse::success("Files unstaged".to_string()).with_commands(vec![cmd])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -444,10 +469,7 @@ impl GitAgent {
             cmd
         ))
         .with_commands(vec![cmd])
-        .with_suggestions(vec![
-            "push".to_string(),
-            "show log".to_string(),
-        ])
+        .with_suggestions(vec!["push".to_string(), "show log".to_string()])
     }
 
     /// Push to remote
@@ -488,10 +510,7 @@ impl GitAgent {
                 let cmd = format!("git {}", args.join(" "));
                 AgentResponse::success(output)
                     .with_commands(vec![cmd])
-                    .with_suggestions(vec![
-                        "show status".to_string(),
-                        "show log".to_string(),
-                    ])
+                    .with_suggestions(vec!["show status".to_string(), "show log".to_string()])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -514,10 +533,7 @@ impl GitAgent {
                 };
                 AgentResponse::success(result)
                     .with_commands(vec![format!("git fetch {}", remote)])
-                    .with_suggestions(vec![
-                        "show status".to_string(),
-                        "pull".to_string(),
-                    ])
+                    .with_suggestions(vec!["show status".to_string(), "pull".to_string()])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -530,14 +546,9 @@ impl GitAgent {
         }
 
         match self.execute_git(&["checkout", "-b", name]) {
-            Ok(_) => {
-                AgentResponse::success(format!("Created and switched to branch: {}", name))
-                    .with_commands(vec![format!("git checkout -b {}", name)])
-                    .with_suggestions(vec![
-                        "show status".to_string(),
-                        "list branches".to_string(),
-                    ])
-            }
+            Ok(_) => AgentResponse::success(format!("Created and switched to branch: {}", name))
+                .with_commands(vec![format!("git checkout -b {}", name)])
+                .with_suggestions(vec!["show status".to_string(), "list branches".to_string()]),
             Err(e) => AgentResponse::error(e),
         }
     }
@@ -549,14 +560,9 @@ impl GitAgent {
         }
 
         match self.execute_git(&["checkout", name]) {
-            Ok(_) => {
-                AgentResponse::success(format!("Switched to branch: {}", name))
-                    .with_commands(vec![format!("git checkout {}", name)])
-                    .with_suggestions(vec![
-                        "show status".to_string(),
-                        "show log".to_string(),
-                    ])
-            }
+            Ok(_) => AgentResponse::success(format!("Switched to branch: {}", name))
+                .with_commands(vec![format!("git checkout {}", name)])
+                .with_suggestions(vec!["show status".to_string(), "show log".to_string()]),
             Err(e) => AgentResponse::error(e),
         }
     }
@@ -582,7 +588,11 @@ impl GitAgent {
             return AgentResponse::error("Not a git repository".to_string());
         }
 
-        let args = if pop { vec!["stash", "pop"] } else { vec!["stash"] };
+        let args = if pop {
+            vec!["stash", "pop"]
+        } else {
+            vec!["stash"]
+        };
 
         match self.execute_git(&args) {
             Ok(output) => {
@@ -615,8 +625,7 @@ impl GitAgent {
                 } else {
                     output
                 };
-                AgentResponse::success(result)
-                    .with_commands(vec!["git remote -v".to_string()])
+                AgentResponse::success(result).with_commands(vec!["git remote -v".to_string()])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -630,8 +639,7 @@ impl GitAgent {
 
         match self.execute_git(&["blame", file]) {
             Ok(output) => {
-                AgentResponse::success(output)
-                    .with_commands(vec![format!("git blame {}", file)])
+                AgentResponse::success(output).with_commands(vec![format!("git blame {}", file)])
             }
             Err(e) => AgentResponse::error(e),
         }
@@ -639,13 +647,12 @@ impl GitAgent {
 
     /// Handle unknown command
     fn handle_unknown(&self, command: &str) -> AgentResponse {
-        AgentResponse::error(format!("Unknown git command: {}", command))
-            .with_suggestions(vec![
-                "show status".to_string(),
-                "show diff".to_string(),
-                "show log".to_string(),
-                "list branches".to_string(),
-            ])
+        AgentResponse::error(format!("Unknown git command: {}", command)).with_suggestions(vec![
+            "show status".to_string(),
+            "show diff".to_string(),
+            "show log".to_string(),
+            "list branches".to_string(),
+        ])
     }
 }
 
@@ -743,11 +750,17 @@ mod tests {
     fn test_parse_diff() {
         assert!(matches!(
             GitCommand::parse("show diff"),
-            GitCommand::Diff { staged: false, file: None }
+            GitCommand::Diff {
+                staged: false,
+                file: None
+            }
         ));
         assert!(matches!(
             GitCommand::parse("show staged diff"),
-            GitCommand::Diff { staged: true, file: None }
+            GitCommand::Diff {
+                staged: true,
+                file: None
+            }
         ));
     }
 
@@ -755,7 +768,10 @@ mod tests {
     fn test_parse_log() {
         assert!(matches!(
             GitCommand::parse("show last 5 commits"),
-            GitCommand::Log { count: 5, oneline: false }
+            GitCommand::Log {
+                count: 5,
+                oneline: false
+            }
         ));
     }
 

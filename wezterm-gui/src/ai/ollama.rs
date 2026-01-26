@@ -555,10 +555,7 @@ mod tests {
     fn test_endpoints() {
         let provider = OllamaProvider::new(test_config());
 
-        assert_eq!(
-            provider.chat_endpoint(),
-            "http://localhost:11434/api/chat"
-        );
+        assert_eq!(provider.chat_endpoint(), "http://localhost:11434/api/chat");
         assert_eq!(
             provider.generate_endpoint(),
             "http://localhost:11434/api/generate"

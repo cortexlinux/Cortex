@@ -74,7 +74,9 @@ pub trait Transcriber: Send + Sync {
     fn transcribe(
         &self,
         audio: &[i16],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, TranscribeError>> + Send + '_>>;
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<String, TranscribeError>> + Send + '_>,
+    >;
 
     /// Transcribe audio synchronously (blocking)
     fn transcribe_sync(&self, audio: &[i16]) -> Result<String, TranscribeError>;
@@ -83,7 +85,13 @@ pub trait Transcriber: Send + Sync {
     fn transcribe_detailed(
         &self,
         audio: &[i16],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<TranscriptionResult, TranscribeError>> + Send + '_>>;
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<TranscriptionResult, TranscribeError>>
+                + Send
+                + '_,
+        >,
+    >;
 
     /// Get the name of this transcriber
     fn name(&self) -> &str;
@@ -178,7 +186,9 @@ impl WhisperLocal {
 
         // Validate audio
         if audio.is_empty() {
-            return Err(TranscribeError::InvalidAudio("Empty audio buffer".to_string()));
+            return Err(TranscribeError::InvalidAudio(
+                "Empty audio buffer".to_string(),
+            ));
         }
 
         // In production, this would use whisper.cpp:
@@ -224,7 +234,9 @@ impl Transcriber for WhisperLocal {
     fn transcribe(
         &self,
         audio: &[i16],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, TranscribeError>> + Send + '_>> {
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<String, TranscribeError>> + Send + '_>,
+    > {
         let audio = audio.to_vec();
         Box::pin(async move { self.do_transcribe(&audio) })
     }
@@ -236,7 +248,13 @@ impl Transcriber for WhisperLocal {
     fn transcribe_detailed(
         &self,
         audio: &[i16],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<TranscriptionResult, TranscribeError>> + Send + '_>> {
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<TranscriptionResult, TranscribeError>>
+                + Send
+                + '_,
+        >,
+    > {
         let audio = audio.to_vec();
         Box::pin(async move {
             let text = self.do_transcribe(&audio)?;
@@ -318,7 +336,9 @@ impl WhisperCloud {
     async fn do_transcribe(&self, audio: &[i16]) -> Result<String, TranscribeError> {
         // Validate audio
         if audio.is_empty() {
-            return Err(TranscribeError::InvalidAudio("Empty audio buffer".to_string()));
+            return Err(TranscribeError::InvalidAudio(
+                "Empty audio buffer".to_string(),
+            ));
         }
 
         // Convert to WAV format for API
@@ -428,7 +448,9 @@ impl Transcriber for WhisperCloud {
     fn transcribe(
         &self,
         audio: &[i16],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, TranscribeError>> + Send + '_>> {
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<String, TranscribeError>> + Send + '_>,
+    > {
         let audio = audio.to_vec();
         Box::pin(async move { self.do_transcribe(&audio).await })
     }
@@ -443,7 +465,13 @@ impl Transcriber for WhisperCloud {
     fn transcribe_detailed(
         &self,
         audio: &[i16],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<TranscriptionResult, TranscribeError>> + Send + '_>> {
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<TranscriptionResult, TranscribeError>>
+                + Send
+                + '_,
+        >,
+    > {
         let audio = audio.to_vec();
         Box::pin(async move {
             let text = self.do_transcribe(&audio).await?;
@@ -560,10 +588,7 @@ mod tests {
 
     #[test]
     fn test_wav_encoding() {
-        let cloud = WhisperCloud::new(
-            "https://example.com".to_string(),
-            "test-key".to_string(),
-        );
+        let cloud = WhisperCloud::new("https://example.com".to_string(), "test-key".to_string());
 
         let audio: Vec<i16> = vec![0, 1000, -1000, 0];
         let wav = cloud.encode_wav(&audio).unwrap();

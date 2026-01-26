@@ -315,18 +315,15 @@ impl<'a> Performer<'a> {
 
         if params.contains_key("start") {
             let command = params.get("cmd").map(|s| s.to_string()).unwrap_or_default();
-            let timestamp = params.get("time")
-                .and_then(|t| t.parse().ok())
-                .unwrap_or(0);
+            let timestamp = params.get("time").and_then(|t| t.parse().ok()).unwrap_or(0);
             handler.alert(Alert::CXBlockStart { command, timestamp });
         } else if params.contains_key("end") {
-            let exit_code = params.get("exit")
-                .and_then(|e| e.parse().ok())
-                .unwrap_or(0);
-            let timestamp = params.get("time")
-                .and_then(|t| t.parse().ok())
-                .unwrap_or(0);
-            handler.alert(Alert::CXBlockEnd { exit_code, timestamp });
+            let exit_code = params.get("exit").and_then(|e| e.parse().ok()).unwrap_or(0);
+            let timestamp = params.get("time").and_then(|t| t.parse().ok()).unwrap_or(0);
+            handler.alert(Alert::CXBlockEnd {
+                exit_code,
+                timestamp,
+            });
         }
     }
 
@@ -334,7 +331,9 @@ impl<'a> Performer<'a> {
         for part in parts {
             if let Some((key, value)) = part.split_once('=') {
                 if key == "path" {
-                    handler.alert(Alert::CXCwdChanged { path: value.to_string() });
+                    handler.alert(Alert::CXCwdChanged {
+                        path: value.to_string(),
+                    });
                     return;
                 }
             }
@@ -346,11 +345,15 @@ impl<'a> Performer<'a> {
             if let Some((key, value)) = part.split_once('=') {
                 match key {
                     "explain" | "text" => {
-                        handler.alert(Alert::CXAIExplain { text: value.to_string() });
+                        handler.alert(Alert::CXAIExplain {
+                            text: value.to_string(),
+                        });
                         return;
                     }
                     "suggest" | "query" => {
-                        handler.alert(Alert::CXAISuggest { query: value.to_string() });
+                        handler.alert(Alert::CXAISuggest {
+                            query: value.to_string(),
+                        });
                         return;
                     }
                     _ => {}
@@ -370,7 +373,10 @@ impl<'a> Performer<'a> {
         }
 
         if let Some(name) = params.get("name") {
-            let command = params.get("command").map(|s| s.to_string()).unwrap_or_default();
+            let command = params
+                .get("command")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
             handler.alert(Alert::CXAgentRequest {
                 name: name.to_string(),
                 command,

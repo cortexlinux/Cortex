@@ -144,9 +144,7 @@ pub enum WebhookEvent {
         tier: SubscriptionTier,
     },
     /// Subscription canceled
-    SubscriptionCanceled {
-        subscription_id: String,
-    },
+    SubscriptionCanceled { subscription_id: String },
     /// Invoice paid
     InvoicePaid {
         customer_id: String,
@@ -200,10 +198,7 @@ impl StripeClient {
 
         // Add metadata
         params.push(("metadata[tier]", tier.display_name().to_string()));
-        params.push((
-            "metadata[source]",
-            "cx-terminal".to_string(),
-        ));
+        params.push(("metadata[source]", "cx-terminal".to_string()));
 
         let response = self
             .client
@@ -228,14 +223,8 @@ impl StripeClient {
             .map_err(|e| super::StripeError::ApiError(e.to_string()))?;
 
         Ok(CheckoutSession {
-            id: session_data["id"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string(),
-            url: session_data["url"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string(),
+            id: session_data["id"].as_str().unwrap_or_default().to_string(),
+            url: session_data["url"].as_str().unwrap_or_default().to_string(),
             tier,
             customer_email: session_data["customer_email"]
                 .as_str()
@@ -289,7 +278,10 @@ impl StripeClient {
     ) -> Result<StripeSubscription, super::StripeError> {
         let response = self
             .client
-            .get(format!("{}/subscriptions/{}", self.base_url, subscription_id))
+            .get(format!(
+                "{}/subscriptions/{}",
+                self.base_url, subscription_id
+            ))
             .basic_auth(&self.config.api_key, Option::<&str>::None)
             .send()
             .await
@@ -320,7 +312,10 @@ impl StripeClient {
         if immediately {
             let response = self
                 .client
-                .delete(format!("{}/subscriptions/{}", self.base_url, subscription_id))
+                .delete(format!(
+                    "{}/subscriptions/{}",
+                    self.base_url, subscription_id
+                ))
                 .basic_auth(&self.config.api_key, Option::<&str>::None)
                 .send()
                 .await
@@ -346,7 +341,10 @@ impl StripeClient {
 
             let response = self
                 .client
-                .post(format!("{}/subscriptions/{}", self.base_url, subscription_id))
+                .post(format!(
+                    "{}/subscriptions/{}",
+                    self.base_url, subscription_id
+                ))
                 .basic_auth(&self.config.api_key, Option::<&str>::None)
                 .form(&params)
                 .send()
@@ -393,17 +391,13 @@ impl StripeClient {
 
         match event_type {
             "checkout.session.completed" => {
-                let customer_id = data["customer"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string();
+                let customer_id = data["customer"].as_str().unwrap_or_default().to_string();
                 let subscription_id = data["subscription"]
                     .as_str()
                     .unwrap_or_default()
                     .to_string();
                 let tier_str = data["metadata"]["tier"].as_str().unwrap_or("pro");
-                let tier =
-                    SubscriptionTier::from_str(tier_str).unwrap_or(SubscriptionTier::Pro);
+                let tier = SubscriptionTier::from_str(tier_str).unwrap_or(SubscriptionTier::Pro);
 
                 Ok(WebhookEvent::CheckoutCompleted {
                     customer_id,
@@ -431,10 +425,7 @@ impl StripeClient {
                 Ok(WebhookEvent::SubscriptionCanceled { subscription_id })
             }
             "invoice.paid" => {
-                let customer_id = data["customer"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string();
+                let customer_id = data["customer"].as_str().unwrap_or_default().to_string();
                 let subscription_id = data["subscription"]
                     .as_str()
                     .unwrap_or_default()
@@ -446,10 +437,7 @@ impl StripeClient {
                 })
             }
             "invoice.payment_failed" => {
-                let customer_id = data["customer"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_string();
+                let customer_id = data["customer"].as_str().unwrap_or_default().to_string();
                 let subscription_id = data["subscription"].as_str().map(|s| s.to_string());
 
                 Ok(WebhookEvent::PaymentFailed {
@@ -652,10 +640,7 @@ mod tests {
 
     #[test]
     fn test_stripe_config_new() {
-        let config = StripeConfig::new(
-            "sk_test_xxx".to_string(),
-            "pk_test_xxx".to_string(),
-        );
+        let config = StripeConfig::new("sk_test_xxx".to_string(), "pk_test_xxx".to_string());
 
         assert_eq!(config.api_key, "sk_test_xxx");
         assert_eq!(config.publishable_key, "pk_test_xxx");

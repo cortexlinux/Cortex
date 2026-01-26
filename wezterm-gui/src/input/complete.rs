@@ -37,14 +37,64 @@ impl Completer {
     /// Create a new completer
     pub fn new() -> Self {
         let builtins = vec![
-            "alias", "bg", "bind", "break", "builtin", "caller", "cd", "command",
-            "compgen", "complete", "compopt", "continue", "declare", "dirs",
-            "disown", "echo", "enable", "eval", "exec", "exit", "export", "false",
-            "fc", "fg", "getopts", "hash", "help", "history", "jobs", "kill",
-            "let", "local", "logout", "mapfile", "popd", "printf", "pushd", "pwd",
-            "read", "readarray", "readonly", "return", "set", "shift", "shopt",
-            "source", "suspend", "test", "times", "trap", "true", "type",
-            "typeset", "ulimit", "umask", "unalias", "unset", "wait",
+            "alias",
+            "bg",
+            "bind",
+            "break",
+            "builtin",
+            "caller",
+            "cd",
+            "command",
+            "compgen",
+            "complete",
+            "compopt",
+            "continue",
+            "declare",
+            "dirs",
+            "disown",
+            "echo",
+            "enable",
+            "eval",
+            "exec",
+            "exit",
+            "export",
+            "false",
+            "fc",
+            "fg",
+            "getopts",
+            "hash",
+            "help",
+            "history",
+            "jobs",
+            "kill",
+            "let",
+            "local",
+            "logout",
+            "mapfile",
+            "popd",
+            "printf",
+            "pushd",
+            "pwd",
+            "read",
+            "readarray",
+            "readonly",
+            "return",
+            "set",
+            "shift",
+            "shopt",
+            "source",
+            "suspend",
+            "test",
+            "times",
+            "trap",
+            "true",
+            "type",
+            "typeset",
+            "ulimit",
+            "umask",
+            "unalias",
+            "unset",
+            "wait",
         ]
         .into_iter()
         .map(String::from)
@@ -75,7 +125,11 @@ impl Completer {
 
         if is_command {
             self.complete_command(word)
-        } else if word.starts_with('~') || word.starts_with('/') || word.starts_with('.') || word.contains('/') {
+        } else if word.starts_with('~')
+            || word.starts_with('/')
+            || word.starts_with('.')
+            || word.contains('/')
+        {
             self.complete_path(word)
         } else if word.starts_with('$') {
             self.complete_variable(word)
@@ -168,7 +222,8 @@ impl Completer {
                     // Build the completion string
                     let completion = if prefix.starts_with('~') {
                         // Keep the ~ prefix
-                        let home = dirs_next::home_dir().map(|h| h.to_string_lossy().to_string())
+                        let home = dirs_next::home_dir()
+                            .map(|h| h.to_string_lossy().to_string())
                             .unwrap_or_default();
                         let full_path = dir.join(&*name);
                         let full_str = full_path.to_string_lossy();
@@ -524,11 +579,7 @@ mod tests {
     #[test]
     fn test_command_completion() {
         let mut completer = Completer::new();
-        completer.path_commands = vec![
-            "ls".to_string(),
-            "lsof".to_string(),
-            "grep".to_string(),
-        ];
+        completer.path_commands = vec!["ls".to_string(), "lsof".to_string(), "grep".to_string()];
 
         let completions = completer.complete("l", 1);
         assert!(completions.contains(&"ls".to_string()));

@@ -1,0 +1,7 @@
+{
+  "status": "init",
+  "scope": "codebase",
+  "type": "backend",
+  "localEndpoint": "http://localhost:8080/",
+  "serverPort": 54926
+}

@@ -551,10 +551,7 @@ impl UserModel {
                                 command: seq.commands[i + 1].clone(),
                                 confidence: seq.confidence * 0.8,
                                 source: SuggestionSource::Sequence,
-                                explanation: Some(format!(
-                                    "Often follows '{}'",
-                                    recent
-                                )),
+                                explanation: Some(format!("Often follows '{}'", recent)),
                             });
                         }
                     }
@@ -583,9 +580,8 @@ impl UserModel {
 
             if let Some(project) = self.project_contexts.get(&project_key) {
                 let mut project_cmds: Vec<_> = project.commands.iter().collect();
-                project_cmds.sort_by(|a, b| {
-                    b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal)
-                });
+                project_cmds
+                    .sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
 
                 for (cmd, freq) in project_cmds.iter().take(3) {
                     suggestions.push(Suggestion {
@@ -832,11 +828,7 @@ impl UserModel {
     }
 
     /// Calculate cosine similarity between two TF-IDF vectors
-    fn cosine_similarity(
-        &self,
-        vec1: &HashMap<String, f32>,
-        vec2: &HashMap<String, f32>,
-    ) -> f32 {
+    fn cosine_similarity(&self, vec1: &HashMap<String, f32>, vec2: &HashMap<String, f32>) -> f32 {
         let mut dot_product = 0.0;
         let mut norm1 = 0.0;
         let mut norm2 = 0.0;
@@ -910,7 +902,8 @@ impl UserModel {
                 let similarity = self.cosine_similarity(&query_tfidf, &mapping.tfidf_vector);
                 if similarity >= threshold {
                     // Boost by confidence and success count
-                    let score = similarity * mapping.confidence
+                    let score = similarity
+                        * mapping.confidence
                         * (1.0 + (mapping.success_count as f32).ln().max(0.0) * 0.1);
                     Some((mapping.command.clone(), score))
                 } else {
@@ -992,10 +985,7 @@ impl UserModel {
                 .filter(|(a, b)| a != b)
                 .collect();
             if diffs.len() == 1 {
-                return Some(format!(
-                    "Corrected '{}' to '{}'",
-                    diffs[0].0, diffs[0].1
-                ));
+                return Some(format!("Corrected '{}' to '{}'", diffs[0].0, diffs[0].1));
             }
         }
 
@@ -1063,8 +1053,7 @@ impl UserModel {
 
         // Prune sequences
         let before = self.common_sequences.len();
-        self.common_sequences
-            .retain(|s| s.frequency >= threshold);
+        self.common_sequences.retain(|s| s.frequency >= threshold);
         removed += before - self.common_sequences.len();
 
         // Prune error patterns

@@ -49,23 +49,44 @@ impl crate::TermWindow {
     ///
     /// This is called when we receive an OSC sequence starting with "777;cx;"
     /// The sequence has already been parsed into a CXSequence enum.
-    pub fn handle_cx_sequence(&mut self, pane_id: PaneId, sequence: CXSequence, current_line: usize) {
+    pub fn handle_cx_sequence(
+        &mut self,
+        pane_id: PaneId,
+        sequence: CXSequence,
+        current_line: usize,
+    ) {
         log::trace!("CX sequence for pane {}: {:?}", pane_id, sequence);
 
         match sequence {
-            CXSequence::BlockStart { command, timestamp: _ } => {
+            CXSequence::BlockStart {
+                command,
+                timestamp: _,
+            } => {
                 let cwd = self.get_pane_cwd(pane_id).unwrap_or_default();
                 let mut managers = self.block_managers.borrow_mut();
                 let manager = managers.entry(pane_id).or_insert_with(BlockManager::new);
                 let block_id = manager.start_block(command, cwd, current_line);
-                log::debug!("Started block {:?} at line {} for pane {}", block_id, current_line, pane_id);
+                log::debug!(
+                    "Started block {:?} at line {} for pane {}",
+                    block_id,
+                    current_line,
+                    pane_id
+                );
             }
 
-            CXSequence::BlockEnd { exit_code, timestamp: _ } => {
+            CXSequence::BlockEnd {
+                exit_code,
+                timestamp: _,
+            } => {
                 let mut managers = self.block_managers.borrow_mut();
                 if let Some(manager) = managers.get_mut(&pane_id) {
                     manager.end_block(exit_code, current_line);
-                    log::debug!("Ended block at line {} with exit code {} for pane {}", current_line, exit_code, pane_id);
+                    log::debug!(
+                        "Ended block at line {} with exit code {} for pane {}",
+                        current_line,
+                        exit_code,
+                        pane_id
+                    );
                 }
             }
 
@@ -97,7 +118,9 @@ impl crate::TermWindow {
             CXSequence::Features { blocks, ai, agents } => {
                 log::info!(
                     "Shell integration features: blocks={}, ai={}, agents={}",
-                    blocks, ai, agents
+                    blocks,
+                    ai,
+                    agents
                 );
             }
 
@@ -108,16 +131,20 @@ impl crate::TermWindow {
     }
 
     /// Handle a click on a block UI element
-    pub fn handle_block_click(&mut self, pane_id: PaneId, element: &BlockUIElement) -> Option<BlockActionResult> {
+    pub fn handle_block_click(
+        &mut self,
+        pane_id: PaneId,
+        element: &BlockUIElement,
+    ) -> Option<BlockActionResult> {
         let action = match element {
             BlockUIElement::CollapseToggle(id) => Some((id, BlockAction::ToggleCollapse)),
             BlockUIElement::CopyCommand(id) => Some((id, BlockAction::CopyCommand)),
             BlockUIElement::RerunButton(id) => Some((id, BlockAction::Rerun)),
             BlockUIElement::ExplainButton(id) => Some((id, BlockAction::Explain)),
-            BlockUIElement::Header(_) |
-            BlockUIElement::StatusIndicator(_) |
-            BlockUIElement::Content(_) |
-            BlockUIElement::Border(_) => None,
+            BlockUIElement::Header(_)
+            | BlockUIElement::StatusIndicator(_)
+            | BlockUIElement::Content(_)
+            | BlockUIElement::Border(_) => None,
         };
 
         if let Some((block_id, action)) = action {
@@ -157,7 +184,9 @@ impl crate::TermWindow {
     /// Get block at a screen line
     pub fn block_at_line(&self, pane_id: PaneId, line: usize) -> Option<BlockId> {
         let managers = self.block_managers.borrow();
-        managers.get(&pane_id).and_then(|m| m.block_at_line(line).map(|b| b.id))
+        managers
+            .get(&pane_id)
+            .and_then(|m| m.block_at_line(line).map(|b| b.id))
     }
 
     /// Interrupt the active block (e.g., on Ctrl+C)
@@ -177,7 +206,8 @@ impl crate::TermWindow {
     /// Search blocks by command text
     pub fn search_blocks(&self, pane_id: PaneId, query: &str) -> Vec<BlockId> {
         let managers = self.block_managers.borrow();
-        managers.get(&pane_id)
+        managers
+            .get(&pane_id)
             .map(|m| m.search(query))
             .unwrap_or_default()
     }

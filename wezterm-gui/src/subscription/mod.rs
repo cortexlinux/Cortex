@@ -16,18 +16,18 @@
 //! - `features`: Feature gate checking and enforcement
 //! - `stripe`: Stripe API integration for payments
 
-mod tier;
-mod license;
 mod features;
+mod license;
 mod stripe;
+mod tier;
 
-pub use tier::{SubscriptionTier, TierLimits, TierInfo};
-pub use license::{License, LicenseValidator, LicenseError, HardwareFingerprint};
-pub use features::{Feature, FeatureGate, FeatureError};
-pub use stripe::{StripeClient, StripeConfig, CheckoutSession, SubscriptionStatus};
+pub use features::{Feature, FeatureError, FeatureGate};
+pub use license::{HardwareFingerprint, License, LicenseError, LicenseValidator};
+pub use stripe::{CheckoutSession, StripeClient, StripeConfig, SubscriptionStatus};
+pub use tier::{SubscriptionTier, TierInfo, TierLimits};
 
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::sync::Arc;
 
 /// Global subscription manager
 static SUBSCRIPTION_MANAGER: once_cell::sync::Lazy<Arc<RwLock<SubscriptionManager>>> =
@@ -57,7 +57,8 @@ impl SubscriptionManager {
     pub fn new() -> Self {
         let validator = LicenseValidator::new();
         let license = validator.load_license().ok();
-        let tier = license.as_ref()
+        let tier = license
+            .as_ref()
             .map(|l| l.tier.clone())
             .unwrap_or(SubscriptionTier::Core);
 
@@ -113,7 +114,8 @@ impl SubscriptionManager {
 
     /// Check if license is valid
     pub fn is_licensed(&self) -> bool {
-        self.license.as_ref()
+        self.license
+            .as_ref()
             .map(|l| self.validator.is_valid(l))
             .unwrap_or(false)
     }
@@ -144,20 +146,27 @@ impl SubscriptionManager {
 
     /// Check if we're in offline grace period
     pub fn is_offline_grace_period(&self) -> bool {
-        self.license.as_ref()
+        self.license
+            .as_ref()
             .map(|l| self.validator.is_in_grace_period(l))
             .unwrap_or(false)
     }
 
     /// Get days remaining in grace period (if applicable)
     pub fn grace_period_days_remaining(&self) -> Option<u32> {
-        self.license.as_ref()
+        self.license
+            .as_ref()
             .and_then(|l| self.validator.grace_period_remaining(l))
     }
 
     /// Create a Stripe checkout session for upgrade
-    pub async fn create_checkout_session(&self, target_tier: SubscriptionTier) -> Result<CheckoutSession, StripeError> {
-        let client = self.stripe_client.as_ref()
+    pub async fn create_checkout_session(
+        &self,
+        target_tier: SubscriptionTier,
+    ) -> Result<CheckoutSession, StripeError> {
+        let client = self
+            .stripe_client
+            .as_ref()
             .ok_or(StripeError::NotConfigured)?;
 
         client.create_checkout_session(target_tier).await
@@ -165,10 +174,14 @@ impl SubscriptionManager {
 
     /// Get Stripe customer portal URL
     pub async fn get_customer_portal_url(&self) -> Result<String, StripeError> {
-        let client = self.stripe_client.as_ref()
+        let client = self
+            .stripe_client
+            .as_ref()
             .ok_or(StripeError::NotConfigured)?;
 
-        let customer_id = self.license.as_ref()
+        let customer_id = self
+            .license
+            .as_ref()
             .and_then(|l| l.stripe_customer_id.as_ref())
             .ok_or(StripeError::NoCustomer)?;
 

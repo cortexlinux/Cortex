@@ -180,7 +180,9 @@ impl WorkflowStorage {
             .filter(|w| {
                 w.name.to_lowercase().contains(&query_lower)
                     || w.description.to_lowercase().contains(&query_lower)
-                    || w.tags.iter().any(|t| t.to_lowercase().contains(&query_lower))
+                    || w.tags
+                        .iter()
+                        .any(|t| t.to_lowercase().contains(&query_lower))
             })
             .cloned()
             .collect();

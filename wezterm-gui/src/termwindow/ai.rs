@@ -7,18 +7,17 @@
 //! as it provides access to a fine-tuned model with system-wide context.
 
 use crate::ai::{
-    AIAction, AIConfig, AIError, AIManager, AIPanel, AIPanelState, AIPanelWidget,
-    AIProvider, ChatMessage, create_provider,
+    create_provider, AIAction, AIConfig, AIError, AIManager, AIPanel, AIPanelState, AIPanelWidget,
+    AIProvider, ChatMessage,
 };
 use crate::cx_daemon::{
-    CXDaemonClient, TerminalContext as DaemonTerminalContext,
-    EnvironmentInfo as DaemonEnvironmentInfo, GitInfo as DaemonGitInfo,
-    is_daemon_available,
+    is_daemon_available, CXDaemonClient, EnvironmentInfo as DaemonEnvironmentInfo,
+    GitInfo as DaemonGitInfo, TerminalContext as DaemonTerminalContext,
 };
 use crate::termwindow::TermWindowNotif;
+use ::window::WindowOps;
 use mux::pane::PaneId;
 use mux::Mux;
-use ::window::WindowOps;
 
 // CX Terminal: AI Panel implementation for TermWindow
 
@@ -26,20 +25,29 @@ impl crate::TermWindow {
     /// Toggle the AI panel visibility
     pub fn toggle_ai_panel(&mut self) {
         self.ai_panel.borrow_mut().toggle();
-        if let Some(w) = self.window.as_ref() { w.invalidate(); }
-        log::debug!("AI panel toggled, visible: {}", self.ai_panel.borrow().is_visible());
+        if let Some(w) = self.window.as_ref() {
+            w.invalidate();
+        }
+        log::debug!(
+            "AI panel toggled, visible: {}",
+            self.ai_panel.borrow().is_visible()
+        );
     }
 
     /// Show the AI panel in a specific mode
     pub fn show_ai_panel(&mut self, mode: AIPanelState) {
         self.ai_panel.borrow_mut().show(mode);
-        if let Some(w) = self.window.as_ref() { w.invalidate(); }
+        if let Some(w) = self.window.as_ref() {
+            w.invalidate();
+        }
     }
 
     /// Hide the AI panel
     pub fn hide_ai_panel(&mut self) {
         self.ai_panel.borrow_mut().hide();
-        if let Some(w) = self.window.as_ref() { w.invalidate(); }
+        if let Some(w) = self.window.as_ref() {
+            w.invalidate();
+        }
     }
 
     /// Check if AI panel is visible
@@ -56,7 +64,9 @@ impl crate::TermWindow {
     /// Get the terminal width minus AI panel
     pub fn terminal_width_with_ai_panel(&self) -> usize {
         let panel_width = self.ai_panel_width();
-        self.dimensions.pixel_width.saturating_sub(panel_width as usize)
+        self.dimensions
+            .pixel_width
+            .saturating_sub(panel_width as usize)
     }
 
     /// Handle AI panel input (when panel has focus)
@@ -81,7 +91,9 @@ impl crate::TermWindow {
                     drop(panel);
                     self.execute_ai_action(action);
                 }
-                if let Some(w) = self.window.as_ref() { w.invalidate(); }
+                if let Some(w) = self.window.as_ref() {
+                    w.invalidate();
+                }
                 return true;
             }
 
@@ -89,7 +101,9 @@ impl crate::TermWindow {
             (window::Modifiers::NONE, "Backspace") => {
                 if !panel.input.is_empty() {
                     panel.input.pop();
-                    if let Some(w) = self.window.as_ref() { w.invalidate(); }
+                    if let Some(w) = self.window.as_ref() {
+                        w.invalidate();
+                    }
                 }
                 return true;
             }
@@ -101,7 +115,9 @@ impl crate::TermWindow {
                     self.hide_ai_panel();
                 } else {
                     panel.input.clear();
-                    if let Some(w) = self.window.as_ref() { w.invalidate(); }
+                    if let Some(w) = self.window.as_ref() {
+                        w.invalidate();
+                    }
                 }
                 return true;
             }
@@ -109,7 +125,9 @@ impl crate::TermWindow {
             // Ctrl+L clears chat history
             (window::Modifiers::CTRL, "l") => {
                 panel.clear_history();
-                if let Some(w) = self.window.as_ref() { w.invalidate(); }
+                if let Some(w) = self.window.as_ref() {
+                    w.invalidate();
+                }
                 return true;
             }
 
@@ -117,25 +135,33 @@ impl crate::TermWindow {
             (window::Modifiers::NONE, "Up") => {
                 drop(panel);
                 self.ai_widget.borrow_mut().scroll_up(1);
-                if let Some(w) = self.window.as_ref() { w.invalidate(); }
+                if let Some(w) = self.window.as_ref() {
+                    w.invalidate();
+                }
                 return true;
             }
             (window::Modifiers::NONE, "Down") => {
                 drop(panel);
                 self.ai_widget.borrow_mut().scroll_down(1);
-                if let Some(w) = self.window.as_ref() { w.invalidate(); }
+                if let Some(w) = self.window.as_ref() {
+                    w.invalidate();
+                }
                 return true;
             }
             (window::Modifiers::NONE, "PageUp") => {
                 drop(panel);
                 self.ai_widget.borrow_mut().scroll_up(10);
-                if let Some(w) = self.window.as_ref() { w.invalidate(); }
+                if let Some(w) = self.window.as_ref() {
+                    w.invalidate();
+                }
                 return true;
             }
             (window::Modifiers::NONE, "PageDown") => {
                 drop(panel);
                 self.ai_widget.borrow_mut().scroll_down(10);
-                if let Some(w) = self.window.as_ref() { w.invalidate(); }
+                if let Some(w) = self.window.as_ref() {
+                    w.invalidate();
+                }
                 return true;
             }
 
@@ -157,7 +183,9 @@ impl crate::TermWindow {
         }
 
         self.ai_panel.borrow_mut().input.push(c);
-        if let Some(w) = self.window.as_ref() { w.invalidate(); }
+        if let Some(w) = self.window.as_ref() {
+            w.invalidate();
+        }
         true
     }
 
@@ -187,7 +215,9 @@ impl crate::TermWindow {
             self.ai_panel.borrow_mut().set_error(
                 "No AI provider configured. Set config.ai in your wezterm config.".to_string(),
             );
-            if let Some(w) = self.window.as_ref() { w.invalidate(); }
+            if let Some(w) = self.window.as_ref() {
+                w.invalidate();
+            }
             return;
         }
 
@@ -195,12 +225,7 @@ impl crate::TermWindow {
         let panel = self.ai_panel.borrow();
         let ai_config = panel.config.clone();
         let use_streaming = ai_config.stream;
-        let messages: Vec<ChatMessage> = panel
-            .history
-            .messages()
-            .iter()
-            .cloned()
-            .collect();
+        let messages: Vec<ChatMessage> = panel.history.messages().iter().cloned().collect();
         drop(panel);
         drop(manager);
 
@@ -235,17 +260,28 @@ impl crate::TermWindow {
 
                                     // Send incremental update for each chunk
                                     let chunk_clone = chunk.clone();
-                                    win.notify(TermWindowNotif::Apply(Box::new(move |term_window| {
-                                        term_window.ai_panel.borrow_mut().append_response(&chunk_clone);
-                                        if let Some(w) = term_window.window.as_ref() { w.invalidate(); }
-                                    })));
+                                    win.notify(TermWindowNotif::Apply(Box::new(
+                                        move |term_window| {
+                                            term_window
+                                                .ai_panel
+                                                .borrow_mut()
+                                                .append_response(&chunk_clone);
+                                            if let Some(w) = term_window.window.as_ref() {
+                                                w.invalidate();
+                                            }
+                                        },
+                                    )));
                                 }
 
                                 // Signal completion
-                                window.notify(TermWindowNotif::Apply(Box::new(move |term_window| {
-                                    term_window.ai_panel.borrow_mut().complete_response();
-                                    if let Some(w) = term_window.window.as_ref() { w.invalidate(); }
-                                })));
+                                window.notify(TermWindowNotif::Apply(Box::new(
+                                    move |term_window| {
+                                        term_window.ai_panel.borrow_mut().complete_response();
+                                        if let Some(w) = term_window.window.as_ref() {
+                                            w.invalidate();
+                                        }
+                                    },
+                                )));
 
                                 return; // Already handled
                             }
@@ -256,9 +292,7 @@ impl crate::TermWindow {
                         p.chat_completion(messages, system_prompt).await
                     }
                 }
-                None => {
-                    Err(AIError::NotConfigured)
-                }
+                None => Err(AIError::NotConfigured),
             };
 
             // Send result back to main thread via window notification
@@ -268,14 +302,18 @@ impl crate::TermWindow {
                     window.notify(TermWindowNotif::Apply(Box::new(move |term_window| {
                         term_window.ai_panel.borrow_mut().append_response(&content);
                         term_window.ai_panel.borrow_mut().complete_response();
-                        if let Some(w) = term_window.window.as_ref() { w.invalidate(); }
+                        if let Some(w) = term_window.window.as_ref() {
+                            w.invalidate();
+                        }
                     })));
                 }
                 Err(e) => {
                     let error_msg = e.to_string();
                     window.notify(TermWindowNotif::Apply(Box::new(move |term_window| {
                         term_window.ai_panel.borrow_mut().set_error(error_msg);
-                        if let Some(w) = term_window.window.as_ref() { w.invalidate(); }
+                        if let Some(w) = term_window.window.as_ref() {
+                            w.invalidate();
+                        }
                     })));
                 }
             }
@@ -283,7 +321,9 @@ impl crate::TermWindow {
         .detach();
 
         // Immediately invalidate to show loading state
-        if let Some(w) = self.window.as_ref() { w.invalidate(); }
+        if let Some(w) = self.window.as_ref() {
+            w.invalidate();
+        }
     }
 
     /// Explain selected text using AI
@@ -355,7 +395,12 @@ impl crate::TermWindow {
                 m.recent_blocks(1)
                     .first()
                     .filter(|b| b.exit_code.map(|c| c != 0).unwrap_or(false))
-                    .map(|b| format!("Command '{}' failed with exit code {:?}", b.command, b.exit_code))
+                    .map(|b| {
+                        format!(
+                            "Command '{}' failed with exit code {:?}",
+                            b.command, b.exit_code
+                        )
+                    })
             })
         };
 
@@ -381,8 +426,8 @@ impl crate::TermWindow {
         let openai_api_key = std::env::var("OPENAI_API_KEY").ok();
 
         // Check for Ollama host (local provider) - default to localhost if not set
-        let ollama_host = std::env::var("OLLAMA_HOST")
-            .unwrap_or_else(|_| "http://localhost:11434".to_string());
+        let ollama_host =
+            std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string());
 
         // Prefer Claude if API key is set
         if let Some(api_key) = claude_api_key {
@@ -494,7 +539,9 @@ impl crate::TermWindow {
                 _ => {}
             }
 
-            if let Some(w) = self.window.as_ref() { w.invalidate(); }
+            if let Some(w) = self.window.as_ref() {
+                w.invalidate();
+            }
             return true;
         }
 
@@ -538,7 +585,11 @@ impl crate::TermWindow {
 
         // Try to parse the command
         if let Some(request) = runtime.parse_command(input) {
-            log::info!("Agent handling command: {} -> agent '{}'", input, request.agent);
+            log::info!(
+                "Agent handling command: {} -> agent '{}'",
+                input,
+                request.agent
+            );
 
             // Execute the agent command
             let response = runtime.handle(request);
@@ -596,7 +647,8 @@ impl crate::TermWindow {
 
     /// List available agents
     pub fn list_agents(&self) -> Vec<(String, String)> {
-        self.agent_runtime.borrow()
+        self.agent_runtime
+            .borrow()
             .list_agents()
             .into_iter()
             .map(|(name, desc)| (name.to_string(), desc.to_string()))
@@ -630,7 +682,8 @@ impl crate::TermWindow {
                         log::warn!("Failed to connect to CX daemon: {}", e);
                     }
                 }
-            }).detach();
+            })
+            .detach();
         } else {
             log::debug!("CX daemon not available, using local AI providers");
         }
@@ -670,7 +723,10 @@ impl crate::TermWindow {
         let client = CXDaemonClient::new();
 
         promise::spawn::spawn(async move {
-            match client.learn_from_command(&command, &output, exit_code, duration_ms, &cwd).await {
+            match client
+                .learn_from_command(&command, &output, exit_code, duration_ms, &cwd)
+                .await
+            {
                 Ok(()) => {
                     log::trace!(
                         "Learning data sent: {} (output len: {}, exit: {}, duration: {}ms)",
@@ -684,7 +740,8 @@ impl crate::TermWindow {
                     log::debug!("Failed to send learning data to daemon: {}", e);
                 }
             }
-        }).detach();
+        })
+        .detach();
     }
 
     /// Query AI preferring daemon if available
@@ -738,7 +795,9 @@ impl crate::TermWindow {
             let client = CXDaemonClient::new();
 
             // Try to query through daemon
-            let result = client.query_ai_with_system(&query, &daemon_context, &system_prompt).await;
+            let result = client
+                .query_ai_with_system(&query, &daemon_context, &system_prompt)
+                .await;
 
             match result {
                 Ok(response) => {
@@ -761,20 +820,27 @@ impl crate::TermWindow {
                     })));
                 }
                 Err(e) => {
-                    log::warn!("Daemon AI query failed: {}, falling back to local provider", e);
+                    log::warn!(
+                        "Daemon AI query failed: {}, falling back to local provider",
+                        e
+                    );
 
                     // Notify to fall back to local provider
                     let error_msg = format!("Daemon error: {}. Falling back to local AI.", e);
                     window.notify(TermWindowNotif::Apply(Box::new(move |term_window| {
                         // Set a note that we're falling back
-                        term_window.ai_panel.borrow_mut().append_response(&format!("[{}]\n\n", error_msg));
+                        term_window
+                            .ai_panel
+                            .borrow_mut()
+                            .append_response(&format!("[{}]\n\n", error_msg));
                         if let Some(w) = term_window.window.as_ref() {
                             w.invalidate();
                         }
                     })));
                 }
             }
-        }).detach();
+        })
+        .detach();
 
         // Immediately invalidate to show loading state
         if let Some(w) = self.window.as_ref() {
@@ -812,11 +878,19 @@ impl crate::TermWindow {
                         }
                         output
                     } else {
-                        format!("Error: {}", response.error.unwrap_or_else(|| "Unknown error".to_string()))
+                        format!(
+                            "Error: {}",
+                            response
+                                .error
+                                .unwrap_or_else(|| "Unknown error".to_string())
+                        )
                     };
 
                     window.notify(TermWindowNotif::Apply(Box::new(move |term_window| {
-                        term_window.ai_panel.borrow_mut().append_response(&formatted);
+                        term_window
+                            .ai_panel
+                            .borrow_mut()
+                            .append_response(&formatted);
                         term_window.ai_panel.borrow_mut().complete_response();
                         if let Some(w) = term_window.window.as_ref() {
                             w.invalidate();
@@ -833,7 +907,8 @@ impl crate::TermWindow {
                     })));
                 }
             }
-        }).detach();
+        })
+        .detach();
     }
 
     /// Get system status from daemon
@@ -866,7 +941,8 @@ impl crate::TermWindow {
                     log::debug!("Failed to get system status: {}", e);
                 }
             }
-        }).detach();
+        })
+        .detach();
     }
 
     /// Disconnect from CX daemon
@@ -877,7 +953,8 @@ impl crate::TermWindow {
             promise::spawn::spawn(async move {
                 let _ = daemon_client.disconnect().await;
                 log::info!("Disconnected from CX daemon");
-            }).detach();
+            })
+            .detach();
         }
     }
 }

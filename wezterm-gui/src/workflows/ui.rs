@@ -122,7 +122,9 @@ impl WorkflowPickerState {
                 } else {
                     w.name.to_lowercase().contains(&query_lower)
                         || w.description.to_lowercase().contains(&query_lower)
-                        || w.tags.iter().any(|t| t.to_lowercase().contains(&query_lower))
+                        || w.tags
+                            .iter()
+                            .any(|t| t.to_lowercase().contains(&query_lower))
                 }
             })
             .map(WorkflowListItem::from)
@@ -353,7 +355,9 @@ impl WorkflowEditorState {
     pub fn move_step_up(&mut self) {
         if let Some(ref mut workflow) = self.workflow {
             if self.selected_step > 0 {
-                workflow.steps.swap(self.selected_step, self.selected_step - 1);
+                workflow
+                    .steps
+                    .swap(self.selected_step, self.selected_step - 1);
                 self.selected_step -= 1;
                 self.dirty = true;
             }
@@ -364,7 +368,9 @@ impl WorkflowEditorState {
     pub fn move_step_down(&mut self) {
         if let Some(ref mut workflow) = self.workflow {
             if self.selected_step < workflow.steps.len() - 1 {
-                workflow.steps.swap(self.selected_step, self.selected_step + 1);
+                workflow
+                    .steps
+                    .swap(self.selected_step, self.selected_step + 1);
                 self.selected_step += 1;
                 self.dirty = true;
             }
@@ -595,10 +601,7 @@ impl CreateFromHistoryState {
     /// Create the workflow
     pub fn create_workflow(&self) -> Workflow {
         let selected_commands = self.get_selected_commands();
-        let commands: Vec<&str> = selected_commands
-            .iter()
-            .map(|s| s.as_str())
-            .collect();
+        let commands: Vec<&str> = selected_commands.iter().map(|s| s.as_str()).collect();
 
         Workflow::from_commands(&self.name, commands)
     }
@@ -670,10 +673,7 @@ mod tests {
     #[test]
     fn test_variable_input_state() {
         let mut workflow = Workflow::new("Test");
-        workflow.add_variable(
-            "name",
-            WorkflowVariable::with_default("Name", "default"),
-        );
+        workflow.add_variable("name", WorkflowVariable::with_default("Name", "default"));
 
         let mut state = VariableInputState::new();
         state.open(&workflow);

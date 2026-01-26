@@ -120,11 +120,7 @@ impl AIProvider for ClaudeProvider {
         let system = system_prompt;
 
         Box::pin(async move {
-            let api_key = self
-                .config
-                .api_key
-                .as_ref()
-                .ok_or(AIError::NotConfigured)?;
+            let api_key = self.config.api_key.as_ref().ok_or(AIError::NotConfigured)?;
 
             let body = self.build_request_body(&messages, system.as_deref(), false);
 
@@ -162,11 +158,7 @@ impl AIProvider for ClaudeProvider {
         let system = system_prompt;
 
         Box::pin(async move {
-            let api_key = self
-                .config
-                .api_key
-                .as_ref()
-                .ok_or(AIError::NotConfigured)?;
+            let api_key = self.config.api_key.as_ref().ok_or(AIError::NotConfigured)?;
 
             let body = self.build_request_body(&messages, system.as_deref(), true);
 

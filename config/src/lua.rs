@@ -222,7 +222,9 @@ pub fn make_lua_context(config_file: &Path) -> anyhow::Result<Lua> {
         let package: Table = globals.get("package").context("get _G.package")?;
         let loaded: Table = package.get("loaded").context("get package.loaded")?;
         // CX Terminal: Create 'cx' as an alias to 'wezterm' for CX users
-        loaded.set("cx", wezterm_mod.clone()).context("set cx alias")?;
+        loaded
+            .set("cx", wezterm_mod.clone())
+            .context("set cx alias")?;
 
         let package_path: String = package.get("path").context("get package.path as String")?;
         let mut path_array: Vec<String> = package_path.split(";").map(|s| s.to_owned()).collect();
@@ -336,10 +338,10 @@ end
 
         // CX Terminal: AI integration module
         let ai_mod = lua.create_table()?;
-        ai_mod.set("enabled", false)?;  // AI disabled by default, enable in config
-        ai_mod.set("provider", "none")?;  // AI provider: "claude", "openai", "local", "none"
-        ai_mod.set("model", "")?;  // Model name if applicable
-        ai_mod.set("api_endpoint", "")?;  // Custom API endpoint
+        ai_mod.set("enabled", false)?; // AI disabled by default, enable in config
+        ai_mod.set("provider", "none")?; // AI provider: "claude", "openai", "local", "none"
+        ai_mod.set("model", "")?; // Model name if applicable
+        ai_mod.set("api_endpoint", "")?; // Custom API endpoint
         wezterm_mod.set("ai", ai_mod)?;
         wezterm_mod.set(
             "running_under_wsl",

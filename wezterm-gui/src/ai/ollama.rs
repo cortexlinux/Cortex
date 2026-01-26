@@ -3,10 +3,8 @@
 //! Implements the AIProvider trait for local Ollama LLM server.
 //! Provides privacy-first, offline-capable AI assistance.
 
-use super::{
-    provider::{AIError, AIProvider, AIProviderConfig, AIResponse, AIResponseStream},
-    ChatMessage, ChatRole,
-};
+use super::provider::{AIError, AIProvider, AIProviderConfig, AIResponse, AIResponseStream};
+use super::{ChatMessage, ChatRole};
 use std::future::Future;
 use std::pin::Pin;
 

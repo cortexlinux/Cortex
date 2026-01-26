@@ -163,8 +163,7 @@ impl ModernInput {
         key: termwiz::input::KeyCode,
         mods: termwiz::input::Modifiers,
     ) -> InputResult {
-        use termwiz::input::KeyCode;
-        use termwiz::input::Modifiers;
+        use termwiz::input::{KeyCode, Modifiers};
 
         // Handle history search mode
         if let Some(ref mut search) = self.history_search {
@@ -362,8 +361,7 @@ impl ModernInput {
         key: termwiz::input::KeyCode,
         mods: termwiz::input::Modifiers,
     ) -> InputResult {
-        use termwiz::input::KeyCode;
-        use termwiz::input::Modifiers;
+        use termwiz::input::{KeyCode, Modifiers};
 
         let search = match self.history_search.as_mut() {
             Some(s) => s,

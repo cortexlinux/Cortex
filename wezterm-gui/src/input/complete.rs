@@ -7,9 +7,8 @@
 //! - Shell builtins
 
 use std::collections::HashSet;
-use std::env;
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 /// Maximum number of completions to return
 const MAX_COMPLETIONS: usize = 20;

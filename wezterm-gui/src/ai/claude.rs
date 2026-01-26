@@ -3,10 +3,8 @@
 //! Implements the AIProvider trait for Anthropic's Claude API.
 //! Supports both streaming and non-streaming completions.
 
-use super::{
-    provider::{AIError, AIProvider, AIProviderConfig, AIResponse, AIResponseStream},
-    ChatMessage, ChatRole,
-};
+use super::provider::{AIError, AIProvider, AIProviderConfig, AIResponse, AIResponseStream};
+use super::{ChatMessage, ChatRole};
 use std::future::Future;
 use std::pin::Pin;
 

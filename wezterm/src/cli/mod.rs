@@ -34,6 +34,7 @@ pub mod new;
 pub mod plan;
 pub mod shortcuts;
 pub mod snapshot;
+pub mod templates;
 
 #[derive(Debug, Parser, Clone, Copy)]
 enum CliOutputFormatKind {

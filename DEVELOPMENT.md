@@ -8,7 +8,7 @@ CX Terminal is licensed under the **Business Source License 1.1** (BSL 1.1).
 
 - Source available for inspection and contribution
 - Commercial use requires a license from AI Venture Holdings LLC
-- Converts to Apache 2.0 after 4 years
+- Converts to Apache License 2.0 after **6 years** from each version release
 
 All new files must include the BSL 1.1 header:
 

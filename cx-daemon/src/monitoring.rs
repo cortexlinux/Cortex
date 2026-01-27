@@ -225,9 +225,7 @@ impl MonitoringService {
         #[cfg(target_os = "linux")]
         {
             // Check if systemctl is available
-            if !Path::new("/usr/bin/systemctl").exists()
-                && !Path::new("/bin/systemctl").exists()
-            {
+            if !Path::new("/usr/bin/systemctl").exists() && !Path::new("/bin/systemctl").exists() {
                 return Ok(Vec::new());
             }
 
@@ -240,11 +238,7 @@ impl MonitoringService {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     let failed: Vec<String> = stdout
                         .lines()
-                        .filter_map(|line| {
-                            line.split_whitespace()
-                                .next()
-                                .map(|s| s.to_string())
-                        })
+                        .filter_map(|line| line.split_whitespace().next().map(|s| s.to_string()))
                         .collect();
                     Ok(failed)
                 }

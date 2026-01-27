@@ -82,12 +82,7 @@ pub struct Alert {
 }
 
 impl Alert {
-    pub fn new(
-        severity: AlertSeverity,
-        source: &str,
-        title: &str,
-        description: &str,
-    ) -> Self {
+    pub fn new(severity: AlertSeverity, source: &str, title: &str, description: &str) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4().to_string(),
@@ -227,8 +222,9 @@ impl AlertDatabase {
             params.push(sev.as_str().to_string());
         }
 
-        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
-        
+        let param_refs: Vec<&dyn rusqlite::ToSql> =
+            params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+
         let alerts = stmt
             .query_map(param_refs.as_slice(), |row| {
                 Ok(Alert {

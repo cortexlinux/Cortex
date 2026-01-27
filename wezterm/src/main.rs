@@ -178,7 +178,10 @@ enum SubCommand {
     Explain(cli::shortcuts::ExplainCommand),
 
     /// Manage the CX daemon
-    #[command(name = "daemon", about = "Manage the CX daemon (status, health, alerts)")]
+    #[command(
+        name = "daemon",
+        about = "Manage the CX daemon (status, health, alerts)"
+    )]
     Daemon(cli::daemon::DaemonCommand),
 }
 

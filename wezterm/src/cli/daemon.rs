@@ -140,7 +140,14 @@ impl DaemonCommand {
                 println!("CX Daemon Status");
                 println!("  Version: {}", version);
                 println!("  Uptime: {} seconds", uptime_secs);
-                println!("  Monitoring: {}", if monitoring_enabled { "enabled" } else { "disabled" });
+                println!(
+                    "  Monitoring: {}",
+                    if monitoring_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                );
                 println!("  Active Alerts: {}", alert_count);
 
                 if verbose {
@@ -189,7 +196,7 @@ impl DaemonCommand {
                 println!("  Memory Usage: {:.1}%", memory_usage_percent);
                 println!("  Disk Usage: {:.1}%", disk_usage_percent);
                 println!("  Uptime: {} seconds", uptime_secs);
-                
+
                 if !failed_services.is_empty() {
                     println!("  Failed Services:");
                     for service in failed_services {
@@ -315,8 +322,8 @@ impl DaemonCommand {
         let mut response_line = String::new();
         reader.read_line(&mut response_line)?;
 
-        let response: Response = serde_json::from_str(&response_line)
-            .context("Failed to parse daemon response")?;
+        let response: Response =
+            serde_json::from_str(&response_line).context("Failed to parse daemon response")?;
 
         Ok(response)
     }

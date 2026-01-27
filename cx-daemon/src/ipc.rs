@@ -112,10 +112,7 @@ pub struct RequestHandler {
 }
 
 impl RequestHandler {
-    pub fn new(
-        alert_db: Arc<Mutex<AlertDatabase>>,
-        monitoring: Arc<MonitoringService>,
-    ) -> Self {
+    pub fn new(alert_db: Arc<Mutex<AlertDatabase>>, monitoring: Arc<MonitoringService>) -> Self {
         Self {
             alert_db,
             monitoring,
@@ -130,17 +127,13 @@ impl RequestHandler {
             DaemonRequest::Version => self.handle_version(),
             DaemonRequest::Status => self.handle_status(),
             DaemonRequest::Health => self.handle_health(),
-            DaemonRequest::Alerts { status, severity } => {
-                self.handle_list_alerts(status, severity)
-            }
+            DaemonRequest::Alerts { status, severity } => self.handle_list_alerts(status, severity),
             DaemonRequest::AcknowledgeAlert { id } => self.handle_acknowledge_alert(id),
             DaemonRequest::DismissAlert { id } => self.handle_dismiss_alert(id),
             DaemonRequest::AcknowledgeAllAlerts => self.handle_acknowledge_all_alerts(),
-            DaemonRequest::Shutdown => {
-                DaemonResponse::Success {
-                    message: "Shutdown requested".to_string(),
-                }
-            }
+            DaemonRequest::Shutdown => DaemonResponse::Success {
+                message: "Shutdown requested".to_string(),
+            },
         }
     }
 
@@ -158,7 +151,11 @@ impl RequestHandler {
     }
 
     fn handle_status(&self) -> DaemonResponse {
-        let alert_count = match self.alert_db.lock().unwrap().list(Some(AlertStatus::Active), None)
+        let alert_count = match self
+            .alert_db
+            .lock()
+            .unwrap()
+            .list(Some(AlertStatus::Active), None)
         {
             Ok(alerts) => alerts.len(),
             Err(_) => 0,

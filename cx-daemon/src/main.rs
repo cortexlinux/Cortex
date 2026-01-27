@@ -152,8 +152,7 @@ fn run() -> Result<()> {
         std::fs::create_dir_all(parent).context("Failed to create socket directory")?;
     }
 
-    let listener =
-        UnixListener::bind(&socket_path).context("Failed to bind to Unix socket")?;
+    let listener = UnixListener::bind(&socket_path).context("Failed to bind to Unix socket")?;
 
     log::info!("Daemon listening on {}", socket_path.display());
 

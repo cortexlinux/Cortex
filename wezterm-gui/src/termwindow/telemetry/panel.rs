@@ -135,7 +135,8 @@ impl TelemetryPanel {
         let title_color: InheritableColor = LinearRgba::with_components(0.0, 1.0, 1.0, 1.0).into();
         let text_color: InheritableColor = LinearRgba::with_components(0.9, 0.9, 0.9, 1.0).into();
         let dim_color: InheritableColor = LinearRgba::with_components(0.5, 0.5, 0.5, 1.0).into();
-        let selected_color: InheritableColor = LinearRgba::with_components(0.0, 1.0, 1.0, 1.0).into();
+        let selected_color: InheritableColor =
+            LinearRgba::with_components(0.0, 1.0, 1.0, 1.0).into();
 
         let git_color: InheritableColor = match data.git_status {
             GitStatus::Clean => LinearRgba::with_components(0.0, 1.0, 0.5, 1.0).into(),
@@ -229,10 +230,7 @@ impl TelemetryPanel {
 
         // Actions header
         children.push(
-            Element::new(
-                    &font,
-                    ElementContent::Text("  Actions:".into()),
-                )
+            Element::new(&font, ElementContent::Text("  Actions:".into()))
                 .colors(ElementColors {
                     border: BorderColor::default(),
                     bg: LinearRgba::TRANSPARENT.into(),
@@ -244,7 +242,10 @@ impl TelemetryPanel {
         // Action items
         for (i, action) in self.actions.iter().enumerate() {
             let (bg, text) = if i == selected {
-                (selected_color.clone(), LinearRgba::with_components(0.0, 0.0, 0.0, 1.0).into())
+                (
+                    selected_color.clone(),
+                    LinearRgba::with_components(0.0, 0.0, 0.0, 1.0).into(),
+                )
             } else {
                 (LinearRgba::TRANSPARENT.into(), text_color.clone())
             };
@@ -253,10 +254,7 @@ impl TelemetryPanel {
             children.push(
                 Element::new(
                     &font,
-                    ElementContent::Text(format!(
-                        "  {} [{}] {}",
-                        prefix, action.key, action.label
-                    )),
+                    ElementContent::Text(format!("  {} [{}] {}", prefix, action.key, action.label)),
                 )
                 .colors(ElementColors {
                     border: BorderColor::default(),

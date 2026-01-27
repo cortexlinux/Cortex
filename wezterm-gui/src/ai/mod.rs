@@ -129,9 +129,7 @@ impl AIConfig {
             AIProviderType::Claude | AIProviderType::OpenAI | AIProviderType::CXLinux => {
                 self.api_key.is_some() && !self.api_key.as_ref().unwrap().is_empty()
             }
-            AIProviderType::Local => {
-                self.api_endpoint.is_some()
-            }
+            AIProviderType::Local => self.api_endpoint.is_some(),
             AIProviderType::Custom => {
                 self.api_endpoint.is_some() && !self.api_endpoint.as_ref().unwrap().is_empty()
             }
@@ -305,12 +303,12 @@ impl AIProviderType {
     /// Get status color for UI
     pub fn status_color(&self) -> &'static str {
         match self {
-            Self::None => "#6272A4",      // Muted gray
-            Self::Claude => "#00D9FF",    // CX cyan
-            Self::OpenAI => "#00D9FF",    // CX cyan
-            Self::Local => "#FFB86C",     // Orange
-            Self::CXLinux => "#00FFFF",   // Bright cyan
-            Self::Custom => "#F1FA8C",    // Yellow
+            Self::None => "#6272A4",    // Muted gray
+            Self::Claude => "#00D9FF",  // CX cyan
+            Self::OpenAI => "#00D9FF",  // CX cyan
+            Self::Local => "#FFB86C",   // Orange
+            Self::CXLinux => "#00FFFF", // Bright cyan
+            Self::Custom => "#F1FA8C",  // Yellow
         }
     }
 

@@ -1,0 +1,21 @@
+# CX Terminal Code Owners
+# These owners will be requested for review when someone opens a pull request
+
+# Default owners for everything
+* @cxlinux-ai/engineering
+
+# CRITICAL: Pricing and subscription files require CEO approval
+# Admin ID 73376634 = GidTeam (CEO)
+**/subscription/** @GidTeam
+**/pricing*.rs @GidTeam
+**/stripe*.rs @GidTeam
+**/billing*.rs @GidTeam
+**/license*.rs @GidTeam
+
+# Configuration and CI files
+CLAUDE.md @GidTeam
+.github/workflows/ @GidTeam @cxlinux-ai/engineering
+
+# Security-sensitive files
+**/auth/** @GidTeam
+**/security/** @GidTeam
